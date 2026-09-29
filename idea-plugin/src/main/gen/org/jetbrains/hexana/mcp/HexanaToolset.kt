@@ -12,6 +12,7 @@ import kotlin.Int
 import kotlin.String
 import kotlin.collections.List
 import kotlin.collections.Map
+import kotlin.ranges.IntRange
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -2445,15 +2446,10 @@ public class HexanaToolset : McpToolsProvider {
       ),
     )
     override suspend fun call(args: JsonObject): McpToolCallResult {
-      val path = args.requireStringArgument("path")
-      val segmentRange = args.requireIntMapArgument("segmentRange")
-      val includeExports = args.optionalBooleanArgument("includeExports") ?: false
-      val includeGlobals = args.optionalBooleanArgument("includeGlobals") ?: true
-      val minByteLength = args.optionalIntArgument("minByteLength")
-      val range = requireHalfOpenSegmentRange(segmentRange)
-      val file = requireWasmFile(path)
+      val request = decodeListDataSegmentsIdeaRequest(args)
+      val file = requireWasmFile(request.path)
       val provider = file.requireCoreWasmBinaryProvider()
-      val result = provider.readDataSegmentsByRange(range, includeExports, includeGlobals, minByteLength ?: 0)
+      val result = provider.readDataSegmentsByRange(request.segmentRange, request.includeExports, request.includeGlobals, request.minByteLength ?: 0)
       val text = encodeHexanaJson(result)
       val structuredContent = encodeHexanaJsonElement(result).jsonObject
       return McpToolCallResult.text(text, structuredContent)
@@ -2555,6 +2551,27 @@ private fun decodeListFunctionsIdeaRequest(args: JsonObject): ListFunctionsIdeaR
   val offset = args.optionalIntArgument("offset") ?: 0
   val limit = args.optionalIntArgument("limit") ?: 200
   return ListFunctionsIdeaRequest(path, offset, limit)
+}
+
+private data class ListDataSegmentsIdeaRequest(
+  public val path: String,
+  public val segmentRange: IntRange,
+  public val includeExports: Boolean,
+  public val includeGlobals: Boolean,
+  public val minByteLength: Int?,
+)
+
+private fun decodeListDataSegmentsIdeaRequest(args: JsonObject): ListDataSegmentsIdeaRequest {
+  val path = args.requireStringArgument("path")
+  val segmentRangeMap = args.requireIntMapArgument("segmentRange")
+  val segmentRangeFrom = segmentRangeMap["from"] ?: mcpFail("Invalid segmentRange no `from`")
+  val segmentRangeToExclusive = segmentRangeMap["to"] ?: Int.MAX_VALUE
+  if (segmentRangeFrom > segmentRangeToExclusive) mcpFail("Invalid segmentRange `to` must be >= `from`")
+  val segmentRange = segmentRangeFrom until segmentRangeToExclusive
+  val includeExports = args.optionalBooleanArgument("includeExports") ?: false
+  val includeGlobals = args.optionalBooleanArgument("includeGlobals") ?: true
+  val minByteLength = args.optionalIntArgument("minByteLength")
+  return ListDataSegmentsIdeaRequest(path, segmentRange, includeExports, includeGlobals, minByteLength)
 }
 
 private fun JsonObject.requireStringArgument(name: String): String = this[name]?.jsonPrimitive?.content

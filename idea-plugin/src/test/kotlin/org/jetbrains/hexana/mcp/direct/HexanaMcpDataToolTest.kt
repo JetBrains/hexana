@@ -1,13 +1,62 @@
 package org.jetbrains.hexana.mcp.direct
 
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonPrimitive
 
 class HexanaMcpDataToolTest : HexanaMcpToolsetDirectTestBase() {
+    fun testListDataSegmentsTypedRangeRetainsIdeaBoundsDefaultsAndFilters() {
+        val path = createDataFixture("fixtures/direct/data/typed_data_segments.wasm").projectRelativePath
+        fun request(from: Int, to: Int? = null, extra: (kotlinx.serialization.json.JsonObjectBuilder.() -> Unit)? = null) =
+            buildJsonObject {
+                put("path", JsonPrimitive(path))
+                put("segmentRange", buildJsonObject {
+                    put("from", JsonPrimitive(from))
+                    if (to != null) put("to", JsonPrimitive(to))
+                })
+                extra?.invoke(this)
+            }
+
+        val defaults = callToolJsonObject("list_data_segments", request(0))
+        val explicit = callToolJsonObject("list_data_segments", request(0, 1) {
+            put("includeExports", JsonPrimitive(false))
+            put("includeGlobals", JsonPrimitive(true))
+            put("minByteLength", JsonNull)
+            put("bytesBase64", JsonPrimitive("ignored invalid bytes"))
+            put("bytes", buildJsonArray { add(JsonPrimitive(999)) })
+            put("ignored", JsonPrimitive(true))
+        })
+        assertEquals(defaults, explicit)
+        assertEquals(1, defaults.array("segments").size)
+        assertEquals(1, defaults.obj("summary").int("totalSegments"))
+        assertFalse(defaults.containsKey("linkingMetadata"))
+        assertTrue(defaults.array("globals").isNotEmpty())
+        val nonDefaultFilters = callToolJsonObject("list_data_segments", request(0, 1) {
+            put("includeExports", JsonPrimitive(true))
+            put("includeGlobals", JsonPrimitive(false))
+        })
+        assertTrue(nonDefaultFilters.array("exportedSymbols").isNotEmpty())
+        assertEquals(0, nonDefaultFilters.array("globals").size)
+        assertEquals(0, callToolJsonObject("list_data_segments", request(0, 0)).array("segments").size)
+        assertEquals(0, callToolJsonObject("list_data_segments", request(9, 10)).array("segments").size)
+        assertEquals(1, callToolJsonObject("list_data_segments", request(-1, 1)).array("segments").size)
+        assertEquals(0, callToolJsonObject("list_data_segments", request(0, 1) {
+            put("minByteLength", JsonPrimitive(100))
+        }).array("segments").size)
+        assertEquals(defaults, callToolJsonObject("list_data_segments", request(0) {
+            put("minByteLength", JsonPrimitive("invalid"))
+        }))
+
+        val reversed = callTool("list_data_segments", request(1, 0))
+        assertTrue(reversed.isError)
+        assertEquals("Invalid segmentRange `to` must be >= `from`", reversed.textPayloads.single())
+    }
+
     fun testListDataSegmentsReturnsSegmentPreviewAndSummary() {
         val fixture = createDataFixture("fixtures/direct/data/list_data_segments.wasm")
 
@@ -119,6 +168,7 @@ class HexanaMcpDataToolTest : HexanaMcpToolsetDirectTestBase() {
         """
         (module
           (memory (export "memory") 1)
+          (global (export "offset") i32 (i32.const 0))
           (data (i32.const 0) "Hello"))
         """.trimIndent()
     )

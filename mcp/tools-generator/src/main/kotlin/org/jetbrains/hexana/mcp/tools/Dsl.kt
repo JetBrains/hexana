@@ -595,12 +595,16 @@ sealed class StandaloneInvocationSpec {
         override val methodName: String,
         val requestTypeName: String,
         val invalidInputMethodName: String,
+        val halfOpenRanges: List<FieldRef> = emptyList(),
     ) : StandaloneInvocationSpec() {
         init {
             validateStandaloneHandlerMethodName(methodName)
             validateStandaloneHandlerMethodName(invalidInputMethodName)
             require(KOTLIN_TYPE_NAME_REGEX.matches(requestTypeName)) {
                 "Standalone typed request name must be a Kotlin type name, got `$requestTypeName`."
+            }
+            require(halfOpenRanges.distinctBy(FieldRef::name).size == halfOpenRanges.size) {
+                "Standalone typed request `$requestTypeName` references duplicate half-open ranges."
             }
         }
     }
@@ -1444,7 +1448,6 @@ sealed class ToolInputPattern {
     object WasmFrames : ToolInputPattern()
     object SourceLocations : ToolInputPattern()
     data class ClosedRange(val parameterName: String) : ToolInputPattern()
-    object DataSegments : ToolInputPattern()
     object DataPayloadPolicyAudit : ToolInputPattern()
     object LocalStackBudgetAudit : ToolInputPattern()
     object ArtifactQuery : ToolInputPattern()
@@ -1851,19 +1854,6 @@ internal fun validateInputPattern(toolName: String, input: ClassSpec, pattern: T
         requireDescribed(to)
     }
 
-    fun requireHalfOpenRange(field: FieldSpec) {
-        requireDescribed(field)
-        val range = requireClassRef(field)
-        val from = requireField("from", owner = range)
-        requireType(from, FieldType.Int32)
-        requireNonNullable(from)
-        requireDescribed(from)
-        val to = requireField("to", owner = range)
-        requireType(to, FieldType.Int32)
-        requireNullable(to)
-        requireDescribed(to)
-    }
-
     fun requireBinaryFunctionPageInput() {
         requireBinaryInput()
 
@@ -2002,24 +1992,6 @@ internal fun validateInputPattern(toolName: String, input: ClassSpec, pattern: T
         is ToolInputPattern.ClosedRange -> {
             requireWasmInput()
             requireClosedRange(requireField(pattern.parameterName))
-        }
-        ToolInputPattern.DataSegments -> {
-            requireWasmInput()
-            requireHalfOpenRange(requireField("segmentRange"))
-            val includeExports = requireField("includeExports")
-            requireType(includeExports, FieldType.BooleanT)
-            requireNonNullable(includeExports)
-            requireDefault(includeExports, "Boolean") { it is Boolean }
-            requireDescribed(includeExports)
-            val includeGlobals = requireField("includeGlobals")
-            requireType(includeGlobals, FieldType.BooleanT)
-            requireNonNullable(includeGlobals)
-            requireDefault(includeGlobals, "Boolean") { it is Boolean }
-            requireDescribed(includeGlobals)
-            val minByteLength = requireField("minByteLength")
-            requireType(minByteLength, FieldType.Int32)
-            requireNullable(minByteLength)
-            requireDescribed(minByteLength)
         }
         ToolInputPattern.DataPayloadPolicyAudit -> {
             requireWasmInput()

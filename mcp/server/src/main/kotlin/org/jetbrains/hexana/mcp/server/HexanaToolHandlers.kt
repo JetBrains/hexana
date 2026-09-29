@@ -504,24 +504,29 @@ class HexanaToolHandlers(
     }
 
     fun listDataSegments(arguments: JsonObject?): CallToolResult {
-        return execute("list_data_segments", ListDataSegmentsResult.serializer()) {
-            val (from, toExclusive) = arguments.requireHalfOpenRange("segmentRange")
-            analysisService.listDataSegments(
-                input = wasmInput(arguments),
-                segmentStartInclusive = from,
-                segmentEndExclusive = toExclusive,
-                includeExports = arguments.booleanOrDefault(
-                    "includeExports",
-                    HexanaToolInputDefaults.LIST_DATA_SEGMENTS_INCLUDE_EXPORTS
-                ),
-                includeGlobals = arguments.booleanOrDefault(
-                    "includeGlobals",
-                    HexanaToolInputDefaults.LIST_DATA_SEGMENTS_INCLUDE_GLOBALS
-                ),
-                minByteLength = arguments.nullableInt("minByteLength", minimum = 0)
-            )
+        return try {
+            listDataSegments(decodeListDataSegmentsRequest(arguments))
+        } catch (error: ToolInputException) {
+            listDataSegmentsInputFailure(error)
         }
     }
+
+    internal fun listDataSegments(request: ListDataSegmentsRequest): CallToolResult =
+        execute("list_data_segments", ListDataSegmentsResult.serializer()) {
+            val fields = decodeListDataSegmentsRequestScalars(request)
+            val input = wasmInput(request)
+            analysisService.listDataSegments(
+                input = input,
+                segmentStartInclusive = fields.segmentRange.first,
+                segmentEndExclusive = fields.segmentRange.second ?: Int.MAX_VALUE,
+                includeExports = fields.includeExports ?: HexanaToolInputDefaults.LIST_DATA_SEGMENTS_INCLUDE_EXPORTS,
+                includeGlobals = fields.includeGlobals ?: HexanaToolInputDefaults.LIST_DATA_SEGMENTS_INCLUDE_GLOBALS,
+                minByteLength = fields.minByteLength,
+            )
+        }
+
+    internal fun listDataSegmentsInputFailure(error: ToolInputException): CallToolResult =
+        execute("list_data_segments", ListDataSegmentsResult.serializer()) { throw error }
 
     fun auditDataPayloadPolicy(arguments: JsonObject?): CallToolResult {
         return execute("audit_data_payload_policy", AuditDataPayloadPolicyResult.serializer()) {
@@ -697,6 +702,21 @@ class HexanaToolHandlers(
             bytesBase64Decoded != null -> WasmInput.RawBytes(bytesBase64Decoded)
             bytes != null -> WasmInput.RawBytes(bytes)
             else -> error("Generated list_functions source selection did not select a source")
+        }
+    }
+
+    private fun wasmInput(request: ListDataSegmentsRequest): WasmInput {
+        val path = request.path.optionalNonBlankString("path")
+        val bytesBase64Decoded = request.bytesBase64.optionalNonBlankString("bytesBase64")
+            ?.let { decodeInlineBase64(it, resourceLimits.maxInlineWasmBytes) }
+        val bytes = request.bytes.optionalByteArray("bytes", resourceLimits.maxInlineWasmBytes)
+
+        requireListDataSegmentsRequestSourceGroup0(path != null, bytesBase64Decoded != null, bytes != null)
+        return when {
+            path != null -> WasmInput.FilePath(path)
+            bytesBase64Decoded != null -> WasmInput.RawBytes(bytesBase64Decoded)
+            bytes != null -> WasmInput.RawBytes(bytes)
+            else -> error("Generated list_data_segments source selection did not select a source")
         }
     }
 
@@ -929,21 +949,6 @@ class HexanaToolHandlers(
         return element as? JsonObject ?: throw ToolInputException("`$name` must be an object")
     }
 
-    private fun JsonObject.requireInt(name: String, minimum: Int? = null, maximum: Int? = null): Int {
-        val element = get(name) ?: throw ToolInputException("`$name` is required")
-        val value = element.jsonPrimitive.intOrNull
-            ?: throw ToolInputException("`$name` must be an integer")
-        return value.validateIntBounds(name, minimum, maximum)
-    }
-
-    private fun JsonObject.optionalInt(name: String, minimum: Int? = null, maximum: Int? = null): Int? {
-        val element = get(name) ?: return null
-        if (element == JsonNull) return null
-        val value = element.jsonPrimitive.intOrNull
-            ?: throw ToolInputException("`$name` must be an integer")
-        return value.validateIntBounds(name, minimum, maximum)
-    }
-
     private fun JsonObject?.nullableInt(name: String, minimum: Int? = null, maximum: Int? = null): Int? {
         val element = this?.get(name) ?: return null
         if (element == JsonNull) return null
@@ -1072,13 +1077,6 @@ class HexanaToolHandlers(
             throw ToolInputException("`$name.to` must be >= `$name.from`")
         }
         return from..to
-    }
-
-    private fun JsonObject?.requireHalfOpenRange(name: String): Pair<Int, Int> {
-        val value = requireObject(name)
-        val from = value.requireInt("from", minimum = 0)
-        val toExclusive = value.optionalInt("to", minimum = 0) ?: Int.MAX_VALUE
-        return from to toExclusive
     }
 
     private fun JsonObject.requireRangeInt(rangeName: String, fieldName: String): Int {

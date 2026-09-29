@@ -35,6 +35,8 @@ data class IdeaTypedInvocationSpec(
     val requestTypeName: String,
     val source: SourceSelection,
     val fields: List<FieldRef>,
+    val halfOpenRanges: List<FieldRef> = emptyList(),
+    val zeroWhenNull: List<FieldRef> = emptyList(),
 ) {
     init {
         require(Regex("^[A-Z][A-Za-z0-9_]*$").matches(requestTypeName)) {
@@ -42,6 +44,10 @@ data class IdeaTypedInvocationSpec(
         }
         require(fields.distinctBy(FieldRef::name).size == fields.size) {
             "IDEA typed request `$requestTypeName` references duplicate fields."
+        }
+        require(halfOpenRanges.distinctBy(FieldRef::name).size == halfOpenRanges.size &&
+            zeroWhenNull.distinctBy(FieldRef::name).size == zeroWhenNull.size) {
+            "IDEA typed request `$requestTypeName` references duplicate range or null bindings."
         }
     }
 
@@ -60,6 +66,30 @@ data class IdeaTypedInvocationSpec(
         require(fields.none { field -> input.exactOneSourceGroups.any { group -> group.selections.any { it.field == field } } }) {
             "IDEA typed request `$requestTypeName` must keep source fields separate from ordinary fields."
         }
+        halfOpenRanges.forEach { reference ->
+            require(reference in fields) { "IDEA typed request `$requestTypeName` must bind range `${reference.name}` as an ordinary field." }
+            validateHalfOpenRange(input, reference)
+        }
+        zeroWhenNull.forEach { reference ->
+            require(reference in fields && reference.type == FieldType.Int32 && reference.nullable) {
+                "IDEA typed request `$requestTypeName` can replace null with zero only for a nullable Int field."
+            }
+        }
+    }
+}
+
+internal fun validateHalfOpenRange(input: ClassSpec, reference: FieldRef) {
+    require(input.fieldRef(reference.name) == reference) { "Half-open range `${reference.name}` must belong to `${input.name}`." }
+    val range = (reference.type as? FieldType.ClassRef)?.clazz
+    require(range != null && range.fields.map(FieldSpec::name) == listOf("from", "to")) {
+        "Half-open range `${reference.name}` must contain `from` and `to` fields."
+    }
+    val from = range.fields[0]
+    val to = range.fields[1]
+    require(!reference.nullable && reference.presence == FieldPresence.Required &&
+        from.type == FieldType.Int32 && !from.nullable && from.presence == FieldPresence.Required && from.minimum == 0 &&
+        to.type == FieldType.Int32 && to.nullable && to.presence == FieldPresence.Optional && to.minimum == 0) {
+        "Half-open range `${reference.name}` requires a nonnegative `from` and optional nonnegative `to`."
     }
 }
 
@@ -206,7 +236,17 @@ internal val HexanaIdeaToolBindings = listOf(
     idea(GetTypesForIndicesToolId, ToolInputPattern.Indices, "org.jetbrains.hexana.mcp.query.readTypesByIndices"),
     idea(ListElementSegmentsToolId, ToolInputPattern.WasmOnly, "org.jetbrains.hexana.mcp.query.readElementSegments"),
     idea(ListDataToolId, ToolInputPattern.ClosedRange("entriesRange"), "org.jetbrains.hexana.mcp.query.readDataSections"),
-    idea(ListDataSegmentsToolId, ToolInputPattern.DataSegments, "org.jetbrains.hexana.mcp.query.readDataSegmentsByRange"),
+    ideaTyped(
+        ListDataSegmentsToolId,
+        IdeaTypedInvocationSpec(
+            "ListDataSegmentsIdeaRequest",
+            pathSource(ListDataSegmentsInput.fieldRef("path")),
+            listOf("segmentRange", "includeExports", "includeGlobals", "minByteLength").map(ListDataSegmentsInput::fieldRef),
+            halfOpenRanges = listOf(ListDataSegmentsInput.fieldRef("segmentRange")),
+            zeroWhenNull = listOf(ListDataSegmentsInput.fieldRef("minByteLength")),
+        ),
+        "org.jetbrains.hexana.mcp.query.readDataSegmentsByRange",
+    ),
     idea(AuditDataPayloadPolicyToolId, ToolInputPattern.DataPayloadPolicyAudit, "org.jetbrains.hexana.mcp.query.auditDataPayloadPolicy"),
     idea(QueryArtifactsToolId, ToolInputPattern.ArtifactQuery, "org.jetbrains.hexana.mcp.query.readArtifactQuery"),
 )
@@ -263,7 +303,13 @@ private val STANDALONE_TOOL_BINDINGS = listOf(
     standalone(GetGlobalsForIndicesToolId, "getGlobalsForIndices"), standalone(ListTypesToolId, "listTypes"),
     standalone(ListValueTypesToolId, "listValueTypes"), standalone(ListReferenceTypesToolId, "listReferenceTypes"),
     standalone(GetTypesForIndicesToolId, "getTypesForIndices"), standalone(ListElementSegmentsToolId, "listElementSegments"),
-    standalone(ListDataToolId, "listData"), standalone(ListDataSegmentsToolId, "listDataSegments"),
+    standalone(ListDataToolId, "listData"), standalone(
+        ListDataSegmentsToolId,
+        StandaloneInvocationSpec.TypedRequest(
+            "listDataSegments", "ListDataSegmentsRequest", "listDataSegmentsInputFailure",
+            halfOpenRanges = listOf(ListDataSegmentsInput.fieldRef("segmentRange")),
+        ),
+    ),
     standalone(AuditDataPayloadPolicyToolId, "auditDataPayloadPolicy"), standalone(QueryArtifactsToolId, "queryArtifacts"),
 )
 

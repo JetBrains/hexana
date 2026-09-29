@@ -224,9 +224,16 @@ class ToolDescriptionGenerationTest {
 
     @Test
     fun `non-public typed fixture derives its neutral request decoder from the schema plan`() {
+        val range = class_("TypedDecoderFixtureRange") {
+            int("from").minimum(0)
+            nullable("to", FieldType.Int32).minimum(0)
+        }
         val input = WasmInputClass.with("TypedDecoderFixture") {
             int("offset", default = 0).minimum(0)
             int("limit", default = 200).minimum(1)
+            embed("segmentRange", of = range)
+            boolean("includeMetadata", default = false)
+            nullable("minByteLength", FieldType.Int32).minimum(0)
         }
         val tool = StandaloneTool(
             ToolSpec(org.jetbrains.hexana.mcp.tools.ListFunctionsToolId, "Typed decoder fixture.", null, input, input),
@@ -236,6 +243,7 @@ class ToolDescriptionGenerationTest {
                     "typedDecoderFixture",
                     "TypedDecoderFixtureRequest",
                     "typedDecoderFixtureInputFailure",
+                    halfOpenRanges = listOf(input.fieldRef("segmentRange")),
                 ),
                 org.jetbrains.hexana.mcp.tools.UnknownFieldPolicy.Ignore,
             ),
@@ -263,7 +271,48 @@ class ToolDescriptionGenerationTest {
         assertTrue(source.contains("limit: Int?"), source)
         assertTrue(source.contains("offsetElement.jsonPrimitive.intOrNull"), source)
         assertTrue(source.contains("limitElement.jsonPrimitive.intOrNull"), source)
+        assertTrue(source.contains("segmentRange: Pair<Int, Int?>"), source)
+        assertTrue(source.contains("segmentRangeToExclusive = if (segmentRangeToElement == null"), source)
+        assertTrue(source.contains("includeMetadataElement.jsonPrimitive.booleanOrNull"), source)
+        assertTrue(source.contains("minByteLengthElement == JsonNull"), source)
         assertFalse(source.contains("HexanaResourceLimits"), source)
+    }
+
+    @Test
+    fun `IDEA typed range and extra ordinary filter use the same adapter path`() {
+        val range = class_("IdeaRangeFixture") {
+            int("from").minimum(0)
+            nullable("to", FieldType.Int32).minimum(0)
+        }
+        val input = WasmInputClass.with("IdeaRangeFixtureInput") {
+            embed("window", of = range)
+            boolean("includeMetadata", default = false)
+            nullable("minByteLength", FieldType.Int32).minimum(0)
+        }
+        val contract = ToolSpec(
+            org.jetbrains.hexana.mcp.tools.ToolId("idea_range_fixture"), "IDEA range fixture.", null,
+            input, ClassSpec("IdeaRangeFixtureOutput", emptyList()),
+        )
+        val invocation = IdeaTypedInvocationSpec(
+            "IdeaRangeFixtureRequest", pathSource(input.fieldRef("path")),
+            listOf("window", "includeMetadata", "minByteLength").map(input::fieldRef),
+            halfOpenRanges = listOf(input.fieldRef("window")),
+            zeroWhenNull = listOf(input.fieldRef("minByteLength")),
+        )
+        val tool = IdeaTool(contract, IdeaToolBinding(
+            contract.id, null, "org.jetbrains.hexana.mcp.query.readDataSegmentsByRange", UnknownFieldPolicy.Ignore, invocation,
+        ))
+        val source = ideaSource(listOf(tool))
+        assertTrue(source.contains("val window: IntRange"), source)
+        assertTrue(source.contains("val windowMap = args.requireIntMapArgument(\"window\")"), source)
+        assertTrue(source.contains("val window = windowFrom until windowToExclusive"), source)
+        assertTrue(source.contains("val includeMetadata = args.optionalBooleanArgument(\"includeMetadata\") ?: false"), source)
+        assertTrue(source.contains("provider.readDataSegmentsByRange(request.window, request.includeMetadata, request.minByteLength ?: 0)"), source)
+
+        val invalid = tool.copy(binding = tool.binding.copy(
+            typedInvocation = invocation.copy(halfOpenRanges = listOf(input.fieldRef("includeMetadata"))),
+        ))
+        assertFailsWith<IllegalArgumentException> { ideaSource(listOf(invalid)) }
     }
 
     @Test

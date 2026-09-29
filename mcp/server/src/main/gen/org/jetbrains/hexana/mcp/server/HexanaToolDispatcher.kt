@@ -8,6 +8,7 @@ import io.modelcontextprotocol.kotlin.sdk.types.ToolAnnotations
 import io.modelcontextprotocol.kotlin.sdk.types.ToolSchema
 import kotlin.Boolean
 import kotlin.Int
+import kotlin.Pair
 import kotlin.String
 import kotlin.collections.Map
 import kotlin.collections.Set
@@ -15,6 +16,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -203,6 +205,71 @@ internal fun decodeListFunctionsRequestScalars(request: ListFunctionsRequest): L
 }
 
 internal fun requireListFunctionsRequestSourceGroup0(
+  source0Present: Boolean,
+  source1Present: Boolean,
+  source2Present: Boolean,
+) {
+  val sourceGroup0Count = listOf(source0Present, source1Present, source2Present).count { it }
+  if (sourceGroup0Count == 0) throw ToolInputException("Exactly one of `path`, `bytesBase64`, or `bytes` is required")
+  if (sourceGroup0Count > 1) throw ToolInputException("Provide exactly one of `path`, `bytesBase64`, or `bytes`")
+}
+
+internal data class ListDataSegmentsRequest(
+  public val path: JsonElement?,
+  public val bytesBase64: JsonElement?,
+  public val bytes: JsonElement?,
+  public val segmentRange: JsonElement?,
+  public val includeExports: JsonElement?,
+  public val includeGlobals: JsonElement?,
+  public val minByteLength: JsonElement?,
+)
+
+internal fun decodeListDataSegmentsRequest(arguments: JsonObject?): ListDataSegmentsRequest {
+  val pathElement = arguments?.get("path")
+  val path = pathElement?.takeUnless { it == JsonNull }
+  val bytesBase64Element = arguments?.get("bytesBase64")
+  val bytesBase64 = bytesBase64Element?.takeUnless { it == JsonNull }
+  val bytesElement = arguments?.get("bytes")
+  val bytes = bytesElement?.takeUnless { it == JsonNull }
+  val segmentRangeElement = arguments?.get("segmentRange")
+  val segmentRange = segmentRangeElement
+  val includeExportsElement = arguments?.get("includeExports")
+  val includeExports = includeExportsElement
+  val includeGlobalsElement = arguments?.get("includeGlobals")
+  val includeGlobals = includeGlobalsElement
+  val minByteLengthElement = arguments?.get("minByteLength")
+  val minByteLength = minByteLengthElement
+  return ListDataSegmentsRequest(path, bytesBase64, bytes, segmentRange, includeExports, includeGlobals, minByteLength)
+}
+
+internal data class ListDataSegmentsRequestScalars(
+  public val segmentRange: Pair<Int, Int?>,
+  public val includeExports: Boolean?,
+  public val includeGlobals: Boolean?,
+  public val minByteLength: Int?,
+)
+
+internal fun decodeListDataSegmentsRequestScalars(request: ListDataSegmentsRequest): ListDataSegmentsRequestScalars {
+  val segmentRangeElement = request.segmentRange ?: throw ToolInputException("`segmentRange` is required")
+  val segmentRangeObject = segmentRangeElement as? JsonObject ?: throw ToolInputException("`segmentRange` must be an object")
+  val segmentRangeFromElement = segmentRangeObject["from"] ?: throw ToolInputException("`from` is required")
+  val segmentRangeFrom = segmentRangeFromElement.jsonPrimitive.intOrNull ?: throw ToolInputException("`from` must be an integer")
+  if (segmentRangeFrom < 0) throw ToolInputException("`from` must be >= 0")
+  val segmentRangeToElement = segmentRangeObject["to"]
+  val segmentRangeToExclusive = if (segmentRangeToElement == null || segmentRangeToElement == JsonNull) null else segmentRangeToElement.jsonPrimitive.intOrNull ?: throw ToolInputException("`to` must be an integer")
+  if (segmentRangeToExclusive != null && segmentRangeToExclusive < 0) throw ToolInputException("`to` must be >= 0")
+  val segmentRange = segmentRangeFrom to segmentRangeToExclusive
+  val includeExportsElement = request.includeExports
+  val includeExports = if (includeExportsElement == null) null else includeExportsElement.jsonPrimitive.booleanOrNull ?: throw ToolInputException("`includeExports` must be a boolean")
+  val includeGlobalsElement = request.includeGlobals
+  val includeGlobals = if (includeGlobalsElement == null) null else includeGlobalsElement.jsonPrimitive.booleanOrNull ?: throw ToolInputException("`includeGlobals` must be a boolean")
+  val minByteLengthElement = request.minByteLength
+  val minByteLength = if (minByteLengthElement == null || minByteLengthElement == JsonNull) null else minByteLengthElement.jsonPrimitive.intOrNull ?: throw ToolInputException("`minByteLength` must be an integer")
+  if (minByteLength != null && minByteLength < 0) throw ToolInputException("`minByteLength` must be >= 0")
+  return ListDataSegmentsRequestScalars(segmentRange, includeExports, includeGlobals, minByteLength)
+}
+
+internal fun requireListDataSegmentsRequestSourceGroup0(
   source0Present: Boolean,
   source1Present: Boolean,
   source2Present: Boolean,
@@ -4596,7 +4663,11 @@ private fun Server.registerListDataSegmentsTool(handlers: HexanaToolHandlers) {
       idempotentHint = true,
     ),
   ))  {
-    request: CallToolRequest -> handlers.listDataSegments(request.arguments)
+    request: CallToolRequest -> try {
+      handlers.listDataSegments(decodeListDataSegmentsRequest(request.arguments))
+    } catch (error: ToolInputException) {
+      handlers.listDataSegmentsInputFailure(error)
+    }
   }
 }
 

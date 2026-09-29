@@ -227,6 +227,12 @@ class HexanaToolCompatibilityTest {
                 appendLine("idea[$index].requestType=${invocation.requestTypeName}")
                 appendLine("idea[$index].source=${invocation.source.kind}:${invocation.source.field.name}")
                 appendLine("idea[$index].fields=${invocation.fields.joinToString { it.name }}")
+                if (invocation.halfOpenRanges.isNotEmpty()) {
+                    appendLine("idea[$index].halfOpenRanges=${invocation.halfOpenRanges.joinToString { it.name }}")
+                }
+                if (invocation.zeroWhenNull.isNotEmpty()) {
+                    appendLine("idea[$index].zeroWhenNull=${invocation.zeroWhenNull.joinToString { it.name }}")
+                }
             }
             appendLine("idea[$index].handler=${tool.handlerFqn}")
         }
@@ -247,6 +253,9 @@ class HexanaToolCompatibilityTest {
                     appendLine("standalone[$index].invocation=typedRequest")
                     appendLine("standalone[$index].requestType=${invocation.requestTypeName}")
                     appendLine("standalone[$index].invalidInputHandler=${invocation.invalidInputMethodName}")
+                    if (invocation.halfOpenRanges.isNotEmpty()) {
+                        appendLine("standalone[$index].halfOpenRanges=${invocation.halfOpenRanges.joinToString { it.name }}")
+                    }
                 }
             }
         }
@@ -440,8 +449,8 @@ class HexanaToolCompatibilityTest {
         // and the guidance text describes the ESM-only import resolution. Combined here
         // with the field-presence snapshot extension that arrived from master.
         const val EXPECTED_SEMANTIC = "5400f3de10d8700b3425c6d0e20e09cc5f19626403f010935639f275a02818e8"
-        const val EXPECTED_IDEA = "714da9778528306fde04001169ecf03acb957ef9e43959f90d245b0fc4ca539d"
-        const val EXPECTED_STANDALONE = "dd0f31cd4e78e695abd10fca5a78ac31cd8602e4ba01a92688295fac45f16a41"
+        const val EXPECTED_IDEA = "61a577f8701b4778a5688ce89769913bbef589dce14df69aba7197a2c4a63256"
+        const val EXPECTED_STANDALONE = "727c29abd4bfc2d7f16c7d8be7e4c839df0c27eb50287e73ff273da951fbf47f"
         const val EXPECTED_MCPB = "d530ca73ea6bdcd8a8244ab0960e10c348d37932c02ff7bee2053a72760abe84"
         const val EXPECTED_MCP_PRODUCTS = "13bc46a83aa5707e526842837ab9f0ac472229483024dba827b7cc35014f8903"
         const val EXPECTED_CLI = "78c54bcff7ec202f6ae4b355148237baa8a2a0e28d080cf32e661f6c7b8b509a"

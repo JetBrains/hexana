@@ -53,7 +53,7 @@ and refreshes the checked-in packaging template.
 
 - `ToolSpec` is semantic-only: typed ID, summary/guidance, input/output schema/defaults/bounds, and intrinsic conversion
   capabilities. Consumer invocation and membership policy must not be added back to feature contracts.
-- IDEA owns invocation bindings (legacy `ToolInputPattern` or a schema-bound typed request, plus handler FQN) and binds to `hexana-mcp.default`. `list_functions` uses a typed IDEA request while retaining its path-only IDEA input projection. Standalone owns handler method bindings and its explicitly bound published MCP product;
+- IDEA owns invocation bindings (legacy `ToolInputPattern` or a schema-bound typed request, plus handler FQN) and binds to `hexana-mcp.default`. `list_functions` and `list_data_segments` use typed IDEA requests while retaining their path-only IDEA input projection. Standalone owns handler method bindings and its explicitly bound published MCP product;
   its `default`/`advanced`/`scripting` profile declarations remain disjoint and complete. MCPB binds to `hexana-mcp.default` independently of profile names. CLI owns command/group/output,
   explicit executable input models, and product selections; product runtime validates advertised formats against concrete projections.
 - All authorities resolve typed IDs through `ToolCatalog`; duplicate/unknown selectors and missing/duplicate bindings
@@ -137,13 +137,13 @@ Before sending a catalog change for review, run the generated-artifact drift che
 2. Mirror the output class shape with `class_(..., kotlinPackage = "...")` in the feature file that owns the tool, so
    the generators can emit MCP output schemas and structured-content encoding. Add cross-feature reusable input pieces
    to `CommonInputs.kt`.
-3. Add the tool's ordered IDEA binding in `SurfaceAuthorities.kt`. If it needs a legacy IDE parameter pattern, add
-   it to `ToolInputPattern`; for a typed request, bind schema field/source references and update `IdeaToolsetMain.kt`.
+3. Add the tool's ordered IDEA binding in `SurfaceAuthorities.kt`. Prefer a typed request with schema field/source references;
+   `list_data_segments` shows the half-open range and nullable filter bindings. Add a legacy `ToolInputPattern` only if needed.
    If the CLI needs path/stdin/base64/raw source selection or
    ordinary/JSON parameter binding, declare an explicit CLI `ToolInputModel`; never derive it from the IDEA binding.
    The standalone dispatcher derives its input schema from the semantic `input`; update
    `StandaloneToolsetMain.kt` only when the DSL needs a new schema feature, field type, or neutral CLI metadata behavior.
-   The existing patterns cover path-only, offset/limit, indices, closed range, and half-open segment range with filters.
+   The remaining patterns cover path-only, indices, closed ranges, and specialized tool inputs.
 4. Update each applicable independent authority in `SurfaceAuthorities.kt`: IDEA selection/binding, standalone
    binding and effective profile lists, and CLI binding/product selections. MCPB follows standalone default membership
    automatically.

@@ -59,7 +59,8 @@ class HexanaHttpIntegrationTest {
                         """
                         (module
                           (memory 1)
-                          (func (export "main")))
+                          (func (export "main"))
+                          (data (i32.const 0) "Hello"))
                         """.trimIndent()
                     )
                     logger.info("Created wasm fixture at {}", wasm)
@@ -138,6 +139,22 @@ class HexanaHttpIntegrationTest {
                     assertEquals(true, invalidFunctionsResult.isError)
                     assertEquals("INVALID_INPUT", invalidFunctionsResult.structuredContent?.get("code")?.jsonPrimitive?.content)
                     assertEquals("`bytes` must be an array", invalidFunctionsResult.structuredContent?.get("message")?.jsonPrimitive?.content)
+
+                    val segmentsResult = client.callTool(
+                        name = "list_data_segments",
+                        arguments = mapOf("bytes" to wasmBytes, "segmentRange" to mapOf("from" to 0, "to" to 1)),
+                        meta = emptyMap<String, Any?>(),
+                    )
+                    assertFalse(segmentsResult.isError == true)
+                    assertJsonTextMatchesStructured(segmentsResult)
+                    assertEquals(1, segmentsResult.structuredContent?.get("segments")?.jsonArray?.size)
+                    assertEquals(1, segmentsResult.structuredContent?.get("summary")?.jsonObject?.get("totalSegments")?.jsonPrimitive?.int)
+                    val invalidSegmentsResult = client.callTool(
+                        name = "list_data_segments",
+                        arguments = mapOf("bytes" to wasmBytes, "segmentRange" to mapOf("from" to -1)),
+                        meta = emptyMap<String, Any?>(),
+                    )
+                    assertEquals("INVALID_INPUT", invalidSegmentsResult.structuredContent?.get("code")?.jsonPrimitive?.content)
 
                     logger.info("Requesting tools/call list_memory")
                     val memoryResult = client.callTool(

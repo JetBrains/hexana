@@ -1938,6 +1938,73 @@ class HexanaToolHandlersTest {
     }
 
     @Test
+    fun listDataSegmentsTypedAdapterPreservesHalfOpenRangeDefaultsAndNestedResult() {
+        val wasm = createWasmFile(
+            "typed-data-segments.wasm",
+            """
+            (module
+              (memory (export "memory") 1)
+              (global (export "offset") i32 (i32.const 0))
+              (data (i32.const 0) "Hello")
+              (data (i32.const 8) "a"))
+            """.trimIndent(),
+        )
+        fun request(from: Int, to: Int? = null, extra: (kotlinx.serialization.json.JsonObjectBuilder.() -> Unit)? = null) =
+            buildJsonObject {
+                put("path", JsonPrimitive(wasm.toString()))
+                put("segmentRange", buildJsonObject {
+                    put("from", JsonPrimitive(from))
+                    if (to != null) put("to", JsonPrimitive(to))
+                })
+                extra?.invoke(this)
+            }
+
+        val defaults = handlers.listDataSegments(request(0, 2) { put("unknown", JsonPrimitive(true)) })
+        val explicitDefaults = handlers.listDataSegments(request(0, 2) {
+            put("includeExports", JsonPrimitive(false))
+            put("includeGlobals", JsonPrimitive(true))
+            put("minByteLength", JsonNull)
+        })
+        assertFalse(defaults.isError == true)
+        assertEquals(explicitDefaults.structuredContent, defaults.structuredContent)
+        val nested = defaults.structuredContent!!
+        assertEquals(2, nested["segments"]!!.jsonArray.size)
+        assertEquals(2, nested["summary"]!!.jsonObject["totalSegments"]!!.jsonPrimitive.int)
+        assertEquals(null, nested["linkingMetadata"])
+        assertTrue(nested["globals"]!!.jsonArray.isNotEmpty())
+        val nonDefaultFilters = handlers.listDataSegments(request(0, 2) {
+            put("includeExports", JsonPrimitive(true))
+            put("includeGlobals", JsonPrimitive(false))
+        }).structuredContent!!
+        assertTrue(nonDefaultFilters["exportedSymbols"]!!.jsonArray.isNotEmpty())
+        assertEquals(0, nonDefaultFilters["globals"]!!.jsonArray.size)
+
+        val inlineBytes = buildJsonArray {
+            Files.readAllBytes(wasm).forEach { add(JsonPrimitive(it.toInt() and 0xFF)) }
+        }
+        val inline = handlers.listDataSegments(buildJsonObject {
+            put("bytes", inlineBytes)
+            put("segmentRange", buildJsonObject { put("from", JsonPrimitive(0)) })
+        })
+        assertEquals(2, inline.structuredContent!!["segments"]!!.jsonArray.size)
+        val duplicateSource = handlers.listDataSegments(request(0, 2) { put("bytes", inlineBytes) })
+        assertEquals("INVALID_INPUT", duplicateSource.structuredContent!!["code"]!!.jsonPrimitive.content)
+
+        val filtered = handlers.listDataSegments(request(0) { put("minByteLength", JsonPrimitive(2)) })
+        assertEquals(1, filtered.structuredContent!!["segments"]!!.jsonArray.size)
+        assertEquals(0, handlers.listDataSegments(request(1, 1)).structuredContent!!["segments"]!!.jsonArray.size)
+        assertEquals(0, handlers.listDataSegments(request(9, 10)).structuredContent!!["segments"]!!.jsonArray.size)
+        val reversed = handlers.listDataSegments(request(1, 0))
+        assertEquals("OUT_OF_RANGE", reversed.structuredContent!!["code"]!!.jsonPrimitive.content)
+        val invalidFilter = handlers.listDataSegments(request(0, 1) { put("minByteLength", JsonPrimitive(-1)) })
+        assertEquals("INVALID_INPUT", invalidFilter.structuredContent!!["code"]!!.jsonPrimitive.content)
+        val negativeStart = handlers.listDataSegments(request(-1, 1))
+        assertEquals("INVALID_INPUT", negativeStart.structuredContent!!["code"]!!.jsonPrimitive.content)
+        val excessive = handlers.listDataSegments(request(0, Int.MAX_VALUE - 1))
+        assertEquals("RESOURCE_LIMIT_EXCEEDED", excessive.structuredContent!!["code"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun unexpectedExceptionReturnsClearInternalErrorMessage() {
         val diagnosticDirectory = isolateDiagnostics("unexpected")
         val handlers = HexanaToolHandlers(

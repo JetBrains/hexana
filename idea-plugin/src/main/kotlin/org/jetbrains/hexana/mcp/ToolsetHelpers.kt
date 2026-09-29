@@ -147,12 +147,3 @@ internal fun requireClosedRange(entriesRange: Map<String, Int>, fieldName: Strin
     }
     return from..to
 }
-
-internal fun requireHalfOpenSegmentRange(segmentRange: Map<String, Int>): IntRange {
-    val from = segmentRange["from"] ?: mcpFail("Invalid segmentRange no `from`")
-    val toExclusive = segmentRange["to"] ?: Int.MAX_VALUE
-    if (from > toExclusive) {
-        mcpFail("Invalid segmentRange `to` must be >= `from`")
-    }
-    return from until toExclusive
-}

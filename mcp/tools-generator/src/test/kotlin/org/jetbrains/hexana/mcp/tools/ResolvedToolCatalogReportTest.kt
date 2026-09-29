@@ -36,6 +36,13 @@ class ResolvedToolCatalogReportTest {
         assertEquals("ListFunctionsRequest", typedDetails.getValue("requestTypeName").jsonPrimitive.content)
         assertEquals("listFunctionsInputFailure", typedDetails.getValue("invalidInputMethodName").jsonPrimitive.content)
 
+        val segmentsViews = tools.getValue("list_data_segments").jsonObject.getValue("views").jsonObject
+        val segmentsStandalone = segmentsViews.getValue("standaloneRegistration").jsonObject.getValue("details").jsonObject
+        val segmentsIdea = segmentsViews.getValue("idea").jsonObject.getValue("details").jsonObject
+        assertEquals("segmentRange", segmentsStandalone.getValue("halfOpenRanges").jsonArray.single().jsonPrimitive.content)
+        assertEquals("segmentRange", segmentsIdea.getValue("halfOpenRanges").jsonArray.single().jsonPrimitive.content)
+        assertEquals("minByteLength", segmentsIdea.getValue("zeroWhenNull").jsonArray.single().jsonPrimitive.content)
+
         val jsonArgumentsTool = HexanaStandaloneTools.first {
             it.standaloneInvocation is StandaloneInvocationSpec.JsonArguments
         }

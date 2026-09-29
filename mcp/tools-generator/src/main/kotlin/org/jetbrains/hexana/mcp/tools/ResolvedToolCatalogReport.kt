@@ -118,6 +118,8 @@ class ResolvedToolCatalogReport(
                     put("requestTypeName", JsonPrimitive(invocation.requestTypeName))
                     put("source", JsonPrimitive(invocation.source.field.name))
                     put("fields", strings(invocation.fields.map { field -> field.name }))
+                    if (invocation.halfOpenRanges.isNotEmpty()) put("halfOpenRanges", strings(invocation.halfOpenRanges.map { field -> field.name }))
+                    if (invocation.zeroWhenNull.isNotEmpty()) put("zeroWhenNull", strings(invocation.zeroWhenNull.map { field -> field.name }))
                 }
                 put("handlerFqn", JsonPrimitive(it.handlerFqn))
             } }, if (idea != null) "IDEA default selection and binding" else "not selected by IDEA default authority"),
@@ -141,6 +143,7 @@ class ResolvedToolCatalogReport(
                 put("invocationKind", JsonPrimitive("typedRequest"))
                 put("requestTypeName", JsonPrimitive(invocation.requestTypeName))
                 put("invalidInputMethodName", JsonPrimitive(invocation.invalidInputMethodName))
+                if (invocation.halfOpenRanges.isNotEmpty()) put("halfOpenRanges", strings(invocation.halfOpenRanges.map { it.name }))
             }
         }
     }
@@ -278,7 +281,6 @@ class ResolvedToolCatalogReport(
         ToolInputPattern.WasmFrames -> "wasmFrames"
         ToolInputPattern.SourceLocations -> "sourceLocations"
         is ToolInputPattern.ClosedRange -> "closedRange(parameter=${pattern.parameterName})"
-        ToolInputPattern.DataSegments -> "dataSegments"
         ToolInputPattern.DataPayloadPolicyAudit -> "dataPayloadPolicyAudit"
         ToolInputPattern.LocalStackBudgetAudit -> "localStackBudgetAudit"
         ToolInputPattern.ArtifactQuery -> "artifactQuery"

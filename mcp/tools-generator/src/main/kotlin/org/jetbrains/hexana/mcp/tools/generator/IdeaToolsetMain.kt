@@ -265,15 +265,6 @@ private fun buildToolBody(spec: IdeaTool): CodeBlock {
                 pattern.parameterName,
             )
         }
-        ToolInputPattern.DataSegments -> {
-            val includeExports = inputField(spec.input, "includeExports").defaultOrError<Boolean>()
-            val includeGlobals = inputField(spec.input, "includeGlobals").defaultOrError<Boolean>()
-            code.addStatement("val segmentRange = args.requireIntMapArgument(%S)", "segmentRange")
-            code.addStatement("val includeExports = args.optionalBooleanArgument(%S) ?: %L", "includeExports", includeExports)
-            code.addStatement("val includeGlobals = args.optionalBooleanArgument(%S) ?: %L", "includeGlobals", includeGlobals)
-            code.addStatement("val minByteLength = args.optionalIntArgument(%S)", "minByteLength")
-            code.addStatement("val range = %M(segmentRange)", REQUIRE_HALF_OPEN_RANGE)
-        }
         ToolInputPattern.DataPayloadPolicyAudit -> {
             code.addStatement("val policyPath = args.requireStringArgument(%S)", "policyPath")
         }
@@ -525,7 +516,6 @@ private fun buildToolBody(spec: IdeaTool): CodeBlock {
             ToolInputPattern.WasmFrames -> "(frames, sourceMapText, sourceMapPath, crashReportText, crashReportPath)"
             ToolInputPattern.SourceLocations -> "(locations, sourceMapText, sourceMapPath)"
             is ToolInputPattern.ClosedRange -> "(range)"
-            ToolInputPattern.DataSegments -> "(range, includeExports, includeGlobals, minByteLength ?: 0)"
             ToolInputPattern.DataPayloadPolicyAudit -> error("Handled above")
             ToolInputPattern.LocalStackBudgetAudit -> error("Handled above")
             ToolInputPattern.ArtifactQuery -> error("Handled above")
@@ -562,18 +552,19 @@ private fun buildIdeaRequestType(spec: IdeaTool, invocation: IdeaTypedInvocation
         .addModifiers(KModifier.PRIVATE, KModifier.DATA)
         .primaryConstructor(FunSpec.constructorBuilder().apply {
             fields.forEachIndexed { index, field ->
-                addParameter(field.name, ideaRequestFieldType(field, index == 0))
+                addParameter(field.name, ideaRequestFieldType(field, index == 0, invocation.halfOpenRanges.any { it.name == field.name }))
             }
         }.build())
         .apply {
             fields.forEachIndexed { index, field ->
-                addProperty(PropertySpec.builder(field.name, ideaRequestFieldType(field, index == 0)).initializer("%N", field.name).build())
+                addProperty(PropertySpec.builder(field.name, ideaRequestFieldType(field, index == 0, invocation.halfOpenRanges.any { it.name == field.name })).initializer("%N", field.name).build())
             }
         }
         .build()
 }
 
-private fun ideaRequestFieldType(field: SchemaFieldPlan, requiredSource: Boolean): TypeName {
+private fun ideaRequestFieldType(field: SchemaFieldPlan, requiredSource: Boolean, halfOpenRange: Boolean): TypeName {
+    if (halfOpenRange) return IntRange::class.asTypeName()
     val scalar = field.type as? SchemaTypePlan.Scalar
         ?: error("IDEA typed request field `${field.wireName}` must be scalar.")
     val type = when (scalar.kind) {
@@ -595,7 +586,27 @@ private fun buildIdeaRequestDecoder(spec: IdeaTool, invocation: IdeaTypedInvocat
         .returns(ClassName(IDEA_PACKAGE, invocation.requestTypeName))
         .addCode(CodeBlock.builder().apply {
             fields.forEachIndexed { index, field ->
+                if (invocation.halfOpenRanges.any { it.name == field.name }) {
+                    val range = (field.type as SchemaTypePlan.ClassRef).clazz
+                    val fromField = range.fields.single { it.name == "from" }
+                    val toField = range.fields.single { it.name == "to" }
+                    val map = "${field.name}Map"
+                    val from = "${field.name}From"
+                    val to = "${field.name}ToExclusive"
+                    addStatement("val %N = args.requireIntMapArgument(%S)", map, field.wireName)
+                    addStatement("val %N = %N[%S] ?: %M(%S)", from, map, fromField.wireName, MCP_FAIL,
+                        "Invalid ${field.wireName} no `${fromField.wireName}`")
+                    addStatement("val %N = %N[%S] ?: %T.MAX_VALUE", to, map, toField.wireName, Int::class)
+                    addStatement("if (%N > %N) %M(%S)", from, to, MCP_FAIL,
+                        "Invalid ${field.wireName} `${toField.wireName}` must be >= `${fromField.wireName}`")
+                    addStatement("val %N = %N until %N", field.name, from, to)
+                    return@forEachIndexed
+                }
                 val scalarKind = (field.type as SchemaTypePlan.Scalar).kind
+                if (index > 0 && field.nullable && field.presence != FieldPresence.Required && scalarKind == SchemaScalarKind.Int32) {
+                    addStatement("val %N = args.optionalIntArgument(%S)", field.name, field.wireName)
+                    return@forEachIndexed
+                }
                 if (index > 0 && field.nullable) {
                     val elementName = "${field.name}Element"
                     val missing = if (field.presence == FieldPresence.Required) {
@@ -659,6 +670,7 @@ private fun buildTypedToolBody(spec: IdeaTool, invocation: IdeaTypedInvocationSp
     invocation.fields.forEachIndexed { index, field ->
         if (index > 0) code.add(", ")
         code.add("request.%N", field.name)
+        if (field in invocation.zeroWhenNull) code.add(" ?: 0")
     }
     code.add(")\n")
     code.addStatement("val text = %M(result)", ENCODE_HEXANA_JSON)
@@ -740,9 +752,6 @@ private fun inputFieldsForPattern(spec: IdeaTool, input: SchemaClassPlan): List<
         ToolInputPattern.WasmFrames -> fields("frames", "crashReportPath", "sourceMapPath")
         ToolInputPattern.SourceLocations -> fields("locations", "sourceMapPath")
         is ToolInputPattern.ClosedRange -> fields(pattern.parameterName)
-        ToolInputPattern.DataSegments -> fields(
-            "segmentRange", "includeExports", "includeGlobals", "minByteLength",
-        )
         ToolInputPattern.DataPayloadPolicyAudit -> fields("policyPath")
         ToolInputPattern.LocalStackBudgetAudit -> fields(
             "policyPath", "logPath", "checkedExports", "maxLocals", "countParams",
@@ -1342,6 +1351,5 @@ private val REQUIRE_WASM_FILE = MemberName(IDEA_PACKAGE, "requireWasmFile")
 private val REQUIRE_TEXT_FILE = MemberName(IDEA_PACKAGE, "requireTextFile")
 private val REQUIRE_BINARY_PROVIDER_INPUT = MemberName(IDEA_PACKAGE, "requireBinaryProviderInput")
 private val REQUIRE_CLOSED_RANGE = MemberName(IDEA_PACKAGE, "requireClosedRange")
-private val REQUIRE_HALF_OPEN_RANGE = MemberName(IDEA_PACKAGE, "requireHalfOpenSegmentRange")
 private val REQUIRE_CORE_WASM_BINARY_PROVIDER = MemberName(IDEA_PACKAGE, "requireCoreWasmBinaryProvider")
 private val REQUIRE_COMPONENT_WASM_BINARY_PROVIDER = MemberName(IDEA_PACKAGE, "requireComponentWasmBinaryProvider")
