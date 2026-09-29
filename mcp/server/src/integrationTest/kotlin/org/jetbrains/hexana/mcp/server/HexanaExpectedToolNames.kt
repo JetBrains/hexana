@@ -7,6 +7,7 @@ internal val EXPECTED_ADVANCED_HEXANA_TOOL_NAMES = listOf(
     "get_locals_for_functions",
     "get_memory_for_indices",
     "get_types_for_indices",
+    "inspect_binary",
     "list_binary_functions",
     "list_code_section_offsets",
     "list_component_surface",
