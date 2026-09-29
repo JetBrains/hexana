@@ -145,7 +145,7 @@ private fun CopyControl(content: () -> String) {
  * on the document being focused, neither of which is guaranteed inside a VS
  * Code webview - so a refusal falls back to the selection trick, which is not.
  */
-private fun copyToClipboard(text: String, onDone: (Boolean) -> Unit) {
+internal fun copyToClipboard(text: String, onDone: (Boolean) -> Unit) {
     val clipboard = window.navigator.asDynamic().clipboard
     if (clipboard == null || clipboard == undefined) {
         onDone(copyViaSelection(text))

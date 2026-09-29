@@ -195,17 +195,10 @@ fun Table(
             if (event.type == KeyEventType.KeyDown) {
                 if (event.key == Key.C && (event.isCtrlPressed || event.isMetaPressed)) {
                     selectedOriginalIndex?.let { id ->
-                        val rowData = selectedOriginalIndex?.let { getCellValues(it) }
-                        if (rowData != null) {
-                            val rowContent = buildString {
-                                append(id)
-                                rowData.forEach {
-                                    append("\t")
-                                    append(it.representation)
-                                }
-                            }
-                            CopyPasteManager.getInstance().setContents(StringSelection(rowContent))
-                        }
+                        // The ID leads only when it is shown; otherwise it is an internal index.
+                        val cells = getCellValues(id).map { it.representation }
+                        val rowContent = (if (showIdColumn) listOf(id.toString()) + cells else cells).joinToString("\t")
+                        CopyPasteManager.getInstance().setContents(StringSelection(rowContent))
                     }
                     return@onPreviewKeyEvent true
                 }

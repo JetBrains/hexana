@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.web.css.Color
@@ -388,6 +389,23 @@ fun TableTabContent(
     var scrollTop by remember { mutableStateOf(0.0) }
     var viewportHeight by remember { mutableStateOf(600.0) }
 
+    fun isRowHighlighted(index: Int): Boolean {
+        val pinnedRow = clickedRow?.takeIf {
+            it.anchorIndex == selection.anchorIndex && it.activeIndex == selection.activeIndex
+        }
+        if (pinnedRow != null) return index == pinnedRow.index
+        val selData = descriptor.rowSelectionProvider(index) ?: return false
+        return selection.hasSelection &&
+            selection.selectionStart == selData.offset &&
+            selection.selectionEnd == selData.offset + selData.size - 1
+    }
+    // The key listener below is registered once, so it reads the row through this state.
+    val highlightedRowText by rememberUpdatedState {
+        visibleIndices.firstOrNull(::isRowHighlighted)?.let { index ->
+            rowClipboardText(descriptor.columns, index, id = index.takeIf { showId })
+        }
+    }
+
     val totalRows = visibleIndices.size
     val totalHeight = totalRows * rowHeight
     val firstVisible = maxOf(0, (scrollTop / rowHeight).toInt() - bufferRows)
@@ -424,6 +442,7 @@ fun TableTabContent(
                             ?.let { (it as? org.w3c.dom.HTMLInputElement)?.focus() }
                     }
                 }
+                copyRowOnShortcut(ke, container, highlightedRowText)
                 if (ke.key == "Escape" && isSearchVisible && !descriptor.alwaysShowSearch) {
                     isSearchVisible = false
                     searchQuery = ""
@@ -527,16 +546,7 @@ fun TableTabContent(
                         if (vi < 0 || vi >= visibleIndices.size) continue
                         val index = visibleIndices[vi]
                         val selData = descriptor.rowSelectionProvider(index)
-                        val pinnedRow = clickedRow?.takeIf {
-                            it.anchorIndex == selection.anchorIndex && it.activeIndex == selection.activeIndex
-                        }
-                        val isHighlighted = if (pinnedRow != null) {
-                            index == pinnedRow.index
-                        } else {
-                            selData != null && selection.hasSelection &&
-                                selection.selectionStart == selData.offset &&
-                                selection.selectionEnd == selData.offset + selData.size - 1
-                        }
+                        val isHighlighted = isRowHighlighted(index)
 
                         PanelTableRow(
                             isHighlighted = isHighlighted,
@@ -743,6 +753,27 @@ private class VscFlatRow(
     val rowSelectionProvider: (Int) -> RowSelectionData?,
     val treePath: List<Int>,
 )
+
+/**
+ * Copies the table's highlighted row on Ctrl/Cmd+C when focus is inside [container].
+ * Stays out of the way when there is text to copy instead: a text selection, or
+ * focus in an input such as the search field.
+ */
+private fun copyRowOnShortcut(event: KeyboardEvent, container: org.w3c.dom.Element, rowText: () -> String?) {
+    if (!event.key.equals("c", ignoreCase = true) || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return
+    val target = event.target as? HTMLElement ?: return
+    if (!container.contains(target)) return
+    if (target is org.w3c.dom.HTMLInputElement || target is org.w3c.dom.HTMLTextAreaElement) return
+    if (kotlinx.browser.window.asDynamic().getSelection()?.toString().unsafeCast<String?>().orEmpty().isNotEmpty()) return
+    val text = rowText() ?: return
+    event.preventDefault()
+    event.stopPropagation()
+    copyToClipboard(text) {}
+}
+
+/** A row's cells joined by tabs, led by its [id] when the table shows one; the IntelliJ table copies the same. */
+private fun rowClipboardText(columns: List<ColumnDescriptor>, index: Int, id: Int?): String =
+    (listOfNotNull(id?.toString()) + columns.map { it.cellProvider(index).representation }).joinToString("\t")
 
 /** A clicked flat-table row and the hex selection (`anchorIndex`/`activeIndex`) it left behind. */
 private data class ClickedRow(val index: Int, val anchorIndex: Int, val activeIndex: Int)
@@ -1600,6 +1631,11 @@ private fun TreeTableBody(
         }
     }
 
+    // The key listener below is registered once, so it reads the row through this state.
+    val focusedRowText by rememberUpdatedState {
+        flatRows.getOrNull(focusedFlatIndex)?.let { row -> rowClipboardText(row.columns, row.index, id = null) }
+    }
+
     val totalRows = flatRows.size
     val firstVisible = maxOf(0, (scrollTop / rowHeight).toInt() - bufferRows)
     val lastVisible = minOf(totalRows - 1, ((scrollTop + viewportHeight) / rowHeight).toInt() + bufferRows)
@@ -1631,6 +1667,7 @@ private fun TreeTableBody(
                             ?.let { (it as? org.w3c.dom.HTMLInputElement)?.focus() }
                     }
                 }
+                copyRowOnShortcut(ke, container, focusedRowText)
                 if (ke.key == "Escape" && isSearchVisible && !descriptor.alwaysShowSearch) {
                     onSearchVisibleChange(false)
                     onSearchQueryChange("")
