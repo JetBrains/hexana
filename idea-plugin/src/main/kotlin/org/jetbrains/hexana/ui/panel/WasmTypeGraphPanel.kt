@@ -4,6 +4,7 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.v2.ScrollbarAdapter
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -11,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -21,12 +23,15 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
@@ -59,6 +64,12 @@ private const val WRAP_ROW_GAP = 60f
 
 /** Inflate amount around a rec-group bounding box to draw the cluster frame. */
 private const val REC_GROUP_FRAME_INFLATE = 12f
+
+/** Y of the graph origin below the canvas top; drawing, hit-testing, and scroll math share it. */
+private const val TG_ORIGIN_TOP = 40f
+
+/** Screen-pixel breathing room kept scrollable around the graph content. */
+private const val TG_SCROLL_MARGIN = 40f
 
 // --- Filter mode ---
 
@@ -107,6 +118,9 @@ private data class TgLayout(
     val recGroupFrames: List<RecGroupFrame>,
     val totalWidth: Float,
     val totalHeight: Float,
+    val nodeLabelResults: Map<Int, TextLayoutResult>,
+    val nodeSubResults: Map<Int, TextLayoutResult>,
+    val recCaptionResults: Map<Int, TextLayoutResult>,
 )
 
 private data class RecGroupFrame(
@@ -344,26 +358,18 @@ private fun layoutTypeGraph(
     val labelStyle = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
     val subStyle = TextStyle(fontSize = 11.sp, fontFamily = FontFamily.Monospace)
 
+    val nodeLabelResults = mutableMapOf<Int, TextLayoutResult>()
+    val nodeSubResults = mutableMapOf<Int, TextLayoutResult>()
     val nodeSizes = mutableMapOf<Int, Pair<Float, Float>>()
     for ((id, node) in graph.nodes) {
-        val labelWidth = textMeasurer.measure(node.label, style = labelStyle).size.width.toFloat()
-        val subWidth = textMeasurer.measure(node.sublabel, style = subStyle).size.width.toFloat()
-        val textWidth = maxOf(labelWidth, subWidth)
+        val labelResult = textMeasurer.measure(node.label, style = labelStyle)
+        val subResult = textMeasurer.measure(node.sublabel, style = subStyle)
+        nodeLabelResults[id] = labelResult
+        nodeSubResults[id] = subResult
+        val textWidth = maxOf(labelResult.size.width.toFloat(), subResult.size.width.toFloat())
         val width = textWidth + NODE_PADDING_H * 2
-        val labelHeight = textMeasurer.measure(node.label, style = labelStyle).size.height.toFloat()
-        val subHeight = textMeasurer.measure(node.sublabel, style = subStyle).size.height.toFloat()
-        val height = labelHeight + subHeight + NODE_PADDING_V * 2 + 4f
+        val height = labelResult.size.height.toFloat() + subResult.size.height.toFloat() + NODE_PADDING_V * 2 + 4f
         nodeSizes[id] = width to height
-    }
-
-    // Group nodes by depth layer; within each layer sort by (recGroup, typeIdx) first.
-    val depthGroups = graph.nodes.values
-        .groupBy { it.layer }
-        .toSortedMap()
-    val layers: List<List<TypeGraphNode>> = depthGroups.map { (_, nodes) ->
-        nodes.sortedWith(compareBy({ graph.nodes[it.id]?.layer ?: 0 },
-            // pre-sort by recGroup then typeIdx so rec-group members start adjacent
-            { /* recGroup not in node directly; access via id */ it.id }))
     }
 
     val positions = mutableMapOf<Int, TgNodeRect>()
@@ -422,7 +428,9 @@ private fun layoutTypeGraph(
         if (r.y < isolatedRowHeight) r else TgNodeRect(r.x + shiftX, r.y, r.width, r.height)
     }
 
-    // Compute rec-group frames from final positions.
+    // Compute rec-group frames from final positions, measuring captions once here.
+    val recCaptionStyle = TextStyle(fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+    val recCaptionResults = mutableMapOf<Int, TextLayoutResult>()
     val recFrames = mutableListOf<RecGroupFrame>()
     for ((groupIndex, members) in recGroupClustersMap) {
         val rects = members.mapNotNull { centeredPositions[it] }
@@ -432,10 +440,12 @@ private fun layoutTypeGraph(
         val maxX = rects.maxOf { it.x + it.width } + REC_GROUP_FRAME_INFLATE
         val maxY = rects.maxOf { it.y + it.height } + REC_GROUP_FRAME_INFLATE
         recFrames.add(RecGroupFrame(groupIndex, minX, minY, maxX - minX, maxY - minY))
+        recCaptionResults[groupIndex] = textMeasurer.measure("rec #$groupIndex", style = recCaptionStyle)
     }
 
     val layoutEdges = graph.edges.map { TgLayoutEdge(it.from, it.to, it.kind) }
-    return TgLayout(centeredPositions, layoutEdges, recFrames, totalWidth, totalHeight)
+    return TgLayout(centeredPositions, layoutEdges, recFrames, totalWidth, totalHeight,
+        nodeLabelResults, nodeSubResults, recCaptionResults)
 }
 
 private fun layoutTypeComponent(
@@ -515,7 +525,8 @@ private fun typeNodeColor(kind: TypeGraphNodeKind, isDark: Boolean): Color = whe
 private fun DrawScope.drawTypeNode(
     x: Float, y: Float, width: Float, height: Float,
     node: TypeGraphNode,
-    textMeasurer: TextMeasurer,
+    labelResult: TextLayoutResult,
+    subResult: TextLayoutResult,
     isHovered: Boolean,
     isDark: Boolean,
 ) {
@@ -553,29 +564,17 @@ private fun DrawScope.drawTypeNode(
         )
     }
 
-    val labelStyle = TextStyle(
-        color = color,
-        fontSize = 13.sp,
-        fontFamily = FontFamily.Monospace,
-        fontWeight = FontWeight.Bold,
-    )
-    val labelResult = textMeasurer.measure(node.label, style = labelStyle)
     drawText(
         labelResult,
+        color = color,
         topLeft = Offset(
             x + (width - labelResult.size.width) / 2f,
             y + NODE_PADDING_V,
         ),
     )
-
-    val subStyle = TextStyle(
-        color = color.copy(alpha = 0.7f),
-        fontSize = 11.sp,
-        fontFamily = FontFamily.Monospace,
-    )
-    val subResult = textMeasurer.measure(node.sublabel, style = subStyle)
     drawText(
         subResult,
+        color = color.copy(alpha = 0.7f),
         topLeft = Offset(
             x + (width - subResult.size.width) / 2f,
             y + height - subResult.size.height - NODE_PADDING_V,
@@ -835,31 +834,108 @@ fun WasmTypeGraphPanel(
             layoutTypeGraph(data.graph, textMeasurer, data.recClusters)
         }
 
+        // Content bounds in graph coordinates; rec-group frames inflate past node rects.
+        val contentBounds = remember(layout) {
+            var minX = Float.MAX_VALUE
+            var minY = Float.MAX_VALUE
+            var maxX = -Float.MAX_VALUE
+            var maxY = -Float.MAX_VALUE
+            for (r in layout.nodePositions.values) {
+                minX = minOf(minX, r.x)
+                minY = minOf(minY, r.y)
+                maxX = maxOf(maxX, r.x + r.width)
+                maxY = maxOf(maxY, r.y + r.height)
+            }
+            for (f in layout.recGroupFrames) {
+                minX = minOf(minX, f.x)
+                minY = minOf(minY, f.y)
+                maxX = maxOf(maxX, f.x + f.width)
+                maxY = maxOf(maxY, f.y + f.height)
+            }
+            Rect(minX, minY, maxX, maxY)
+        }
+
         var panOffset by remember { mutableStateOf(Offset.Zero) }
         var scale by remember { mutableStateOf(1f) }
+        var canvasSize by remember { mutableStateOf(IntSize.Zero) }
         var hoveredNodeId by remember { mutableStateOf<Int?>(null) }
         var lastPressedNodeId by remember { mutableStateOf<Int?>(null) }
         var lastPressUptimeMillis by remember { mutableLongStateOf(0L) }
         val isDark = JewelTheme.isDark
 
+        // Pan bounds: keep the graph within TG_SCROLL_MARGIN of the viewport so it
+        // cannot be dragged out of reach; the scrollbars share the same range.
+        fun clampPan(offset: Offset, scaleNow: Float): Offset {
+            if (canvasSize.width == 0 || canvasSize.height == 0) return offset
+            val panAtLeftEdge = TG_SCROLL_MARGIN - canvasSize.width / 2f - contentBounds.left * scaleNow
+            val panAtRightEdge = canvasSize.width / 2f - TG_SCROLL_MARGIN - contentBounds.right * scaleNow
+            val panAtTopEdge = TG_SCROLL_MARGIN - TG_ORIGIN_TOP - contentBounds.top * scaleNow
+            val panAtBottomEdge = canvasSize.height - TG_ORIGIN_TOP - TG_SCROLL_MARGIN - contentBounds.bottom * scaleNow
+            return Offset(
+                offset.x.coerceIn(minOf(panAtLeftEdge, panAtRightEdge), maxOf(panAtLeftEdge, panAtRightEdge)),
+                offset.y.coerceIn(minOf(panAtTopEdge, panAtBottomEdge), maxOf(panAtTopEdge, panAtBottomEdge)),
+            )
+        }
+
+        fun applyScale(newScale: Float) {
+            scale = newScale.coerceIn(0.2f, 3f)
+            panOffset = clampPan(panOffset, scale)
+        }
+
+        val hScrollAdapter = remember(contentBounds) {
+            object : ScrollbarAdapter {
+                override val contentSize: Double
+                    get() = (contentBounds.width * scale + 2 * TG_SCROLL_MARGIN).toDouble()
+                override val viewportSize: Double
+                    get() = canvasSize.width.toDouble()
+                override val scrollOffset: Double
+                    get() {
+                        val left = canvasSize.width / 2f + panOffset.x + contentBounds.left * scale - TG_SCROLL_MARGIN
+                        return (-left).toDouble().coerceIn(0.0, maxOf(0.0, contentSize - viewportSize))
+                    }
+                override suspend fun scrollTo(scrollOffset: Double) {
+                    val x = TG_SCROLL_MARGIN - scrollOffset.toFloat() - canvasSize.width / 2f - contentBounds.left * scale
+                    panOffset = clampPan(Offset(x, panOffset.y), scale)
+                }
+            }
+        }
+        val vScrollAdapter = remember(contentBounds) {
+            object : ScrollbarAdapter {
+                override val contentSize: Double
+                    get() = (contentBounds.height * scale + 2 * TG_SCROLL_MARGIN).toDouble()
+                override val viewportSize: Double
+                    get() = canvasSize.height.toDouble()
+                override val scrollOffset: Double
+                    get() {
+                        val top = TG_ORIGIN_TOP + panOffset.y + contentBounds.top * scale - TG_SCROLL_MARGIN
+                        return (-top).toDouble().coerceIn(0.0, maxOf(0.0, contentSize - viewportSize))
+                    }
+                override suspend fun scrollTo(scrollOffset: Double) {
+                    val y = TG_SCROLL_MARGIN - scrollOffset.toFloat() - TG_ORIGIN_TOP - contentBounds.top * scale
+                    panOffset = clampPan(Offset(panOffset.x, y), scale)
+                }
+            }
+        }
+
         Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(Unit) {
+                    .onSizeChanged { canvasSize = it }
+                    .pointerInput(contentBounds) {
                         detectDragGestures { change, dragAmount ->
                             change.consume()
-                            panOffset += dragAmount
+                            panOffset = clampPan(panOffset + dragAmount, scale)
                         }
                     }
                     .onPointerEvent(PointerEventType.Scroll) { event ->
                         val scrollDelta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
                         val zoomFactor = if (scrollDelta > 0) 0.9f else 1.1f
-                        scale = (scale * zoomFactor).coerceIn(0.2f, 3f)
+                        applyScale(scale * zoomFactor)
                     }
                     .onPointerEvent(PointerEventType.Move) { event ->
                         val pos = event.changes.firstOrNull()?.position ?: return@onPointerEvent
-                        val origin = Offset(size.width / 2f, 40f) + panOffset
+                        val origin = Offset(size.width / 2f, TG_ORIGIN_TOP) + panOffset
                         val graphX = (pos.x - origin.x) / scale
                         val graphY = (pos.y - origin.y) / scale
                         hoveredNodeId = layout.nodePositions.entries.firstOrNull { (_, r) ->
@@ -870,7 +946,7 @@ fun WasmTypeGraphPanel(
                     .onPointerEvent(PointerEventType.Exit) { hoveredNodeId = null }
                     .onPointerEvent(PointerEventType.Press) { event ->
                         val pos = event.changes.firstOrNull()?.position ?: return@onPointerEvent
-                        val origin = Offset(size.width / 2f, 40f) + panOffset
+                        val origin = Offset(size.width / 2f, TG_ORIGIN_TOP) + panOffset
                         val graphX = (pos.x - origin.x) / scale
                         val graphY = (pos.y - origin.y) / scale
                         val clickedId = layout.nodePositions.entries.firstOrNull { (_, r) ->
@@ -900,7 +976,7 @@ fun WasmTypeGraphPanel(
                         }
                     }
             ) {
-                val origin = Offset(size.width / 2f, 40f) + panOffset
+                val origin = Offset(size.width / 2f, TG_ORIGIN_TOP) + panOffset
 
                 withTransform({
                     translate(origin.x, origin.y)
@@ -911,11 +987,6 @@ fun WasmTypeGraphPanel(
                     // bounding box may include whitespace between them.
                     val recFrameBg = if (isDark) TypeNodeColors.REC_FRAME_DARK else TypeNodeColors.REC_FRAME_LIGHT
                     val recFrameBorder = if (isDark) TypeNodeColors.REC_FRAME_BORDER_DARK else TypeNodeColors.REC_FRAME_BORDER_LIGHT
-                    val recCaptionStyle = TextStyle(
-                        color = recFrameBorder,
-                        fontSize = 10.sp,
-                        fontFamily = FontFamily.Monospace,
-                    )
                     for (frame in layout.recGroupFrames) {
                         drawRoundRect(
                             color = recFrameBg,
@@ -930,9 +1001,10 @@ fun WasmTypeGraphPanel(
                             cornerRadius = CornerRadius(8f),
                             style = Stroke(width = 1.5f),
                         )
-                        val caption = textMeasurer.measure("rec #${frame.groupIndex}", style = recCaptionStyle)
+                        val caption = layout.recCaptionResults[frame.groupIndex] ?: continue
                         drawText(
                             caption,
+                            color = recFrameBorder,
                             topLeft = Offset(frame.x + 6f, frame.y + 4f),
                         )
                     }
@@ -973,10 +1045,23 @@ fun WasmTypeGraphPanel(
                     // Draw nodes.
                     for ((id, rect) in layout.nodePositions) {
                         val node = data.graph.nodes[id] ?: continue
-                        drawTypeNode(rect.x, rect.y, rect.width, rect.height, node, textMeasurer, hoveredNodeId == id, isDark)
+                        val labelResult = layout.nodeLabelResults[id] ?: continue
+                        val subResult = layout.nodeSubResults[id] ?: continue
+                        drawTypeNode(rect.x, rect.y, rect.width, rect.height, node, labelResult, subResult, hoveredNodeId == id, isDark)
                     }
                 }
             }
+
+            VerticalScrollbar(
+                adapter = vScrollAdapter,
+                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                style = typeGraphScrollbarStyle(),
+            )
+            HorizontalScrollbar(
+                adapter = hScrollAdapter,
+                modifier = Modifier.align(Alignment.BottomStart).fillMaxWidth(),
+                style = typeGraphScrollbarStyle(),
+            )
 
             // Zoom controls (copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears)
             val controlBg = if (isDark) Color(0xCC1E1E1E.toInt()) else Color(0xCCF5F5F5.toInt())
@@ -991,14 +1076,14 @@ fun WasmTypeGraphPanel(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Box(
-                    modifier = Modifier.size(28.dp).clickable { scale = (scale * 1.2f).coerceIn(0.2f, 3f) },
+                    modifier = Modifier.size(28.dp).clickable { applyScale(scale * 1.2f) },
                     contentAlignment = Alignment.Center,
                 ) { Text("+", color = controlText) }
                 Spacer(modifier = Modifier.height(2.dp))
                 Text("${(scale * 100).toInt()}%", color = controlMuted, fontSize = 9.sp)
                 Spacer(modifier = Modifier.height(2.dp))
                 Box(
-                    modifier = Modifier.size(28.dp).clickable { scale = (scale / 1.2f).coerceIn(0.2f, 3f) },
+                    modifier = Modifier.size(28.dp).clickable { applyScale(scale / 1.2f) },
                     contentAlignment = Alignment.Center,
                 ) { Text("−", color = controlText) }
                 Spacer(modifier = Modifier.height(4.dp))
@@ -1050,6 +1135,20 @@ fun WasmTypeGraphPanel(
             }
         }
     }
+}
+
+// Overlay scrollbars for the pan/zoom canvas (pattern from RowDetailPanel.kt).
+@Composable
+private fun typeGraphScrollbarStyle(): ScrollbarStyle {
+    val color = if (JewelTheme.isDark) Color(0xFFCCCCCC.toInt()) else Color(0xFF6E7177.toInt())
+    return ScrollbarStyle(
+        minimalHeight = 16.dp,
+        thickness = 8.dp,
+        shape = RoundedCornerShape(4.dp),
+        hoverDurationMillis = 300,
+        unhoverColor = color.copy(alpha = 0.35f),
+        hoverColor = color.copy(alpha = 0.70f),
+    )
 }
 
 @Composable
