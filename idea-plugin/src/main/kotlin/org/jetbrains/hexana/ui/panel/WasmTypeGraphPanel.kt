@@ -20,8 +20,21 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.foundation.focusable
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed as keyIsCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed as keyIsMetaPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isAltPressed
+import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isMetaPressed
+import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -33,9 +46,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.withContext
@@ -44,6 +59,7 @@ import org.jetbrains.hexana.providers.format.typeDisplayName
 import org.jetbrains.hexana.wasm.analysis.typegraph.TypeGraphIndex
 import org.jetbrains.hexana.wasm.analysis.typegraph.TypeGraphNodeKind
 import org.jetbrains.hexana.wasm.analysis.typegraph.computeTypeNeighborhood
+import com.intellij.openapi.util.SystemInfo
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.Text
 
@@ -72,6 +88,15 @@ private const val TG_ORIGIN_TOP = 40f
 
 /** Screen-pixel breathing room kept scrollable around the graph content. */
 private const val TG_SCROLL_MARGIN = 40f
+
+/** Pan pixels per wheel-line unit. */
+private const val TG_WHEEL_PAN_STEP = 40f
+
+/** Per-event pan cap so precise trackpad deltas on the same channel cannot over-pan. */
+private const val TG_WHEEL_PAN_MAX = 120f
+
+private fun wheelPanAmount(delta: Float): Float =
+    (-delta * TG_WHEEL_PAN_STEP).coerceIn(-TG_WHEEL_PAN_MAX, TG_WHEEL_PAN_MAX)
 
 // --- Filter mode ---
 
@@ -131,6 +156,8 @@ private data class RecGroupFrame(
     val y: Float,
     val width: Float,
     val height: Float,
+    val memberIds: List<Int>,
+    val honest: Boolean,
 )
 
 // --- Pure logic helpers (internal so tests can reach them) ---
@@ -223,6 +250,25 @@ internal fun recGroupClusters(included: Collection<Int>, index: TypeGraphIndex):
 }
 
 /**
+ * Returns true when [frameBbox] (x, y, width, height) does not contain any node rect
+ * whose id is NOT in [memberIds]. O(nodes) with early exit.
+ */
+internal fun recFrameIsHonest(
+    frameX: Float, frameY: Float, frameWidth: Float, frameHeight: Float,
+    memberIds: Set<Int>,
+    allPositions: Map<Int, TgNodeRect>,
+): Boolean {
+    for ((id, r) in allPositions) {
+        if (id in memberIds) continue
+        // Check whether this non-member rect intersects the frame bbox.
+        val intersects = r.x < frameX + frameWidth && r.x + r.width > frameX &&
+            r.y < frameY + frameHeight && r.y + r.height > frameY
+        if (intersects) return false
+    }
+    return true
+}
+
+/**
  * Computes [RecGroupFrame] list from final node positions, without text measurement.
  * The caption [TextLayoutResult] entries must be computed separately (full layout measures
  * them via textMeasurer; incremental layout carries them forward from the previous layout
@@ -240,7 +286,9 @@ private fun computeRecGroupFrames(
         val minY = rects.minOf { it.y } - REC_GROUP_FRAME_INFLATE
         val maxX = rects.maxOf { it.x + it.width } + REC_GROUP_FRAME_INFLATE
         val maxY = rects.maxOf { it.y + it.height } + REC_GROUP_FRAME_INFLATE
-        result.add(RecGroupFrame(groupIndex, minX, minY, maxX - minX, maxY - minY))
+        val memberSet = members.toSet()
+        val honest = recFrameIsHonest(minX, minY, maxX - minX, maxY - minY, memberSet, positions)
+        result.add(RecGroupFrame(groupIndex, minX, minY, maxX - minX, maxY - minY, members, honest))
     }
     return result
 }
@@ -1029,29 +1077,86 @@ fun WasmTypeGraphPanel(
                 style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = mutedColor),
             )
 
-            // B2: depth/hops increment buttons.
+            // B2: depth/hops compact dropdowns (1..5).
             val depthHopsStyle = TextStyle(
                 fontFamily = FontFamily.Monospace,
                 fontSize = 12.sp,
                 color = if (isDarkHeader) Color(0xFFCCCCCC.toInt()) else Color(0xFF333333.toInt()),
             )
             val maxDepthHops = 5
-            Text(
-                text = "depth $subtypeDepth",
-                modifier = Modifier
-                    .background(if (subtypeDepth > 1) selectedBg else normalBg, shape = RoundedCornerShape(4.dp))
-                    .clickable { if (subtypeDepth < maxDepthHops) subtypeDepth++ }
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
-                style = depthHopsStyle,
-            )
-            Text(
-                text = "hops $fieldHops",
-                modifier = Modifier
-                    .background(if (fieldHops > 1) selectedBg else normalBg, shape = RoundedCornerShape(4.dp))
-                    .clickable { if (fieldHops < maxDepthHops) fieldHops++ }
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
-                style = depthHopsStyle,
-            )
+            val menuBg = if (isDarkHeader) Color(0xFF2B2B2B.toInt()) else Color(0xFFF5F5F5.toInt())
+            var depthMenuOpen by remember { mutableStateOf(false) }
+            Box {
+                Text(
+                    text = "depth: $subtypeDepth",
+                    modifier = Modifier
+                        .background(if (subtypeDepth > 1) selectedBg else normalBg, shape = RoundedCornerShape(4.dp))
+                        .clickable { depthMenuOpen = true }
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                    style = depthHopsStyle,
+                )
+                if (depthMenuOpen) {
+                    Popup(
+                        alignment = Alignment.TopStart,
+                        offset = IntOffset(0, 28),
+                        focusable = true,
+                        onDismissRequest = { depthMenuOpen = false },
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .background(menuBg, shape = RoundedCornerShape(4.dp))
+                                .border(1.dp, selectedBg, shape = RoundedCornerShape(4.dp)),
+                        ) {
+                            for (v in 1..maxDepthHops) {
+                                Text(
+                                    text = "$v",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { subtypeDepth = v; depthMenuOpen = false }
+                                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                                    style = depthHopsStyle,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            var hopsMenuOpen by remember { mutableStateOf(false) }
+            Box {
+                Text(
+                    text = "hops: $fieldHops",
+                    modifier = Modifier
+                        .background(if (fieldHops > 1) selectedBg else normalBg, shape = RoundedCornerShape(4.dp))
+                        .clickable { hopsMenuOpen = true }
+                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                    style = depthHopsStyle,
+                )
+                if (hopsMenuOpen) {
+                    Popup(
+                        alignment = Alignment.TopStart,
+                        offset = IntOffset(0, 28),
+                        focusable = true,
+                        onDismissRequest = { hopsMenuOpen = false },
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .background(menuBg, shape = RoundedCornerShape(4.dp))
+                                .border(1.dp, selectedBg, shape = RoundedCornerShape(4.dp)),
+                        ) {
+                            for (v in 1..maxDepthHops) {
+                                Text(
+                                    text = "$v",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { fieldHops = v; hopsMenuOpen = false }
+                                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                                    style = depthHopsStyle,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.weight(1f))
 
@@ -1345,6 +1450,8 @@ fun WasmTypeGraphPanel(
             }
         }
 
+        val canvasFocusRequester = remember { FocusRequester() }
+
         val hScrollAdapter = remember(contentBounds) {
             object : ScrollbarAdapter {
                 override val contentSize: Double
@@ -1380,7 +1487,26 @@ fun WasmTypeGraphPanel(
             }
         }
 
-        Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
+        val modLabel = if (SystemInfo.isMac) "Cmd" else "Ctrl"
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clipToBounds()
+                .focusRequester(canvasFocusRequester)
+                .focusable()
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    if (KeymapShortcuts.isModifierOnly(event)) return@onPreviewKeyEvent false
+                    val zoomMod = if (SystemInfo.isMac) event.keyIsMetaPressed else event.keyIsCtrlPressed
+                    if (!zoomMod) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.Equals, Key.NumPadAdd -> { applyScale(scale * 1.2f); true }
+                        Key.Minus, Key.NumPadSubtract -> { applyScale(scale / 1.2f); true }
+                        Key.Zero, Key.NumPad0 -> { scale = 1f; panOffset = Offset.Zero; true }
+                        else -> false
+                    }
+                },
+        ) {
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1392,9 +1518,26 @@ fun WasmTypeGraphPanel(
                         }
                     }
                     .onPointerEvent(PointerEventType.Scroll) { event ->
-                        val scrollDelta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
-                        val zoomFactor = if (scrollDelta > 0) 0.9f else 1.1f
-                        applyScale(scale * zoomFactor)
+                        val delta = event.changes.firstOrNull()?.scrollDelta ?: return@onPointerEvent
+                        val mods = event.keyboardModifiers
+                        val zoomModifier = if (SystemInfo.isMac) mods.isMetaPressed else mods.isCtrlPressed
+                        when {
+                            zoomModifier -> {
+                                val zoomFactor = if (delta.y > 0) 0.9f else 1.1f
+                                applyScale(scale * zoomFactor)
+                            }
+                            mods.isShiftPressed -> {
+                                // Shift+wheel on a mouse: horizontal pan with y delta.
+                                panOffset = clampPan(panOffset + Offset(wheelPanAmount(delta.y), 0f), scale)
+                            }
+                            else -> {
+                                // Plain wheel: pan (content follows natural scroll direction).
+                                panOffset = clampPan(
+                                    panOffset + Offset(wheelPanAmount(delta.x), wheelPanAmount(delta.y)),
+                                    scale,
+                                )
+                            }
+                        }
                     }
                     .onPointerEvent(PointerEventType.Move) { event ->
                         val pos = event.changes.firstOrNull()?.position ?: return@onPointerEvent
@@ -1408,6 +1551,7 @@ fun WasmTypeGraphPanel(
                     }
                     .onPointerEvent(PointerEventType.Exit) { hoveredNodeId = null }
                     .onPointerEvent(PointerEventType.Press) { event ->
+                        canvasFocusRequester.requestFocus()
                         val pos = event.changes.firstOrNull()?.position ?: return@onPointerEvent
                         val origin = Offset(size.width / 2f, TG_ORIGIN_TOP) + panOffset
                         val graphX = (pos.x - origin.x) / scale
@@ -1455,30 +1599,60 @@ fun WasmTypeGraphPanel(
                     scale(scale, scale, Offset.Zero)
                 }) {
                     // Draw rec-group cluster frames FIRST (behind nodes).
-                    // Note: row wrap can scatter rec-group members across rows, so the
-                    // bounding box may include whitespace between them.
+                    // Honest frames: bbox contains only member nodes -> full fill + border + caption.
+                    // Dishonest frames: bbox engulfs non-members -> accent bar on each member's left
+                    // edge + caption once above the first member (skipped if it overlaps another node).
                     val recFrameBg = if (isDark) TypeNodeColors.REC_FRAME_DARK else TypeNodeColors.REC_FRAME_LIGHT
                     val recFrameBorder = if (isDark) TypeNodeColors.REC_FRAME_BORDER_DARK else TypeNodeColors.REC_FRAME_BORDER_LIGHT
+                    val accentBarWidth = 3.5f
                     for (frame in layout.recGroupFrames) {
-                        drawRoundRect(
-                            color = recFrameBg,
-                            topLeft = Offset(frame.x, frame.y),
-                            size = Size(frame.width, frame.height),
-                            cornerRadius = CornerRadius(8f),
-                        )
-                        drawRoundRect(
-                            color = recFrameBorder,
-                            topLeft = Offset(frame.x, frame.y),
-                            size = Size(frame.width, frame.height),
-                            cornerRadius = CornerRadius(8f),
-                            style = Stroke(width = 1.5f),
-                        )
-                        val caption = layout.recCaptionResults[frame.groupIndex] ?: continue
-                        drawText(
-                            caption,
-                            color = recFrameBorder,
-                            topLeft = Offset(frame.x + 6f, frame.y + 4f),
-                        )
+                        if (frame.honest) {
+                            drawRoundRect(
+                                color = recFrameBg,
+                                topLeft = Offset(frame.x, frame.y),
+                                size = Size(frame.width, frame.height),
+                                cornerRadius = CornerRadius(8f),
+                            )
+                            drawRoundRect(
+                                color = recFrameBorder,
+                                topLeft = Offset(frame.x, frame.y),
+                                size = Size(frame.width, frame.height),
+                                cornerRadius = CornerRadius(8f),
+                                style = Stroke(width = 1.5f),
+                            )
+                            val caption = layout.recCaptionResults[frame.groupIndex] ?: continue
+                            drawText(
+                                caption,
+                                color = recFrameBorder,
+                                topLeft = Offset(frame.x + 6f, frame.y + 4f),
+                            )
+                        } else {
+                            // Accent bar on left edge of each member node.
+                            for (memberId in frame.memberIds) {
+                                val memberRect = layout.nodePositions[memberId] ?: continue
+                                drawRect(
+                                    color = recFrameBorder,
+                                    topLeft = Offset(memberRect.x, memberRect.y),
+                                    size = Size(accentBarWidth, memberRect.height),
+                                )
+                            }
+                            // Caption above the first member whose position is known.
+                            val caption = layout.recCaptionResults[frame.groupIndex] ?: continue
+                            val firstRect = frame.memberIds.mapNotNull { layout.nodePositions[it] }
+                                .minWithOrNull(compareBy({ it.y }, { it.x })) ?: continue
+                            val captionW = caption.size.width.toFloat()
+                            val captionH = caption.size.height.toFloat()
+                            val captionX = firstRect.x
+                            val captionY = firstRect.y - captionH - 2f
+                            // Skip caption if it would overlap any node rect.
+                            val captionOverlaps = layout.nodePositions.values.any { r ->
+                                captionX < r.x + r.width && captionX + captionW > r.x &&
+                                    captionY < r.y + r.height && captionY + captionH > r.y
+                            }
+                            if (!captionOverlaps) {
+                                drawText(caption, color = recFrameBorder, topLeft = Offset(captionX, captionY))
+                            }
+                        }
                     }
 
                     // Build edge draw infos.
@@ -1625,7 +1799,11 @@ fun WasmTypeGraphPanel(
                     Spacer(modifier = Modifier.height(4.dp))
                     Text("Click node to expand neighbors", color = legendMuted)
                     Text("Double-click to navigate to WAT", color = legendMuted)
-                    Text("Scroll to zoom, drag to pan", color = legendMuted)
+                    Text("Drag or scroll to pan", color = legendMuted)
+                    Text(
+                        "$modLabel+scroll or $modLabel++/− to zoom, $modLabel+0 to reset",
+                        color = legendMuted,
+                    )
                 }
             }
         }

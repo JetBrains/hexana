@@ -5,6 +5,7 @@ import org.jetbrains.hexana.ui.panel.TgNodeRect
 import org.jetbrains.hexana.ui.panel.TypeGraphFilter
 import org.jetbrains.hexana.ui.panel.assignTypeLayers
 import org.jetbrains.hexana.ui.panel.placeNewNodesIncrementally
+import org.jetbrains.hexana.ui.panel.recFrameIsHonest
 import org.jetbrains.hexana.ui.panel.recGroupClusters
 import org.jetbrains.hexana.ui.panel.unionWithExpansions
 import org.jetbrains.hexana.wasm.analysis.typegraph.TypeGraphIndex
@@ -429,5 +430,33 @@ class WasmTypeGraphPanelTest : UsefulTestCase() {
         assertFalse("already-placed id 5 must not be re-placed", 5 in result)
         // id 10 must appear (genuinely new).
         assertTrue("genuinely new id 10 must be placed", 10 in result)
+    }
+
+    // -------------------------------------------------------------------
+    // recFrameIsHonest tests
+    // -------------------------------------------------------------------
+
+    fun testRecFrameIsHonest_allMembersInsideIsHonest() {
+        // Frame covers exactly its two members; no non-member nodes present.
+        val positions = mapOf(
+            0 to TgNodeRect(10f, 10f, 80f, 36f),
+            1 to TgNodeRect(110f, 10f, 80f, 36f),
+        )
+        val memberIds = setOf(0, 1)
+        // Frame bbox that tightly wraps the members.
+        val honest = recFrameIsHonest(0f, 0f, 200f, 56f, memberIds, positions)
+        assertTrue("frame containing only members must be honest", honest)
+    }
+
+    fun testRecFrameIsHonest_nonMemberInsideIsDishonest() {
+        // Non-member node 2 sits inside the frame bbox.
+        val positions = mapOf(
+            0 to TgNodeRect(10f, 10f, 80f, 36f),
+            1 to TgNodeRect(110f, 10f, 80f, 36f),
+            2 to TgNodeRect(50f, 15f, 60f, 30f), // non-member, inside frame
+        )
+        val memberIds = setOf(0, 1)
+        val honest = recFrameIsHonest(0f, 0f, 200f, 56f, memberIds, positions)
+        assertFalse("frame that engulfs a non-member node must be dishonest", honest)
     }
 }
