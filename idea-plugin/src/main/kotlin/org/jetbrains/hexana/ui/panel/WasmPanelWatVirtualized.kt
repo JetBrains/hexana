@@ -89,13 +89,8 @@ import org.jetbrains.hexana.providers.format.RowEncodeResult
 import org.jetbrains.hexana.providers.format.RowKind
 import org.jetbrains.hexana.providers.format.WasmChunkTree
 import org.jetbrains.hexana.providers.format.WasmHexanaWatRenderer
-import org.jetbrains.hexana.providers.format.storageTypeRefIdx
 import org.jetbrains.hexana.providers.format.typeDisplayName
 import org.jetbrains.hexana.providers.format.fieldDisplayName
-import org.jetbrains.hexana.wasm.sections.WasmStructTypeRecord
-import org.jetbrains.hexana.wasm.sections.WasmArrayTypeRecord
-import org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord
-import org.jetbrains.hexana.wasm.sections.WasmRefType
 import org.jetbrains.hexana.providers.format.WasmParsedBinary
 import org.jetbrains.hexana.providers.format.WasmSectionKinds
 import org.jetbrains.hexana.providers.format.buildWasmChunkTree
@@ -687,75 +682,7 @@ private fun WasmPanelWatVirtualizedContent(
     androidx.compose.runtime.LaunchedEffect(typeInfoRequest) {
         val request = typeInfoRequest ?: return@LaunchedEffect
         typeInfoData = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val idx = request.typeIdx
-            val index = provider.typeGraphIndex ?: return@withContext null
-            val kind = index.kind(idx)
-            val kindLabel = kind.name.lowercase()
-            val recGroup = index.recGroup(idx)
-            fun typeEntry(t: Int) = TypeEntry(t, provider.typeDisplayName(t))
-            fun funcEntry(f: Int): FuncEntry {
-                val isImport = f < provider.importFuncCount
-                val label = funcDisplayNames[f] ?: if (isImport) "(imported)" else "\$func$f"
-                return FuncEntry(f, label, isImport)
-            }
-            // Build field/param/result structural preview from leafTypeRecords.
-            fun storageTypeLabel(vt: org.jetbrains.hexana.wasm.sections.WasmValueType<*>): Pair<String, Int?> {
-                val refTypeIdx = storageTypeRefIdx(vt)
-                val text = when (vt) {
-                    is org.jetbrains.hexana.wasm.sections.WasmPactTypeI8 -> "i8"
-                    is org.jetbrains.hexana.wasm.sections.WasmPactTypeI16 -> "i16"
-                    is org.jetbrains.hexana.wasm.sections.WasmI32Type -> "i32"
-                    is org.jetbrains.hexana.wasm.sections.WasmI64Type -> "i64"
-                    is org.jetbrains.hexana.wasm.sections.WasmF32Type -> "f32"
-                    is org.jetbrains.hexana.wasm.sections.WasmF64Type -> "f64"
-                    is org.jetbrains.hexana.wasm.sections.WasmVecType -> "v128"
-                    is WasmRefType -> {
-                        if (refTypeIdx != null) {
-                            val name = provider.typeDisplayName(refTypeIdx)
-                            "(ref $name)"
-                        } else {
-                            vt.toString()
-                        }
-                    }
-                    else -> vt.toString()
-                }
-                return text to refTypeIdx
-            }
-            val fields: List<FieldEntry> = when (val rec = provider.leafTypeRecords.getOrNull(idx)) {
-                is WasmStructTypeRecord -> rec.fields.mapIndexed { fi, field ->
-                    val name = provider.fieldDisplayName(idx, fi) ?: "field $fi"
-                    val (typeText, refTypeIdx) = storageTypeLabel(field.storageType)
-                    val mut = if (field.isMutable) " mut" else ""
-                    FieldEntry("$name: $typeText$mut", refTypeIdx)
-                }
-                is WasmArrayTypeRecord -> {
-                    val (typeText, refTypeIdx) = storageTypeLabel(rec.fieldType.storageType)
-                    val mut = if (rec.fieldType.isMutable) " mut" else ""
-                    listOf(FieldEntry("elem: $typeText$mut", refTypeIdx))
-                }
-                is WasmSectionFunctionTypeRecord -> {
-                    val params = rec.params.mapIndexed { pi, vt ->
-                        val (typeText, refTypeIdx) = storageTypeLabel(vt)
-                        FieldEntry("param $pi: $typeText", refTypeIdx)
-                    }
-                    val results = rec.retTypes.mapIndexed { ri, vt ->
-                        val (typeText, refTypeIdx) = storageTypeLabel(vt)
-                        FieldEntry("result $ri: $typeText", refTypeIdx)
-                    }
-                    params + results
-                }
-                else -> emptyList()
-            }
-            TypeInfoData(
-                typeIdx = idx,
-                kindLabel = kindLabel,
-                recGroup = recGroup,
-                superTypes = index.superTypes(idx).map(::typeEntry),
-                directSubtypes = index.directSubtypes(idx).map(::typeEntry),
-                referencingTypes = index.referencingTypes(idx).map(::typeEntry),
-                referencingFuncs = index.referencingFuncs(idx).map(::funcEntry),
-                fields = fields,
-            )
+            buildTypeInfoData(request.typeIdx, provider, funcDisplayNames)
         }
         typeInfoData?.let { data ->
             uiProbeSink?.invoke(

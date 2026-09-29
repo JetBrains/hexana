@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isAltPressed
 import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -77,7 +78,7 @@ internal enum class TypeGraphFilter { HIERARCHY, FIELD_REFS, BOTH }
 
 // --- Graph model ---
 
-private data class TypeGraphNode(
+internal data class TypeGraphNode(
     val id: Int,         // typeIdx
     val kind: TypeGraphNodeKind,
     val label: String,   // typeDisplayName result
@@ -86,16 +87,16 @@ private data class TypeGraphNode(
     val isFocus: Boolean,
 )
 
-private enum class TypeEdgeKind { SUBTYPE, FIELD_REF }
+internal enum class TypeEdgeKind { SUBTYPE, FIELD_REF }
 
-private data class TypeGraphEdge(
+internal data class TypeGraphEdge(
     val from: Int,
     val to: Int,
     val kind: TypeEdgeKind,
 )
 
 /** Graph model used by the canvas layout. All keys are typeIdx. */
-private data class TypeGraph(
+internal data class TypeGraph(
     val nodes: Map<Int, TypeGraphNode>,
     val edges: List<TypeGraphEdge>,
 )
@@ -222,21 +223,84 @@ internal fun recGroupClusters(included: Collection<Int>, index: TypeGraphIndex):
 
 // --- Graph builder ---
 
-private fun buildTypeGraph(
+internal fun buildTypeGraph(
     included: Set<Int>,
     focusType: Int,
     index: TypeGraphIndex,
     provider: WasmBinaryProvider,
     filter: TypeGraphFilter,
     layers: Map<Int, Int>,
+    foldFuncLeaves: Boolean = false,
+    expandedTypes: Set<Int> = emptySet(),
 ): TypeGraph {
+    // B1: Compute foldable FUNC nodes.
+    // A FUNC node is foldable when:
+    //   - folding is enabled (foldFuncLeaves=true, filter involves field-refs, node is not focus)
+    //   - every struct parent that field-refs it is NOT in expandedTypes
+    //   - the FUNC is not reachable via any other path (subtype/supertype chain)
+    val foldedFuncs: Map<Int, List<Int>> // parentStructId -> list of folded FUNC child ids
+    val foldedFuncSet: Set<Int>
+    if (foldFuncLeaves && filter != TypeGraphFilter.HIERARCHY) {
+        // For each FUNC node in included, determine if it is purely a field-ref leaf.
+        // A FUNC is a pure field-ref leaf if:
+        //   1. It is not the focus.
+        //   2. It has no subtype edges into it from the included set (not a subtype target).
+        //   3. It is not a supertype of anything in the included set.
+        //   4. All struct parents that field-ref it are non-expanded.
+        val funcParents = mutableMapOf<Int, MutableList<Int>>() // funcId -> [structParentIds]
+        for (t in included) {
+            if (index.kind(t) == TypeGraphNodeKind.FUNC) continue
+            for (ref in index.fieldRefs(t)) {
+                if (ref in included && index.kind(ref) == TypeGraphNodeKind.FUNC && ref != focusType) {
+                    funcParents.getOrPut(ref) { mutableListOf() }.add(t)
+                }
+            }
+        }
+        // Check which FUNC nodes are reachable via subtype/supertype edges.
+        val funcInHierarchy = mutableSetOf<Int>()
+        if (filter != TypeGraphFilter.FIELD_REFS) {
+            for (t in included) {
+                for (sub in index.directSubtypes(t)) {
+                    if (sub in included && index.kind(sub) == TypeGraphNodeKind.FUNC) funcInHierarchy.add(sub)
+                }
+                // Check if this FUNC is a supertype of something (unlikely but spec says check)
+                if (index.kind(t) == TypeGraphNodeKind.FUNC) {
+                    for (sup in index.superTypes(t)) {
+                        if (sup in included) funcInHierarchy.add(t)
+                    }
+                }
+            }
+        }
+        val result = mutableMapOf<Int, MutableList<Int>>()
+        val foldable = mutableSetOf<Int>()
+        for ((funcId, parents) in funcParents) {
+            if (funcId in funcInHierarchy) continue // reachable via hierarchy, do not fold
+            // All parents must be non-expanded for this FUNC to be foldable
+            if (parents.all { it !in expandedTypes }) {
+                foldable.add(funcId)
+                // Assign to first (or only) parent for badge counting
+                for (p in parents) {
+                    result.getOrPut(p) { mutableListOf() }.add(funcId)
+                }
+            }
+        }
+        foldedFuncs = result
+        foldedFuncSet = foldable
+    } else {
+        foldedFuncs = emptyMap()
+        foldedFuncSet = emptySet()
+    }
+
     val nodes = mutableMapOf<Int, TypeGraphNode>()
     for (t in included) {
+        if (t in foldedFuncSet) continue // skip folded FUNC nodes
         val kind = index.kind(t)
+        val foldedCount = foldedFuncs[t]?.size ?: 0
         val sublabel = when (kind) {
             TypeGraphNodeKind.STRUCT -> {
                 val fc = index.fieldRefs(t).size
-                "struct, $fc field${if (fc == 1) "" else "s"}"
+                val fieldPart = "struct, $fc field${if (fc == 1) "" else "s"}"
+                if (foldedCount > 0) "$fieldPart  +$foldedCount func${if (foldedCount == 1) "" else "s"}" else fieldPart
             }
             TypeGraphNodeKind.ARRAY -> "array"
             TypeGraphNodeKind.FUNC -> "func"
@@ -255,17 +319,21 @@ private fun buildTypeGraph(
     if (filter != TypeGraphFilter.FIELD_REFS) {
         // SUBTYPE edges: from parent to child (parent renders above, child below)
         for (t in included) {
+            if (t in foldedFuncSet) continue
             for (sub in index.directSubtypes(t)) {
-                if (sub in included) edges.add(TypeGraphEdge(t, sub, TypeEdgeKind.SUBTYPE))
+                if (sub in included && sub !in foldedFuncSet) edges.add(TypeGraphEdge(t, sub, TypeEdgeKind.SUBTYPE))
             }
         }
     }
     if (filter != TypeGraphFilter.HIERARCHY) {
-        // FIELD_REF edges: FUNC nodes get no outgoing field edges (leaf fence)
+        // FIELD_REF edges: FUNC nodes get no outgoing field edges (leaf fence); skip folded FUNCs
         for (t in included) {
+            if (t in foldedFuncSet) continue
             if (index.kind(t) == TypeGraphNodeKind.FUNC) continue
             for (ref in index.fieldRefs(t)) {
-                if (ref in included && ref != t) edges.add(TypeGraphEdge(t, ref, TypeEdgeKind.FIELD_REF))
+                if (ref in included && ref != t && ref !in foldedFuncSet) {
+                    edges.add(TypeGraphEdge(t, ref, TypeEdgeKind.FIELD_REF))
+                }
             }
         }
     }
@@ -669,11 +737,29 @@ fun WasmTypeGraphPanel(
     var filter by remember { mutableStateOf(TypeGraphFilter.BOTH) }
     var expandedTypes by remember { mutableStateOf(emptySet<Int>()) }
     var showAllConfirmPending by remember { mutableStateOf(false) }
+    // B2: neighborhood depth/hops controls (start at 1, reset with focus).
+    var subtypeDepth by remember { mutableStateOf(1) }
+    var fieldHops by remember { mutableStateOf(1) }
+    // B3: type-info popup state.
+    var typeInfoPopupData by remember { mutableStateOf<TypeInfoData?>(null) }
+    var typeInfoPopupRequest by remember { mutableStateOf<Int?>(null) }
 
-    // Reset expansion when focus changes.
+    // Reset expansion and depth when focus changes.
     LaunchedEffect(focusType) {
         expandedTypes = emptySet()
         showAllConfirmPending = false
+        subtypeDepth = 1
+        fieldHops = 1
+        typeInfoPopupData = null
+        typeInfoPopupRequest = null
+    }
+
+    // B3: Off-EDT TypeInfoData build triggered by Alt+click on a node.
+    LaunchedEffect(typeInfoPopupRequest) {
+        val idx = typeInfoPopupRequest ?: return@LaunchedEffect
+        typeInfoPopupData = withContext(Dispatchers.IO) {
+            buildTypeInfoData(idx, provider)
+        }
     }
 
     // Early-exit states that need no data.
@@ -703,7 +789,7 @@ fun WasmTypeGraphPanel(
     var graphData by remember { mutableStateOf<GraphData?>(null) }
     var showAll by remember { mutableStateOf(false) }
 
-    LaunchedEffect(focus, filter, expandedTypes, showAll) {
+    LaunchedEffect(focus, filter, expandedTypes, showAll, subtypeDepth, fieldHops) {
         val startNanos = System.nanoTime()
         val data = withContext(Dispatchers.IO) {
             val baseNeighborhood = if (showAll) {
@@ -713,13 +799,20 @@ fun WasmTypeGraphPanel(
                     index, focus,
                     includeHierarchy = filter != TypeGraphFilter.FIELD_REFS,
                     includeFieldRefs = filter != TypeGraphFilter.HIERARCHY,
+                    subtypeDepth = subtypeDepth,
+                    fieldHops = fieldHops,
                 ).included
             }
             val includedSet = unionWithExpansions(baseNeighborhood, expandedTypes, index, filter)
             val includedArr = includedSet.toIntArray().also { it.sort() }
             val layers = assignTypeLayers(includedArr, index)
             val clusters = recGroupClusters(includedSet, index)
-            val graph = buildTypeGraph(includedSet, focus, index, provider, filter, layers)
+            // B1: fold FUNC leaves only in neighborhood mode (not show-all)
+            val graph = buildTypeGraph(
+                includedSet, focus, index, provider, filter, layers,
+                foldFuncLeaves = !showAll,
+                expandedTypes = expandedTypes,
+            )
             GraphData(graph, includedSet, clusters)
         }
         graphData = data
@@ -778,6 +871,30 @@ fun WasmTypeGraphPanel(
             Text(
                 text = "showing $shown of $total types",
                 style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = mutedColor),
+            )
+
+            // B2: depth/hops increment buttons.
+            val depthHopsStyle = TextStyle(
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.sp,
+                color = if (isDarkHeader) Color(0xFFCCCCCC.toInt()) else Color(0xFF333333.toInt()),
+            )
+            val maxDepthHops = 5
+            Text(
+                text = "depth $subtypeDepth",
+                modifier = Modifier
+                    .background(if (subtypeDepth > 1) selectedBg else normalBg, shape = RoundedCornerShape(4.dp))
+                    .clickable { if (subtypeDepth < maxDepthHops) subtypeDepth++ }
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                style = depthHopsStyle,
+            )
+            Text(
+                text = "hops $fieldHops",
+                modifier = Modifier
+                    .background(if (fieldHops > 1) selectedBg else normalBg, shape = RoundedCornerShape(4.dp))
+                    .clickable { if (fieldHops < maxDepthHops) fieldHops++ }
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                style = depthHopsStyle,
             )
 
             Spacer(modifier = Modifier.weight(1f))
@@ -953,6 +1070,15 @@ fun WasmTypeGraphPanel(
                             graphX >= r.x && graphX <= r.x + r.width &&
                                 graphY >= r.y && graphY <= r.y + r.height
                         }?.key
+
+                        // B3: Alt+click opens the type-info popup; does not toggle expansion
+                        // or count as the first click of a double-click sequence.
+                        // event.keyboardModifiers is available on the PointerEvent in Compose Desktop.
+                        if (clickedId != null && event.keyboardModifiers.isAltPressed) {
+                            typeInfoPopupRequest = clickedId
+                            return@onPointerEvent
+                        }
+
                         val pressUptimeMillis = event.changes.firstOrNull()?.uptimeMillis ?: 0L
                         val isDoubleClick = clickedId != null &&
                             clickedId == lastPressedNodeId &&
@@ -1091,6 +1217,29 @@ fun WasmTypeGraphPanel(
                     modifier = Modifier.size(28.dp).clickable { scale = 1f; panOffset = Offset.Zero },
                     contentAlignment = Alignment.Center,
                 ) { Text("⌂", color = controlText, fontSize = 14.sp) }
+            }
+
+            // B3: type-info popup for Alt+click on a node.
+            val popupData = typeInfoPopupData
+            if (popupData != null) {
+                WasmTypeInfoPopup(
+                    data = popupData,
+                    onGotoType = { typeIdx ->
+                        typeInfoPopupData = null
+                        typeInfoPopupRequest = null
+                        val off = provider.leafTypeRecords.getOrNull(typeIdx)?.offset?.toLong() ?: 0L
+                        onNavigateToType(typeIdx, off)
+                    },
+                    onGotoFunc = { _ ->
+                        // Type Graph panel has no WAT func navigation; dismiss.
+                        typeInfoPopupData = null
+                        typeInfoPopupRequest = null
+                    },
+                    onDismiss = {
+                        typeInfoPopupData = null
+                        typeInfoPopupRequest = null
+                    },
+                )
             }
 
             // Legend

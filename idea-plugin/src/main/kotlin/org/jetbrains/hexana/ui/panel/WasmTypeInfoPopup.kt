@@ -24,6 +24,9 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
+import org.jetbrains.hexana.providers.format.fieldDisplayName
+import org.jetbrains.hexana.providers.format.storageTypeRefIdx
+import org.jetbrains.hexana.providers.format.typeDisplayName
 import org.jetbrains.hexana.ui.HexanaTheme
 import org.jetbrains.jewel.ui.component.Text
 
@@ -66,6 +69,90 @@ internal data class TypeInfoData(
 
 /** Triggers an off-EDT TypeInfoData build. */
 internal data class TypeInfoRequest(val typeIdx: Int)
+
+/**
+ * Assembles a [TypeInfoData] for [typeIdx] from the provider's index and leaf records.
+ * Runs off the EDT. [funcDisplayNames] maps funcIdx -> display name for referenced funcs.
+ * Returns null if the index is absent.
+ */
+internal fun buildTypeInfoData(
+    typeIdx: Int,
+    provider: org.jetbrains.hexana.providers.WasmBinaryProvider,
+    funcDisplayNames: Map<Int, String> = emptyMap(),
+): TypeInfoData? {
+    val index = provider.typeGraphIndex ?: return null
+    val kind = index.kind(typeIdx)
+    val kindLabel = kind.name.lowercase()
+    val recGroup = index.recGroup(typeIdx)
+    fun typeEntry(t: Int) = TypeEntry(t, provider.typeDisplayName(t))
+    fun funcEntry(f: Int): FuncEntry {
+        val isImport = f < provider.importFuncCount
+        val label = funcDisplayNames[f] ?: if (isImport) "(imported)" else "\$func$f"
+        return FuncEntry(f, label, isImport)
+    }
+    val fields: List<FieldEntry> = when (val rec = provider.leafTypeRecords.getOrNull(typeIdx)) {
+        is org.jetbrains.hexana.wasm.sections.WasmStructTypeRecord -> rec.fields.mapIndexed { fi, field ->
+            val name = provider.fieldDisplayName(typeIdx, fi) ?: "field $fi"
+            val (typeText, refTypeIdx) = storageTypeLabelPair(field.storageType, provider)
+            val mut = if (field.isMutable) " mut" else ""
+            FieldEntry("$name: $typeText$mut", refTypeIdx)
+        }
+        is org.jetbrains.hexana.wasm.sections.WasmArrayTypeRecord -> {
+            val (typeText, refTypeIdx) = storageTypeLabelPair(rec.fieldType.storageType, provider)
+            val mut = if (rec.fieldType.isMutable) " mut" else ""
+            listOf(FieldEntry("elem: $typeText$mut", refTypeIdx))
+        }
+        is org.jetbrains.hexana.wasm.sections.WasmSectionFunctionTypeRecord -> {
+            val params = rec.params.mapIndexed { pi, vt ->
+                val (typeText, refTypeIdx) = storageTypeLabelPair(vt, provider)
+                FieldEntry("param $pi: $typeText", refTypeIdx)
+            }
+            val results = rec.retTypes.mapIndexed { ri, vt ->
+                val (typeText, refTypeIdx) = storageTypeLabelPair(vt, provider)
+                FieldEntry("result $ri: $typeText", refTypeIdx)
+            }
+            params + results
+        }
+        else -> emptyList()
+    }
+    return TypeInfoData(
+        typeIdx = typeIdx,
+        kindLabel = kindLabel,
+        recGroup = recGroup,
+        superTypes = index.superTypes(typeIdx).map(::typeEntry),
+        directSubtypes = index.directSubtypes(typeIdx).map(::typeEntry),
+        referencingTypes = index.referencingTypes(typeIdx).map(::typeEntry),
+        referencingFuncs = index.referencingFuncs(typeIdx).map(::funcEntry),
+        fields = fields,
+    )
+}
+
+/** Returns (displayText, refTypeIdx?) for a storage/value type. */
+private fun storageTypeLabelPair(
+    vt: org.jetbrains.hexana.wasm.sections.WasmValueType<*>,
+    provider: org.jetbrains.hexana.providers.WasmBinaryProvider,
+): Pair<String, Int?> {
+    val refTypeIdx = org.jetbrains.hexana.providers.format.storageTypeRefIdx(vt)
+    val text = when (vt) {
+        is org.jetbrains.hexana.wasm.sections.WasmPactTypeI8 -> "i8"
+        is org.jetbrains.hexana.wasm.sections.WasmPactTypeI16 -> "i16"
+        is org.jetbrains.hexana.wasm.sections.WasmI32Type -> "i32"
+        is org.jetbrains.hexana.wasm.sections.WasmI64Type -> "i64"
+        is org.jetbrains.hexana.wasm.sections.WasmF32Type -> "f32"
+        is org.jetbrains.hexana.wasm.sections.WasmF64Type -> "f64"
+        is org.jetbrains.hexana.wasm.sections.WasmVecType -> "v128"
+        is org.jetbrains.hexana.wasm.sections.WasmRefType -> {
+            if (refTypeIdx != null) {
+                val name = provider.typeDisplayName(refTypeIdx)
+                "(ref $name)"
+            } else {
+                vt.toString()
+            }
+        }
+        else -> vt.toString()
+    }
+    return text to refTypeIdx
+}
 
 private const val MAX_LIST_ITEMS = 100
 
