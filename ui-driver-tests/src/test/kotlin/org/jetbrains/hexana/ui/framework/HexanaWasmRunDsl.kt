@@ -379,9 +379,14 @@ internal class HexanaWasmRunDsl internal constructor(
         var lastState = wasmDebuggerTabState()
         if (lastState.tabSelected) return
 
-        val runnerTabs = driver.ideFrame {
-            ensureFocused()
-        }.debugToolWindow().jbRunnerTabs.waitFound(timeout)
+        val ideFrame = driver.ideFrame {}
+        try {
+            ideFrame.ensureFocused()
+        } catch (_: IllegalStateException) {
+            // SmoothRobot.hasInputFocus is absent on the 2025.2 remote driver; frame focus is best-effort,
+            // runnerTabs.setFocus() below does the actual focusing.
+        }
+        val runnerTabs = ideFrame.debugToolWindow().jbRunnerTabs.waitFound(timeout)
         runnerTabs.setFocus()
 
         repeat(3) {
