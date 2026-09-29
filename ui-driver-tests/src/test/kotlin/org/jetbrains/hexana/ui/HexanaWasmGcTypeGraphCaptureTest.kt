@@ -31,7 +31,23 @@ class HexanaWasmGcTypeGraphCaptureTest {
         hexanaIde(
             testName = "hexana-wasmgc-type-graph-capture",
             projectDir = project,
-            configure = { showWhatsNewOnNewVersion(false) },
+            configure = {
+                showWhatsNewOnNewVersion(false)
+                patchContext { context ->
+                    val optionsDir = context.paths.configDir.resolve("options").createDirectories()
+                    Files.writeString(
+                        optionsDir.resolve("laf.xml"),
+                        """
+                        <application>
+                          <component name="LafManager" autodetect="false">
+                            <laf themeId="ExperimentalLight" />
+                          </component>
+                        </application>
+                        """.trimIndent()
+                    )
+                    context
+                }
+            },
         ) {
             maximizeWindow()
             closeProjectToolWindow()
