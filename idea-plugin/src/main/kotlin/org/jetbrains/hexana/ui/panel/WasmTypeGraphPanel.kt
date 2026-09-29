@@ -32,6 +32,7 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -103,7 +104,7 @@ internal data class TypeGraph(
 
 // --- Layout types (copied from WasmComponentDependencyGraph.kt, extract when a third consumer appears) ---
 
-private data class TgNodeRect(val x: Float, val y: Float, val width: Float, val height: Float)
+internal data class TgNodeRect(val x: Float, val y: Float, val width: Float, val height: Float)
 
 private data class TgLayoutEdge(val from: Int, val to: Int, val kind: TypeEdgeKind)
 
@@ -219,6 +220,130 @@ internal fun recGroupClusters(included: Collection<Int>, index: TypeGraphIndex):
         if (g >= 0) byGroup.getOrPut(g) { mutableListOf() }.add(t)
     }
     return byGroup.filter { (_, members) -> members.size >= 2 }
+}
+
+/**
+ * Computes [RecGroupFrame] list from final node positions, without text measurement.
+ * The caption [TextLayoutResult] entries must be computed separately (full layout measures
+ * them via textMeasurer; incremental layout carries them forward from the previous layout
+ * for existing groups or measures new ones).
+ */
+private fun computeRecGroupFrames(
+    recGroupClustersMap: Map<Int, List<Int>>,
+    positions: Map<Int, TgNodeRect>,
+): List<RecGroupFrame> {
+    val result = mutableListOf<RecGroupFrame>()
+    for ((groupIndex, members) in recGroupClustersMap) {
+        val rects = members.mapNotNull { positions[it] }
+        if (rects.size < 2) continue
+        val minX = rects.minOf { it.x } - REC_GROUP_FRAME_INFLATE
+        val minY = rects.minOf { it.y } - REC_GROUP_FRAME_INFLATE
+        val maxX = rects.maxOf { it.x + it.width } + REC_GROUP_FRAME_INFLATE
+        val maxY = rects.maxOf { it.y + it.height } + REC_GROUP_FRAME_INFLATE
+        result.add(RecGroupFrame(groupIndex, minX, minY, maxX - minX, maxY - minY))
+    }
+    return result
+}
+
+/**
+ * Places newly revealed nodes (those in [newNodeSizes] but not in [previousPositions]) below
+ * the [anchorRect] in wrapped rows, collision-avoiding against all occupied rects
+ * ([previousPositions] filtered to [survivorIds]).
+ *
+ * Contract:
+ * - Returns a map containing ONLY the new nodes' rects (keys are the typeIdx values from
+ *   [newNodeSizes]). The caller merges it with the survivor positions.
+ * - Any id in [newNodeSizes] that already exists in [previousPositions] is silently ignored:
+ *   those nodes were already placed and must not be re-placed.
+ * - Survivor positions are NOT modified. Transient overlap on the anchor's own rect update
+ *   (fold-badge resize) is handled by the caller, not here.
+ * - Termination: the push-down loop jumps rowStartY past the bottom of every conflicting rect
+ *   and then repeats. Each iteration resolves at least one blocker, so the loop runs at most
+ *   occupied.size + 1 times before all conflicts are cleared.
+ *
+ * [newNodeSizes] maps typeIdx -> (width, height).
+ * [anchorRect] is the anchor node's existing rect (top-left corner in graph coordinates).
+ * [maxRowWidth] caps the row width before wrapping.
+ * [hGap] is the horizontal gap between nodes in a row.
+ * [vGap] is the drop from the anchor bottom to the first row, and the minimum push step.
+ * [rowGap] is the gap between successive rows of new nodes (defaults to [vGap]).
+ *
+ * Exposed internal so WasmTypeGraphPanelTest can call it directly.
+ */
+internal fun placeNewNodesIncrementally(
+    previousPositions: Map<Int, TgNodeRect>,
+    survivorIds: Set<Int>,
+    newNodeSizes: Map<Int, Pair<Float, Float>>,
+    anchorRect: TgNodeRect,
+    maxRowWidth: Float,
+    hGap: Float,
+    vGap: Float,
+    rowGap: Float = vGap,
+): Map<Int, TgNodeRect> {
+    // Ignore ids that are already placed in previousPositions (double-place guard).
+    val filteredNewSizes = newNodeSizes.filterKeys { it !in previousPositions }
+    if (filteredNewSizes.isEmpty()) return emptyMap()
+
+    // Occupied rects: all survivors (includes anchor itself).
+    val occupied = previousPositions.filterKeys { it in survivorIds }.values.toMutableList()
+
+    // Build rows from new nodes ordered by id for determinism.
+    val orderedNew = filteredNewSizes.entries.sortedBy { it.key }
+
+    val rows = mutableListOf<List<Map.Entry<Int, Pair<Float, Float>>>>()
+    var currentRow = mutableListOf<Map.Entry<Int, Pair<Float, Float>>>()
+    var currentRowWidth = 0f
+    for (entry in orderedNew) {
+        val w = entry.value.first
+        val needed = if (currentRow.isEmpty()) w else w + hGap
+        if (currentRow.isNotEmpty() && currentRowWidth + needed > maxRowWidth) {
+            rows.add(currentRow)
+            currentRow = mutableListOf()
+            currentRowWidth = 0f
+        }
+        currentRow.add(entry)
+        currentRowWidth += needed
+    }
+    if (currentRow.isNotEmpty()) rows.add(currentRow)
+
+    val result = mutableMapOf<Int, TgNodeRect>()
+    // Start placing below the anchor (vGap = anchor drop).
+    var rowStartY = anchorRect.y + anchorRect.height + vGap
+
+    for (row in rows) {
+        val rowHeight = row.maxOf { it.value.second }
+        val rowTotalWidth = row.sumOf { it.value.first.toDouble() }.toFloat() +
+            (row.size - 1) * hGap
+
+        // Push down until the row does not overlap any occupied rect.
+        // Each iteration jumps past the bottom of ALL currently conflicting rects,
+        // so the loop runs at most occupied.size + 1 times (each jump resolves at
+        // least one blocker and the occupied set is finite).
+        var iters = 0
+        while (iters <= occupied.size + 1) {
+            val rowBottom = rowStartY + rowHeight
+            val conflictingBottom = occupied
+                .filter { occ -> rowStartY < occ.y + occ.height && rowBottom > occ.y }
+                .maxOfOrNull { occ -> occ.y + occ.height }
+            if (conflictingBottom == null) break
+            rowStartY = conflictingBottom + vGap
+            iters++
+        }
+
+        // Place each node in the row, centered on anchorRect.x.
+        var x = anchorRect.x + anchorRect.width / 2f - rowTotalWidth / 2f
+        for (entry in row) {
+            val (w, h) = entry.value
+            val yOffset = (rowHeight - h) / 2f
+            val rect = TgNodeRect(x, rowStartY + yOffset, w, h)
+            result[entry.key] = rect
+            occupied.add(rect)
+            x += w + hGap
+        }
+        rowStartY += rowHeight + rowGap
+    }
+
+    return result
 }
 
 // --- Graph builder ---
@@ -452,8 +577,6 @@ private fun layoutTypeGraph(
         val rows = tgWrapLayerRows(isolatedNodesList, nodeSizes)
         var currentY = 0f
         for (row in rows) {
-            val rowWidth = row.sumOf { (nodeSizes[it.id]?.first ?: 0f).toDouble() }.toFloat() +
-                (row.size - 1) * HORIZONTAL_GAP
             val rowHeight = row.maxOf { nodeSizes[it.id]?.second ?: 36f }
             var x = 0f
             for (node in row) {
@@ -496,19 +619,12 @@ private fun layoutTypeGraph(
         if (r.y < isolatedRowHeight) r else TgNodeRect(r.x + shiftX, r.y, r.width, r.height)
     }
 
-    // Compute rec-group frames from final positions, measuring captions once here.
+    // Compute rec-group frames using the shared helper, then measure captions.
     val recCaptionStyle = TextStyle(fontSize = 10.sp, fontFamily = FontFamily.Monospace)
     val recCaptionResults = mutableMapOf<Int, TextLayoutResult>()
-    val recFrames = mutableListOf<RecGroupFrame>()
-    for ((groupIndex, members) in recGroupClustersMap) {
-        val rects = members.mapNotNull { centeredPositions[it] }
-        if (rects.size < 2) continue
-        val minX = rects.minOf { it.x } - REC_GROUP_FRAME_INFLATE
-        val minY = rects.minOf { it.y } - REC_GROUP_FRAME_INFLATE
-        val maxX = rects.maxOf { it.x + it.width } + REC_GROUP_FRAME_INFLATE
-        val maxY = rects.maxOf { it.y + it.height } + REC_GROUP_FRAME_INFLATE
-        recFrames.add(RecGroupFrame(groupIndex, minX, minY, maxX - minX, maxY - minY))
-        recCaptionResults[groupIndex] = textMeasurer.measure("rec #$groupIndex", style = recCaptionStyle)
+    val recFrames = computeRecGroupFrames(recGroupClustersMap, centeredPositions)
+    for (frame in recFrames) {
+        recCaptionResults[frame.groupIndex] = textMeasurer.measure("rec #${frame.groupIndex}", style = recCaptionStyle)
     }
 
     val layoutEdges = graph.edges.map { TgLayoutEdge(it.from, it.to, it.kind) }
@@ -780,10 +896,21 @@ fun WasmTypeGraphPanel(
     }
 
     // Off-EDT data computation.
+    // Snapshots of all LaunchedEffect keys are captured at dispatch time and stored on
+    // GraphData so the layout gate can compare against what actually built this data,
+    // not against the live state at render time (which may have advanced further).
     data class GraphData(
         val graph: TypeGraph,
         val included: Set<Int>,
         val recClusters: Map<Int, List<Int>>,
+        // Snapshot of the expandedTypes set that produced this GraphData.
+        val expandedTypes: Set<Int>,
+        // Snapshot of the other keys that produced this GraphData.
+        val snapshotFocus: Int,
+        val snapshotFilter: TypeGraphFilter,
+        val snapshotShowAll: Boolean,
+        val snapshotSubtypeDepth: Int,
+        val snapshotFieldHops: Int,
     )
 
     var graphData by remember { mutableStateOf<GraphData?>(null) }
@@ -791,43 +918,50 @@ fun WasmTypeGraphPanel(
 
     LaunchedEffect(focus, filter, expandedTypes, showAll, subtypeDepth, fieldHops) {
         val startNanos = System.nanoTime()
+        // Snapshot all keys before crossing to the IO thread.
+        val snapFocus = focus
+        val snapFilter = filter
+        val snapExpandedTypes = expandedTypes
+        val snapShowAll = showAll
+        val snapSubtypeDepth = subtypeDepth
+        val snapFieldHops = fieldHops
         val data = withContext(Dispatchers.IO) {
-            val baseNeighborhood = if (showAll) {
+            val baseNeighborhood = if (snapShowAll) {
                 IntArray(index.typeCount) { it }
             } else {
                 computeTypeNeighborhood(
-                    index, focus,
-                    includeHierarchy = filter != TypeGraphFilter.FIELD_REFS,
-                    includeFieldRefs = filter != TypeGraphFilter.HIERARCHY,
-                    subtypeDepth = subtypeDepth,
-                    fieldHops = fieldHops,
+                    index, snapFocus,
+                    includeHierarchy = snapFilter != TypeGraphFilter.FIELD_REFS,
+                    includeFieldRefs = snapFilter != TypeGraphFilter.HIERARCHY,
+                    subtypeDepth = snapSubtypeDepth,
+                    fieldHops = snapFieldHops,
                 ).included
             }
-            val includedSet = unionWithExpansions(baseNeighborhood, expandedTypes, index, filter)
+            val includedSet = unionWithExpansions(baseNeighborhood, snapExpandedTypes, index, snapFilter)
             val includedArr = includedSet.toIntArray().also { it.sort() }
             val layers = assignTypeLayers(includedArr, index)
             val clusters = recGroupClusters(includedSet, index)
             // B1: fold FUNC leaves only in neighborhood mode (not show-all)
             val graph = buildTypeGraph(
-                includedSet, focus, index, provider, filter, layers,
-                foldFuncLeaves = !showAll,
-                expandedTypes = expandedTypes,
+                includedSet, snapFocus, index, provider, snapFilter, layers,
+                foldFuncLeaves = !snapShowAll,
+                expandedTypes = snapExpandedTypes,
             )
-            GraphData(graph, includedSet, clusters)
+            GraphData(graph, includedSet, clusters, snapExpandedTypes, snapFocus, snapFilter, snapShowAll, snapSubtypeDepth, snapFieldHops)
         }
         graphData = data
         val buildMillis = (System.nanoTime() - startNanos) / 1_000_000
         uiProbeSink?.invoke(
             "typeGraph",
-            "focus=$focus shown=${data.graph.nodes.size} total=${index.typeCount} filter=$filter" +
-                " showAll=$showAll expanded=${expandedTypes.size} buildMillis=$buildMillis",
+            "focus=$snapFocus shown=${data.graph.nodes.size} total=${index.typeCount} filter=$snapFilter" +
+                " showAll=$snapShowAll expanded=${snapExpandedTypes.size} buildMillis=$buildMillis",
         )
     }
 
     val data = graphData
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Header bar: filter controls + counters + show-all button.
+        // Header bar: focus title + filter controls + counters + show-all button.
         val isDarkHeader = JewelTheme.isDark
         val mutedColor = if (isDarkHeader) Color(0xFFAAAAAA.toInt()) else Color(0xFF6E7177.toInt())
         val selectedBg = if (isDarkHeader) Color(0xFF3A3A3A.toInt()) else Color(0xFFDDDDDD.toInt())
@@ -840,6 +974,28 @@ fun WasmTypeGraphPanel(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            // Focus type name: leftmost, truncated when long.
+            val focusName = provider.typeDisplayName(focus)
+            val focusTitleText = if (showAll) {
+                "All types  ($focusName type $focus)"
+            } else {
+                "$focusName  (type $focus)"
+            }
+            Text(
+                text = focusTitleText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false).widthIn(max = 260.dp),
+                style = TextStyle(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isDarkHeader) Color(0xFFCCCCCC.toInt()) else Color(0xFF333333.toInt()),
+                ),
+            )
+
+            Spacer(modifier = Modifier.width(8.dp))
+
             // Filter segmented control (three pills)
             for (mode in TypeGraphFilter.entries) {
                 val label = when (mode) {
@@ -946,9 +1102,168 @@ fun WasmTypeGraphPanel(
         }
 
         val textMeasurer = rememberTextMeasurer()
-        // Layout runs in composition (text measurement requires UI side).
-        val layout = remember(data, textMeasurer) {
-            layoutTypeGraph(data.graph, textMeasurer, data.recClusters)
+
+        // Holder for the last committed layout and the param tuple that produced it.
+        // Stored outside remember(data) so incremental path can read the previous layout.
+        // Plain mutable class, not MutableState, to avoid triggering recomposition on assignment.
+        class LayoutRef {
+            var layout: TgLayout? = null
+            // The "stable" params tuple: everything except expandedTypes.
+            var stableFocus: Int = -1
+            var stableFilter: TypeGraphFilter = TypeGraphFilter.BOTH
+            var stableShowAll: Boolean = false
+            var stableSubtypeDepth: Int = -1
+            var stableFieldHops: Int = -1
+            // The expandedTypes at the time of the last layout, used to diff against current.
+            var stableExpanded: Set<Int> = emptySet()
+            // Node strings at the time of last layout; keyed by typeIdx.
+            var prevNodeLabels: Map<Int, String> = emptyMap()
+            var prevNodeSubLabels: Map<Int, String> = emptyMap()
+        }
+        val layoutRef = remember { LayoutRef() }
+
+        val labelStyle = TextStyle(fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+        val subStyle = TextStyle(fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+        val recCaptionStyle = TextStyle(fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+
+        // Compute layout at most once per distinct GraphData instance.
+        // All layoutRef reads/writes are inside this remember block so that unrelated
+        // recompositions (popup state, showAllConfirmPending, etc.) never re-execute them.
+        // textMeasurer is captured by value; theme changes that matter flow through data/isDark.
+        // Returns Pair(TgLayout, newNodeIds) so the auto-pan effect can see which nodes were added.
+        val (layout: TgLayout, newNodeIds: Set<Int>) = remember(data) {
+            // Decide incremental vs full layout.
+            // Incremental: stable params match AND previous layout exists AND the data's
+            // expandedTypes snapshot differs from the last committed stableExpanded by exactly
+            // one id AND that id has a rect in the previous layout (anchor known).
+            // Using data.expandedTypes (not live expandedTypes) avoids generation skew: the
+            // GraphData was built for this exact snapshot.
+            val prevLayout = layoutRef.layout
+            val stableParamsMatch = prevLayout != null &&
+                layoutRef.stableFocus == data.snapshotFocus &&
+                layoutRef.stableFilter == data.snapshotFilter &&
+                layoutRef.stableShowAll == data.snapshotShowAll &&
+                layoutRef.stableSubtypeDepth == data.snapshotSubtypeDepth &&
+                layoutRef.stableFieldHops == data.snapshotFieldHops
+
+            val expandedDelta: Set<Int> = if (stableParamsMatch) {
+                val prev = layoutRef.stableExpanded
+                val added = data.expandedTypes - prev
+                val removed = prev - data.expandedTypes
+                // Accept delta only if exactly one id changed (added xor removed, not both).
+                if ((added.size == 1 && removed.isEmpty()) || (added.isEmpty() && removed.size == 1)) {
+                    added + removed
+                } else emptySet()
+            } else emptySet()
+
+            val anchorId = expandedDelta.firstOrNull()
+            val useIncremental = stableParamsMatch && anchorId != null && prevLayout!!.nodePositions.containsKey(anchorId)
+
+            if (!useIncremental || prevLayout == null) {
+                val fresh = layoutTypeGraph(data.graph, textMeasurer, data.recClusters)
+                layoutRef.layout = fresh
+                layoutRef.stableFocus = data.snapshotFocus
+                layoutRef.stableFilter = data.snapshotFilter
+                layoutRef.stableShowAll = data.snapshotShowAll
+                layoutRef.stableSubtypeDepth = data.snapshotSubtypeDepth
+                layoutRef.stableFieldHops = data.snapshotFieldHops
+                layoutRef.stableExpanded = data.expandedTypes
+                layoutRef.prevNodeLabels = data.graph.nodes.mapValues { (_, n) -> n.label }
+                layoutRef.prevNodeSubLabels = data.graph.nodes.mapValues { (_, n) -> n.sublabel }
+                fresh to emptySet<Int>()
+            } else {
+                // Incremental path.
+                val currentIds = data.graph.nodes.keys
+                val previousIds = prevLayout.nodePositions.keys
+                val survivorIds = currentIds.intersect(previousIds)
+                val newIds = currentIds - previousIds.toSet()
+
+                // Carry forward survivor text results; re-measure nodes whose strings changed.
+                val nodeLabelResults = mutableMapOf<Int, TextLayoutResult>()
+                val nodeSubResults = mutableMapOf<Int, TextLayoutResult>()
+
+                for (id in survivorIds) {
+                    val node = data.graph.nodes[id] ?: continue
+                    val prevLabel = layoutRef.prevNodeLabels[id]
+                    val prevSub = layoutRef.prevNodeSubLabels[id]
+                    if (prevLabel == node.label && prevLabel != null) {
+                        prevLayout.nodeLabelResults[id]?.let { nodeLabelResults[id] = it }
+                    } else {
+                        nodeLabelResults[id] = textMeasurer.measure(node.label, style = labelStyle)
+                    }
+                    if (prevSub == node.sublabel && prevSub != null) {
+                        prevLayout.nodeSubResults[id]?.let { nodeSubResults[id] = it }
+                    } else {
+                        nodeSubResults[id] = textMeasurer.measure(node.sublabel, style = subStyle)
+                    }
+                }
+                for (id in newIds) {
+                    val node = data.graph.nodes[id] ?: continue
+                    nodeLabelResults[id] = textMeasurer.measure(node.label, style = labelStyle)
+                    nodeSubResults[id] = textMeasurer.measure(node.sublabel, style = subStyle)
+                }
+
+                // Build merged positions: survivors keep their rects; anchor gets its width/height
+                // updated in-place if the fold-badge changed (keep top-left, update size).
+                val mergedPositions = mutableMapOf<Int, TgNodeRect>()
+                for (id in survivorIds) {
+                    val labelR = nodeLabelResults[id] ?: continue
+                    val subR = nodeSubResults[id] ?: continue
+                    val textWidth = maxOf(labelR.size.width.toFloat(), subR.size.width.toFloat())
+                    val newW = textWidth + NODE_PADDING_H * 2
+                    val newH = labelR.size.height.toFloat() + subR.size.height.toFloat() + NODE_PADDING_V * 2 + 4f
+                    val prev = prevLayout.nodePositions[id]!!
+                    // Keep top-left; update size (transient overlap on anchor is acceptable).
+                    mergedPositions[id] = TgNodeRect(prev.x, prev.y, newW, newH)
+                }
+
+                // Place new nodes incrementally below the anchor.
+                // vGap = anchor drop; rowGap = WRAP_ROW_GAP for inter-row spacing.
+                val anchorRect = mergedPositions[anchorId!!]
+                if (anchorRect != null && newIds.isNotEmpty()) {
+                    val newSizes = newIds.mapNotNull { id ->
+                        val lR = nodeLabelResults[id] ?: return@mapNotNull null
+                        val sR = nodeSubResults[id] ?: return@mapNotNull null
+                        val tw = maxOf(lR.size.width.toFloat(), sR.size.width.toFloat())
+                        val w = tw + NODE_PADDING_H * 2
+                        val h = lR.size.height.toFloat() + sR.size.height.toFloat() + NODE_PADDING_V * 2 + 4f
+                        id to (w to h)
+                    }.toMap()
+                    val placed = placeNewNodesIncrementally(
+                        previousPositions = mergedPositions,
+                        survivorIds = survivorIds,
+                        newNodeSizes = newSizes,
+                        anchorRect = anchorRect,
+                        maxRowWidth = MAX_ROW_WIDTH,
+                        hGap = HORIZONTAL_GAP,
+                        vGap = VERTICAL_GAP,
+                        rowGap = WRAP_ROW_GAP,
+                    )
+                    mergedPositions.putAll(placed)
+                }
+
+                // Recompute rec-group frames and carry forward caption results for existing groups.
+                val recFrames = computeRecGroupFrames(data.recClusters, mergedPositions)
+                val recCaptionResults = mutableMapOf<Int, TextLayoutResult>()
+                for (frame in recFrames) {
+                    recCaptionResults[frame.groupIndex] = prevLayout.recCaptionResults[frame.groupIndex]
+                        ?: textMeasurer.measure("rec #${frame.groupIndex}", style = recCaptionStyle)
+                }
+
+                val totalWidth = if (mergedPositions.isEmpty()) 0f else
+                    mergedPositions.values.maxOf { it.x + it.width } - mergedPositions.values.minOf { it.x }
+                val totalHeight = if (mergedPositions.isEmpty()) 0f else
+                    mergedPositions.values.maxOf { it.y + it.height }
+
+                val layoutEdges = data.graph.edges.map { TgLayoutEdge(it.from, it.to, it.kind) }
+                val inc = TgLayout(mergedPositions, layoutEdges, recFrames, totalWidth, totalHeight,
+                    nodeLabelResults, nodeSubResults, recCaptionResults)
+                layoutRef.layout = inc
+                layoutRef.stableExpanded = data.expandedTypes
+                layoutRef.prevNodeLabels = data.graph.nodes.mapValues { (_, n) -> n.label }
+                layoutRef.prevNodeSubLabels = data.graph.nodes.mapValues { (_, n) -> n.sublabel }
+                inc to newIds
+            }
         }
 
         // Content bounds in graph coordinates; rec-group frames inflate past node rects.
@@ -997,6 +1312,37 @@ fun WasmTypeGraphPanel(
         fun applyScale(newScale: Float) {
             scale = newScale.coerceIn(0.2f, 3f)
             panOffset = clampPan(panOffset, scale)
+        }
+
+        // Auto-pan: after an incremental expansion that added new nodes, scroll to make the
+        // top of the new-node bounding box visible if it is fully outside the viewport.
+        // Keyed on (layout, canvasSize) so it re-fires when the canvas size becomes known
+        // after the layout was already set (avoids the early-return / never-fires problem).
+        // newNodeIds comes from the remember(data) block above (non-empty only on incremental path).
+        LaunchedEffect(layout, canvasSize) {
+            if (newNodeIds.isEmpty() || canvasSize.width == 0 || canvasSize.height == 0) return@LaunchedEffect
+            val newRects = newNodeIds.mapNotNull { layout.nodePositions[it] }
+            if (newRects.isEmpty()) return@LaunchedEffect
+            val newMinY = newRects.minOf { it.y }
+            val newMaxY = newRects.maxOf { it.y + it.height }
+            val newMinX = newRects.minOf { it.x }
+            val newMaxX = newRects.maxOf { it.x + it.width }
+            // Screen coordinates of new-node bounding box.
+            val originX = canvasSize.width / 2f + panOffset.x
+            val originY = TG_ORIGIN_TOP + panOffset.y
+            val screenTop = originY + newMinY * scale
+            val screenBottom = originY + newMaxY * scale
+            val screenLeft = originX + newMinX * scale
+            val screenRight = originX + newMaxX * scale
+            // If any part is inside the viewport, do not move.
+            val viewW = canvasSize.width.toFloat()
+            val viewH = canvasSize.height.toFloat()
+            val partiallyVisible = screenTop < viewH && screenBottom > 0f && screenLeft < viewW && screenRight > 0f
+            if (!partiallyVisible) {
+                // Bring the top of new nodes to TG_SCROLL_MARGIN below origin.
+                val targetPanY = TG_SCROLL_MARGIN - TG_ORIGIN_TOP - newMinY * scale
+                panOffset = clampPan(Offset(panOffset.x, targetPanY), scale)
+            }
         }
 
         val hScrollAdapter = remember(contentBounds) {
