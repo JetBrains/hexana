@@ -18,7 +18,7 @@
         <p><b>Binary formats</b></p>
         <ul>
           <li>Hex editor for any file, with search and go-to-offset</li>
-          <li>WASM (<code>.wasm</code>): section browser, imports/exports, function types, code bodies, GC types, WIT (Component Model) interfaces, DWARF 4/5 debug info; bytes the parser cannot decode are reported per region in a <b>Problems</b> tab instead of failing the view</li>
+          <li>WASM (<code>.wasm</code>): section browser, imports/exports, function types, code bodies, GC types, WIT (Component Model) interfaces, DWARF 4/5 debug info; bytes the parser cannot decode are reported per region in a <b>Problems</b> tab instead of failing the view; WasmGC type sections carry inline kind/field annotations, a type-info popup (Alt+click), and an interactive <b>Type Graph</b> tab with subtype/field-reference edges, FUNC-leaf folding, rec-group frames, depth and hops controls, stable incremental expansion, and pan/zoom canvas</li>
           <li>Embedded core modules and nested components of a Component Model binary open recursively in their own editor views</li>
           <li>WASM size profiler: byte-accurate size attribution of sections and functions, expanding recursively through nested Component Model submodules</li>
           <li>Binary diff (<b>Compare Binaries With…</b>) for any supported format — WASM: size impact, changed entities, per-signature dispatch-table changes, and on-demand WAT compare, for core modules and Component Model binaries; native: section size impact, and for ELF, Mach-O and COFF a per-function comparison with side-by-side disassembly</li>
@@ -47,6 +47,15 @@
           <li><b>Wasm</b> debugger tab: the paused function disassembled to WAT with the exact current instruction highlighted, per-instruction Step Over / Step Into, and the operand stack (live values where the runtime serves them, statically reconstructed origins otherwise)</li>
           <li>Conditional breakpoints, inlined call frames, and variables stored in linear memory, all resolved through DWARF</li>
           <li>Managed wasi-sdk installation: WASM debugging needs an LLDB with the wasm process plugin, and the WebAssembly settings page downloads and verifies one, shared across projects and JetBrains IDEs</li>
+        </ul>
+
+        <p><b>Scripting</b></p>
+        <ul>
+          <li>Script tabs run JavaScript against the open binary: <code>binary.functions()</code>, <code>.imports()</code>, <code>.exports()</code>, and format-agnostic members (<code>format</code>, <code>size</code>, <code>structure</code>, <code>strings</code>, <code>sizeAnalysis</code>); results render as tables or log output in a side panel. Sandboxed, with a timeout and bounded output.</li>
+          <li><code>hexana.defineCheck(id, fn)</code> declares named checks whose findings appear in the <b>Problems</b> tab and in SARIF 2.1.0 output; <code>hexana.defineFlags(schema)</code> adds typed per-run parameters</li>
+          <li><b>Hexana Suite</b> run configuration for <code>*.test.js</code> files: <code>describe</code>/<code>test</code>/<code>beforeEach</code>/<code>afterEach</code> with async support, artifact role binding, seeded deterministic crypto, and an ESM loader for bare-specifier imports from <code>node_modules</code>. Results stream into the SM test console with navigation to call sites, Rerun Failed, and Copy CLI Command.</li>
+          <li>Gutter run icons on <code>test()</code> and <code>describe()</code> calls; <b>Run Suites for This Binary</b> in the binary editor context menu matches suites to the open file by declared artifact role</li>
+          <li>The <code>run_script_suite</code> MCP tool and CLI command run suites headlessly with JUnit XML report output</li>
         </ul>
 
         <p>An MCP server exposes function lists, type signatures, data segments, and module structure to AI assistants
