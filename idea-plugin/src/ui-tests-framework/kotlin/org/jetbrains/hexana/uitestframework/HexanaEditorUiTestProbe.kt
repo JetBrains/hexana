@@ -569,8 +569,10 @@ object HexanaEditorUiTestProbe {
         if (best < 0) throw IllegalStateException("No struct with supertype and subtypes in '$fileIdentifier'")
         val demoFuncIdx = index.referencingFuncs(best).firstOrNull() ?: -1
         // Hub type for the "graph opens fast on a type with >50 transitive
-        // referencers" acceptance check: the smallest 2-hop neighborhood above
+        // referencers" acceptance check: the smallest 1-hop neighborhood above
         // 50 (matches the acceptance bar without dragging in a 1500-node hub).
+        // depth=1/hops=1 mirrors WasmTypeGraphPanel's initial state, so this
+        // count equals the panel's first "showing X of Y" counter (included=).
         var hub = -1
         var hubSize = Int.MAX_VALUE
         for (t in 0 until index.typeCount) {
@@ -580,6 +582,8 @@ object HexanaEditorUiTestProbe {
                 focus = t,
                 includeHierarchy = true,
                 includeFieldRefs = true,
+                subtypeDepth = 1,
+                fieldHops = 1,
             ).included.size
             if (size > 50 && size < hubSize) {
                 hubSize = size

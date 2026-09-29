@@ -68,12 +68,16 @@ class HexanaWasmGcTypeGraphAcceptanceTest {
                 editor.wasmUiProbeValue("typeGraph")?.takeIf { it.contains("focus=$hub ") }
             }
             logOutput("typeGraph state: $graphState")
-            val shown = graphState.field("shown")
+            // "counter X" is the header's "showing X of Y", which reads the
+            // pre-folding neighborhood (included=), not the folded node count
+            // (shown=). The probe computed hubNeighborhood at the panel's
+            // initial depth=1/hops=1, so the two must match exactly.
+            val included = graphState.field("included")
             val total = graphState.field("total")
             val buildMillis = graphState.field("buildMillis")
-            assertEquals(hubNeighborhood, shown, "counter X must equal the computed neighborhood: $graphState")
+            assertEquals(hubNeighborhood, included, "counter X must equal the computed neighborhood: $graphState")
             assertEquals(totalTypes, total, "counter Y must equal the module type count: $graphState")
-            assertTrue(shown > 50, "focused neighborhood must show >50 types for the hub: $graphState")
+            assertTrue(included > 50, "focused neighborhood must show >50 types for the hub: $graphState")
             assertTrue(buildMillis in 0..999, "graph build must take <1s, got ${buildMillis}ms: $graphState")
 
             // 2. Graph -> WAT: drive the same typeNavFlow the graph's node

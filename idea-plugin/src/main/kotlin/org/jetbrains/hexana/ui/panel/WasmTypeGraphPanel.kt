@@ -1001,7 +1001,8 @@ fun WasmTypeGraphPanel(
         val buildMillis = (System.nanoTime() - startNanos) / 1_000_000
         uiProbeSink?.invoke(
             "typeGraph",
-            "focus=$snapFocus shown=${data.graph.nodes.size} total=${index.typeCount} filter=$snapFilter" +
+            "focus=$snapFocus shown=${data.graph.nodes.size} included=${data.included.size}" +
+                " total=${index.typeCount} filter=$snapFilter" +
                 " showAll=$snapShowAll expanded=${snapExpandedTypes.size} buildMillis=$buildMillis",
         )
     }

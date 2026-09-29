@@ -128,4 +128,31 @@ class TypeGraphNeighborhoodTest {
         // 7 declared + 2 implicit func types injected by wasm-tools
         assertEquals(9, n.totalTypes)
     }
+
+    @Test
+    fun `kotlin hello fixture has a struct hub with a 1-hop neighborhood above 50`() = runTest {
+        // Precondition of HexanaWasmGcTypeGraphAcceptanceTest: its hub selection
+        // (HexanaEditorUiTestProbe.wasmTypeGraphDemoTargets) picks the smallest
+        // depth=1/hops=1 neighborhood above 50, matching the panel's initial view.
+        // Pin that such a hub exists in the fixture so the UI test cannot fail
+        // late on CI over a missing hub.
+        val buffer = resourceAsByteBuffer("kotlin/hello.wasm")
+        val result = WasmParser().parse(buffer)
+        val module = (result as WasmParseSuccess).wasmModule as WasmModule
+        val index = TypeGraphIndexBuilder(buffer, module).build()
+        var hubSize = -1
+        for (t in 0 until index.typeCount) {
+            if (index.kind(t) != TypeGraphNodeKind.STRUCT) continue
+            val size = computeTypeNeighborhood(
+                index,
+                focus = t,
+                includeHierarchy = true,
+                includeFieldRefs = true,
+                subtypeDepth = 1,
+                fieldHops = 1,
+            ).included.size
+            if (size > 50 && (hubSize < 0 || size < hubSize)) hubSize = size
+        }
+        assertTrue(hubSize > 50, "expected a struct with a 1-hop neighborhood above 50, smallest found: $hubSize")
+    }
 }
