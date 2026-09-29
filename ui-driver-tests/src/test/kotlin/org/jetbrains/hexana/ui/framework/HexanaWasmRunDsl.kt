@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.ui.framework
 
 import com.intellij.driver.client.Driver
+import com.intellij.driver.client.impl.DriverCallException
 import com.intellij.driver.model.OnDispatcher
 import com.intellij.driver.sdk.ActionManager
 import com.intellij.driver.sdk.ActionUtils
@@ -383,8 +384,13 @@ internal class HexanaWasmRunDsl internal constructor(
         try {
             ideFrame.ensureFocused()
         } catch (_: IllegalStateException) {
-            // SmoothRobot.hasInputFocus is absent on the 2025.2 remote driver; frame focus is best-effort,
-            // runnerTabs.setFocus() below does the actual focusing.
+            // ensureFocused proxies to SmoothRobot.hasInputFocus, which does not exist in the 2025.2
+            // performance plugin. Locally the missing method surfaces as IllegalStateException from the
+            // dispatcher; frame focus is best-effort, runnerTabs.setFocus() below does the actual focusing.
+        } catch (_: DriverCallException) {
+            // Same missing hasInputFocus on CI: there the remote call fails inside DriverImpl.makeCall,
+            // which wraps it in DriverCallException (extends RuntimeException, so the ISE catch above
+            // never sees it). Confirmed on UiTests2025_2_6_1 #103 (build 1074541975, IU-252.28539.33).
         }
         val runnerTabs = ideFrame.debugToolWindow().jbRunnerTabs.waitFound(timeout)
         runnerTabs.setFocus()
