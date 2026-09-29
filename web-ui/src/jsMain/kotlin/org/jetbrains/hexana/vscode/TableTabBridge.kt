@@ -227,6 +227,12 @@ fun TableTabContent(
     val hasContextMenu = descriptor.contextMenuItems.isNotEmpty() || descriptor.dynamicContextMenuProvider != null
     var contextMenuState by remember { mutableStateOf<ContextMenuState?>(null) }
 
+    // --- Clicked row ---
+    // Rows without a byte range can't be highlighted through the hex selection, so the
+    // clicked row is remembered together with the hex selection it left behind; it stays
+    // highlighted until that selection changes.
+    var clickedRow by remember(descriptor) { mutableStateOf<ClickedRow?>(null) }
+
     // --- Predefined filter state ---
     val filters = descriptor.predefinedFilters
     var selectedFilterIndex: Int? by remember(descriptor) {
@@ -521,9 +527,16 @@ fun TableTabContent(
                         if (vi < 0 || vi >= visibleIndices.size) continue
                         val index = visibleIndices[vi]
                         val selData = descriptor.rowSelectionProvider(index)
-                        val isHighlighted = selData != null && selection.hasSelection &&
-                            selection.selectionStart == selData.offset &&
-                            selection.selectionEnd == selData.offset + selData.size - 1
+                        val pinnedRow = clickedRow?.takeIf {
+                            it.anchorIndex == selection.anchorIndex && it.activeIndex == selection.activeIndex
+                        }
+                        val isHighlighted = if (pinnedRow != null) {
+                            index == pinnedRow.index
+                        } else {
+                            selData != null && selection.hasSelection &&
+                                selection.selectionStart == selData.offset &&
+                                selection.selectionEnd == selData.offset + selData.size - 1
+                        }
 
                         PanelTableRow(
                             isHighlighted = isHighlighted,
@@ -546,6 +559,8 @@ fun TableTabContent(
                                         scrollHexViewerTo(selData.offset)
                                     }
                                 }
+                                // Snapshot taken after the handlers above updated the hex selection.
+                                clickedRow = ClickedRow(index, selection.anchorIndex, selection.activeIndex)
                             },
                             onContextMenu = if (hasContextMenu) { { x, y ->
                                 contextMenuState = ContextMenuState(index, x, y)
@@ -728,6 +743,9 @@ private class VscFlatRow(
     val rowSelectionProvider: (Int) -> RowSelectionData?,
     val treePath: List<Int>,
 )
+
+/** A clicked flat-table row and the hex selection (`anchorIndex`/`activeIndex`) it left behind. */
+private data class ClickedRow(val index: Int, val anchorIndex: Int, val activeIndex: Int)
 
 internal fun compareTableValues(first: Any?, second: Any?): Int = when {
     first is Number && second is Number -> {
