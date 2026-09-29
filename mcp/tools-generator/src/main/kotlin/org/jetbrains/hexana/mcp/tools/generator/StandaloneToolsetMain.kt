@@ -547,6 +547,7 @@ private fun buildCliToolSpecClass(): TypeSpec {
         .addParameter(ParameterSpec.builder("groups", setOfToolGroup).build())
         .addParameter(ParameterSpec.builder("inputModes", setOfInputMode).build())
         .addParameter(ParameterSpec.builder("sourceSlotName", String::class.asTypeName().copy(nullable = true)).build())
+        .addParameter(ParameterSpec.builder("autoStdin", Boolean::class).defaultValue("true").build())
         .addParameter(ParameterSpec.builder("inputOptions", listOfInputOption).build())
         .addParameter("sourceGroups", listOfSourceGroup)
         .addParameter("examples", listOfUsageExample)
@@ -572,6 +573,7 @@ private fun buildCliToolSpecClass(): TypeSpec {
         .addProperty(property("groups", setOfToolGroup))
         .addProperty(property("inputModes", setOfInputMode))
         .addProperty(property("sourceSlotName", String::class.asTypeName().copy(nullable = true)))
+        .addProperty(property("autoStdin", Boolean::class.asTypeName()))
         .addProperty(property("inputOptions", listOfInputOption))
         .addProperty(property("sourceGroups", listOfSourceGroup))
         .addProperty(property("examples", listOfUsageExample))
@@ -632,6 +634,11 @@ private fun cliToolSpecInitializer(spec: CliTool): CodeBlock {
         .add("  groups = %L,\n", enumSetInitializer(CLI_TOOL_GROUP, cli.groups.map { it.generatedCliGroupName() }))
         .add("  inputModes = %L,\n", enumSetInitializer(CLI_INPUT_MODE, spec.generatedCliInputModeNames()))
         .add("  sourceSlotName = %S,\n", spec.inputModel?.sources?.singleOrNull()?.name)
+        .apply {
+            if (spec.inputModel?.sources?.singleOrNull()?.cli?.autoStdin == false) {
+                add("  autoStdin = false,\n")
+            }
+        }
         .add("  inputOptions = %L,\n", cliInputOptionsInitializer(spec.cliInputOptions()))
         .add("  sourceGroups = %L,\n", cliSourceGroupsInitializer(spec))
         .add("  examples = %L,\n", cliExamplesInitializer(spec))

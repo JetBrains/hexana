@@ -15,6 +15,7 @@ private val HEXANA_TOOL_ORDER = listOf(
     GetGlobalsForIndicesToolId, ListTypesToolId, ListValueTypesToolId, ListReferenceTypesToolId,
     GetTypesForIndicesToolId, ListElementSegmentsToolId, ListDataToolId, ListDataSegmentsToolId,
     AuditDataPayloadPolicyToolId, QueryArtifactsToolId,
+    ValidateAndExplainToolId, MetadataAuditToolId, ComponentWitReportToolId,
 )
 
 val HexanaToolSchemaCompatibility = ToolCompatibilitySpec(
@@ -39,6 +40,7 @@ val HexanaTools: List<ToolSpec> = orderedTools(
     ElementTools,
     DataTools,
     ArtifactQueryTools,
+    WasmWorkflowTools,
 )
 
 val HexanaToolCatalog: ToolCatalog = ToolCatalog(HexanaTools)

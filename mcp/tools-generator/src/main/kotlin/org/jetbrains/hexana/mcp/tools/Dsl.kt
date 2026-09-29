@@ -815,6 +815,7 @@ data class CliProductSpec(
     val executableName: String,
     val description: String,
     val nativeArtifactKind: String = "${id.value}-native",
+    val nativeReleaseEnabled: Boolean = true,
 ) {
     init {
         require(CLI_COMMAND_NAME_REGEX.matches(executableName)) {

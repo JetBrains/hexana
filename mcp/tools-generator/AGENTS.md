@@ -14,7 +14,9 @@ generators resolve contracts through the authority for their consumer and emit c
 - `cli/metadata/src/main/gen/org/jetbrains/hexana/cli/metadata/HexanaCliProducts.kt` — generated product identities,
   selected executable tools, output policy, and default output metadata.
 - `cli/metadata/src/main/gen/cli-release-artifacts.json` — versioned native release product, target, archive, and
-  launcher expectations consumed by CLI downloads packaging.
+  launcher expectations consumed by CLI downloads packaging. It includes only CLI products with
+  `nativeReleaseEnabled`; `hexana-wasm-tools` has generated CLI identity and membership, while its native release
+  stays deferred until the installed application and packaging slices are ready.
 - `HexanaCliToolset.kt` also emits source-slot and per-option metadata for executable CLI bindings. Bindings with
   `generatedInputRequest` emit a typed neutral request decoder and converter in that file; `summarize-module` is the
   current production consumer. The decoder keeps source bytes in `ToolInputSources`, while semantic parameter types,
@@ -59,11 +61,16 @@ and refreshes the checked-in packaging template.
 - All authorities resolve typed IDs through `ToolCatalog`; duplicate/unknown selectors and missing/duplicate bindings
   fail before generation, and resolved output follows canonical contract order.
 - CLI release-product membership is CLI authority metadata independent from MCP profiles. Every executable binding
-  belongs to exactly one of `hexana-cli` or `hexana-cli-script`; TODO tools stay visible in the global CLI registry but
+  belongs to exactly one of `hexana-cli`, `hexana-cli-script`, or `hexana-wasm-tools`; TODO tools stay visible in the global CLI registry but
   belong to neither product. `hexana-mcp` is not a CLI release product.
+- `WasmWorkflowTools.kt` declares the three CLI-only report mirrors. Their CLI bindings accept one positional Wasm path
+  or explicit `--stdin`, plus bounded repeatable `--runtime` or `--dependency` only on the relevant command.
+- Generated CLI metadata carries source auto-stdin policy. The product frontend reads implicit stdin only for bindings
+  that declare `autoStdin`, so the focused Wasm workflows require a path, `-`, or `--stdin` explicitly.
 - Public MCPB manifest exposure is generated from the explicitly bound `hexana-mcp.default` declaration; it has no independent membership policy.
-- Top-level tool output classes also declare their `mcp/core` model package here with `kotlinPackage = ...`; the
-  idea-plugin generator must not carry a separate result-class package map.
+- MCP-backed top-level tool output classes declare their `mcp/core` model package here with `kotlinPackage = ...`;
+  the idea-plugin generator must not carry a separate result-class package map. CLI-only Wasm workflow mirrors have no
+  `mcp/core` serializer and are excluded from the server serializer-conformance test.
 - Input/output conversion capability symbols are intrinsic reusable metadata on `ClassSpec`. `SemanticJson`, `McpWrapper`,
   `Pretty`, `Table`, and `RawText` are implemented for current CLI paths. `RawBytes` is symbolic/deferred for future
   binary-safe rendering and is not exposed by current catalog tools. CLI source-slot input behavior belongs only in

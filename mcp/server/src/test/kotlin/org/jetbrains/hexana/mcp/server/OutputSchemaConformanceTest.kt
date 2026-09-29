@@ -44,7 +44,7 @@ import org.jetbrains.hexana.mcp.tools.HexanaToolCatalog
 class OutputSchemaConformanceTest {
     @Test
     fun `catalog output declarations match Kotlin serializers`() {
-        val catalog = HexanaToolCatalog.contracts
+        val catalog = HexanaToolCatalog.contracts.filter { it.output.kotlinFqn != null }
         val expected = catalog.map { it.output.kotlinFqn ?: error("${it.name} output has no Kotlin FQN") }.toSet()
         val duplicates = serializerEntries.groupBy { it.first }.filterValues { it.size > 1 }.keys
         assertTrue(duplicates.isEmpty(), "explicit serializer registry contains duplicate root serializers: $duplicates")

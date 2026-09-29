@@ -409,9 +409,28 @@ val HexanaCliScriptProductSpec = CliProductSpec(
     nativeArtifactKind = "script-cli-native",
 )
 
-val HexanaCliProductRegistry = CliProductRegistry(
-    listOf(HexanaCliProductSpec, HexanaCliScriptProductSpec),
+val HexanaWasmToolsProductSpec = CliProductSpec(
+    id = ProductId("hexana-wasm-tools"),
+    executableName = "hexana-wasm-tools",
+    description = "Focused WebAssembly structural and metadata reports.",
+    nativeReleaseEnabled = false,
 )
+
+val HexanaCliProductRegistry = CliProductRegistry(
+    listOf(HexanaCliProductSpec, HexanaCliScriptProductSpec, HexanaWasmToolsProductSpec),
+)
+
+private fun wasmWorkflowInputModel(vararg parameters: ParamBindingSpec): ToolInputModel = toolInputModel {
+    wasmSource("wasm", target = SourceTargetSpec.RootInput) {
+        cli {
+            positional("wasm")
+            stdin("--stdin")
+        }
+    }
+    parameters.forEach { parameter ->
+        param(parameter.name, parameter.targetField, parameter.cliOption, parameter.cardinality, parameter.maxOccurrences)
+    }
+}
 
 private val CLI_TOOL_BINDINGS = listOf(
     cliToolBinding(
@@ -499,6 +518,33 @@ private val CLI_TOOL_BINDINGS = listOf(
     todoCli(ListElementSegmentsToolId, "list-element-segments", ToolGroup.Element),
     todoCli(ListDataSegmentsToolId, "list-data-segments", ToolGroup.Data),
     todoCli(AuditDataPayloadPolicyToolId, "audit-data-payload-policy", ToolGroup.Data),
+    cliToolBinding(
+        ValidateAndExplainToolId, "validate-and-explain", ToolGroup.Module, ToolOutputPolicy.ToolDefined,
+        executionStatus = CliExecutionStatus.Executable,
+        products = setOf(HexanaWasmToolsProductSpec.id),
+        inputModel = wasmWorkflowInputModel(ParamBindingSpec(
+            "runtimes", ParamBindingKind.Value, cliOption = "--runtime",
+            cardinality = CliParameterCardinality.Repeatable, maxOccurrences = 500,
+        )),
+        unknownFieldPolicy = HexanaCliUnknownFieldPolicy,
+    ),
+    cliToolBinding(
+        MetadataAuditToolId, "metadata-audit", ToolGroup.Module, ToolOutputPolicy.ToolDefined,
+        executionStatus = CliExecutionStatus.Executable,
+        products = setOf(HexanaWasmToolsProductSpec.id),
+        inputModel = wasmWorkflowInputModel(),
+        unknownFieldPolicy = HexanaCliUnknownFieldPolicy,
+    ),
+    cliToolBinding(
+        ComponentWitReportToolId, "component-wit-report", ToolGroup.Component, ToolOutputPolicy.ToolDefined,
+        executionStatus = CliExecutionStatus.Executable,
+        products = setOf(HexanaWasmToolsProductSpec.id),
+        inputModel = wasmWorkflowInputModel(ParamBindingSpec(
+            "dependencyPaths", ParamBindingKind.Value, cliOption = "--dependency",
+            cardinality = CliParameterCardinality.Repeatable, maxOccurrences = 500,
+        )),
+        unknownFieldPolicy = HexanaCliUnknownFieldPolicy,
+    ),
 )
 
 val HexanaCliTools: List<CliTool> = HexanaToolCatalog.resolveBindings(

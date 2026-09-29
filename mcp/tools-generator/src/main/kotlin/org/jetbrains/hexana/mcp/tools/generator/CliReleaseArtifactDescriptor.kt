@@ -5,6 +5,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.jetbrains.hexana.mcp.tools.CliProductRegistry
+import org.jetbrains.hexana.mcp.tools.CliProductSpec
 
 private data class NativeReleaseTarget(val id: String, val platform: String, val architecture: String, val displayName: String)
 
@@ -16,6 +17,7 @@ private val nativeReleaseTargets = listOf(
 private val releaseJson = Json { prettyPrint = true }
 
 internal fun buildCliReleaseArtifactDescriptor(products: CliProductRegistry): String {
+    val nativeProducts = products.products.filter(CliProductSpec::nativeReleaseEnabled)
     val document = buildJsonObject {
         put("schemaVersion", 1)
         put("kind", "hexana-cli-native-release-artifacts")
@@ -31,7 +33,7 @@ internal fun buildCliReleaseArtifactDescriptor(products: CliProductRegistry): St
             }
         })
         put("products", buildJsonArray {
-            products.products.forEach { product ->
+            nativeProducts.forEach { product ->
                 add(buildJsonObject {
                     put("id", product.id.value)
                     put("executable", product.executableName)
@@ -42,7 +44,7 @@ internal fun buildCliReleaseArtifactDescriptor(products: CliProductRegistry): St
         })
         put("artifacts", buildJsonArray {
             nativeReleaseTargets.forEach { target ->
-                products.products.forEach { product ->
+                nativeProducts.forEach { product ->
                     add(buildJsonObject {
                         put("target", target.id)
                         put("product", product.id.value)

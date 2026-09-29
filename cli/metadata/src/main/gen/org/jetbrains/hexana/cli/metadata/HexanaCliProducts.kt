@@ -34,9 +34,13 @@ public object HexanaGeneratedCliProducts {
   public val HEXANA_CLI_SCRIPT: HexanaCliProductDescriptor =
       HexanaCliProductDescriptor("hexana-cli-script", "hexana-cli-script", "Hexana command-line scripting runtime.")
 
+  public val HEXANA_WASM_TOOLS: HexanaCliProductDescriptor =
+      HexanaCliProductDescriptor("hexana-wasm-tools", "hexana-wasm-tools", "Focused WebAssembly structural and metadata reports.")
+
   public val PRODUCTS: Map<String, HexanaCliProductDescriptor> = mapOf(
         "hexana-cli" to HEXANA_CLI,
         "hexana-cli-script" to HEXANA_CLI_SCRIPT,
+        "hexana-wasm-tools" to HEXANA_WASM_TOOLS,
       )
 
   public val SELECTIONS: Map<String, List<HexanaCliProductToolSelection>> = mapOf(
@@ -48,6 +52,11 @@ public object HexanaGeneratedCliProducts {
         "hexana-cli-script" to listOf(
           HexanaCliProductToolSelection("run_binary_script", "run-script", "ToolDefined", "RawText"),
           HexanaCliProductToolSelection("run_script_suite", "test", "ToolDefined", "RawText"),
+        ),
+        "hexana-wasm-tools" to listOf(
+          HexanaCliProductToolSelection("validate_and_explain", "validate-and-explain", "ToolDefined", "SemanticJson"),
+          HexanaCliProductToolSelection("metadata_audit", "metadata-audit", "ToolDefined", "SemanticJson"),
+          HexanaCliProductToolSelection("component_wit_report", "component-wit-report", "ToolDefined", "SemanticJson"),
         ),
       )
 }

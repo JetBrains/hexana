@@ -816,11 +816,16 @@ private fun selectSource(
     if (stdinRequested) {
         return ToolInputSourceSelection.StdinBytes(readStdinBytes(stdin, maxInlineBytes(slotName, resourceLimits)), slotName)
     }
-    val autoBytes = readAutoStdinBytes(stdin, maxInlineBytes(slotName, resourceLimits))
+    val autoBytes = if (spec.autoStdin) readAutoStdinBytes(stdin, maxInlineBytes(slotName, resourceLimits)) else null
     if (autoBytes != null) {
         return ToolInputSourceSelection.StdinBytes(autoBytes, slotName)
     }
-    throw ProductUsageException("Missing ${spec.commandName} source. Provide a path, --stdin, or a base64 source option.")
+    val choices = if (spec.inputOptions.any { it.valueType == "base64" }) {
+        "a path, --stdin, or a base64 source option"
+    } else {
+        "a path or --stdin"
+    }
+    throw ProductUsageException("Missing ${spec.commandName} source. Provide $choices.")
 }
 
 private fun maxInlineBytes(slotName: String, resourceLimits: HexanaResourceLimits): Int =

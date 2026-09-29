@@ -148,9 +148,49 @@ class HexanaProductCliTest {
             mapOf(
                 "hexana-cli" to listOf("summarize-binary", "summarize-module", "wasm-to-wat"),
                 "hexana-cli-script" to listOf("run-script", "test"),
+                "hexana-wasm-tools" to listOf("component-wit-report", "metadata-audit", "validate-and-explain"),
             ),
             commands,
         )
+    }
+
+    @Test
+    fun wasmProductUsesGeneratedSelectionAndProjectionGuards() {
+        val product = HexanaGeneratedCliProducts.HEXANA_WASM_TOOLS
+        val selections = HexanaGeneratedCliProducts.SELECTIONS.getValue(product.productId)
+        val bindings = selections.map { testBinding(it.toolName) }
+        assertEquals(3, selectedProductTools(product, bindings).size)
+        assertFailsWith<IllegalArgumentException> { selectedProductTools(product, bindings.dropLast(1)) }
+        assertFailsWith<IllegalArgumentException> {
+            selectedProductTools(product, bindings.map { binding ->
+                if (binding.toolName == "metadata_audit") binding.copy(
+                    supportedOutputFormats = binding.supportedOutputFormats - org.jetbrains.hexana.cli.runtime.ToolOutputFormat.PRETTY,
+                ) else binding
+            })
+        }
+        val metadata = HexanaGeneratedCliToolRegistry.TOOLS.filter { spec -> selections.any { it.toolName == spec.toolName } }
+        assertTrue(metadata.all { it.outputFormats == setOf(org.jetbrains.hexana.cli.runtime.ToolOutputFormat.JSON,
+            org.jetbrains.hexana.cli.runtime.ToolOutputFormat.PRETTY) })
+        assertEquals(listOf("--runtime" to 500, "--dependency" to 500), metadata.flatMap { spec ->
+            spec.parameterOptions.map { it.option to it.maxOccurrences }
+        })
+        assertTrue(metadata.none { it.autoStdin })
+        val cli = HexanaProductCli(product, object : HexanaProductToolExecutor {
+            override val bindings = selections.map { testBinding(it.toolName) }
+        })
+        val missingSource = cli.run(arrayOf("metadata-audit"), FailOnReadInputStream, fixtureEnv)
+        assertEquals(USAGE_EXIT_CODE, missingSource.exitCode)
+        assertTrue(missingSource.stderr.contains("Provide a path or --stdin"), missingSource.stderr)
+
+        val recording = RecordingProductExecutor(toolNames = selections.map { it.toolName })
+        val executable = HexanaProductCli(product, recording)
+        val repeated = executable.run(arrayOf("validate-and-explain", "fixture.wasm", "--runtime", "wasmtime",
+            "--runtime", "wasmer"), FailOnReadInputStream, fixtureEnv)
+        assertEquals(SUCCESS_EXIT_CODE, repeated.exitCode, repeated.stderr)
+        assertEquals(listOf("wasmtime", "wasmer"), recording.singleRequest().parameterValues["runtimes"])
+        val unsupported = executable.run(arrayOf("metadata-audit", "fixture.wasm", "--runtime", "wasmtime"),
+            FailOnReadInputStream, fixtureEnv)
+        assertEquals(USAGE_EXIT_CODE, unsupported.exitCode)
     }
 
     @Test
@@ -513,8 +553,9 @@ private fun runStandardSummary(
 
 private class RecordingProductExecutor(
     private val result: ProductCliResult = ProductCliResult(stdout = """{"format":"wasm"}"""),
+    private val toolNames: List<String> = STANDARD_TOOL_NAMES,
 ) : HexanaProductToolExecutor {
-    override val bindings: List<HexanaProductToolExecutorBinding> = STANDARD_TOOL_NAMES.map { toolName ->
+    override val bindings: List<HexanaProductToolExecutorBinding> = toolNames.map { toolName ->
         HexanaProductToolExecutorBinding(toolName, formatsFor(toolName), ::record)
     }
     private val requests = mutableListOf<HexanaProductToolExecutionRequest>()

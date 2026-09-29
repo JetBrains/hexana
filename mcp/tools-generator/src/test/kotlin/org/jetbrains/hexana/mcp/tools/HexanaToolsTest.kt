@@ -169,6 +169,9 @@ class HexanaToolsTest {
                 "list_data_segments",
                 "audit_data_payload_policy",
                 "query_artifacts",
+                "validate_and_explain",
+                "metadata_audit",
+                "component_wit_report",
             ),
             HexanaTools.map { it.name },
         )
@@ -208,7 +211,7 @@ class HexanaToolsTest {
         assertTrue(mcpProfile("default").toolIds.intersect(mcpProfile("advanced").toolIds.toSet()).isEmpty())
         assertTrue(mcpProfile("default").toolIds.intersect(mcpProfile("scripting").toolIds.toSet()).isEmpty())
         assertTrue(mcpProfile("advanced").toolIds.intersect(mcpProfile("scripting").toolIds.toSet()).isEmpty())
-        assertEquals(32, HexanaCliTools.size)
+        assertEquals(35, HexanaCliTools.size)
         assertTrue(HexanaStandaloneTools.all {
             it.standaloneInvocation.methodName.matches(Regex("^[A-Za-z_][A-Za-z0-9_]*$"))
         })
@@ -256,7 +259,7 @@ class HexanaToolsTest {
     @Test
     fun `CLI product declarations and executable models preserve approved inventories`() {
         assertEquals(
-            listOf(HexanaCliProductSpec, HexanaCliScriptProductSpec),
+            listOf(HexanaCliProductSpec, HexanaCliScriptProductSpec, HexanaWasmToolsProductSpec),
             HexanaCliProductRegistry.products,
         )
         val products = HexanaCliProductRegistry.products.associate { product ->
@@ -264,10 +267,49 @@ class HexanaToolsTest {
         }
         assertEquals(listOf("summarize_binary", "wasm_to_wat", "summarize_module"), products.getValue(HexanaCliProductSpec.id))
         assertEquals(listOf("run_binary_script", "run_script_suite"), products.getValue(HexanaCliScriptProductSpec.id))
+        assertEquals(listOf("validate_and_explain", "metadata_audit", "component_wit_report"),
+            products.getValue(HexanaWasmToolsProductSpec.id))
         val executable = HexanaCliTools.filter { it.binding.executionStatus == CliExecutionStatus.Executable }
-        assertEquals(5, executable.size)
+        assertEquals(8, executable.size)
         assertTrue(executable.all { it.inputModel != null })
         assertEquals(OutputConversionCapability.Pretty, HexanaCliTools.single { it.name == "summarize_module" }.binding.defaultOutput)
+    }
+
+    @Test
+    fun `Wasm report tools are CLI-only with exact source and bounded repeated options`() {
+        val ids = listOf(ValidateAndExplainToolId, MetadataAuditToolId, ComponentWitReportToolId)
+        assertTrue(HexanaIdeaTools.none { it.id in ids })
+        assertTrue(HexanaStandaloneTools.none { it.id in ids })
+        assertTrue(HexanaMcpbTools.none { it.id in ids })
+        val tools = ids.map { id -> HexanaCliTools.single { it.id == id } }
+        tools.forEach { tool ->
+            assertEquals(setOf(HexanaWasmToolsProductSpec.id), tool.binding.products)
+            assertEquals(setOf(OutputConversionCapability.SemanticJson, OutputConversionCapability.Pretty),
+                tool.output.outputCapabilities)
+            val source = tool.inputModel!!.sources.single()
+            assertEquals("wasm", source.name)
+            assertEquals("wasm", source.cli.positionalPathName)
+            assertEquals("--stdin", source.cli.stdinOption)
+            assertEquals(null, source.cli.base64Option)
+            assertFalse(source.cli.autoStdin)
+        }
+        assertTrue(tools[1].inputModel!!.params.isEmpty())
+        assertEquals(listOf("--runtime" to "runtimes", "--dependency" to "dependencyPaths"),
+            listOf(tools[0], tools[2]).map { tool ->
+                val parameter = tool.inputModel!!.params.single()
+                assertEquals(CliParameterCardinality.Repeatable, parameter.cardinality)
+                assertEquals(500, parameter.maxOccurrences)
+                parameter.cliOption to parameter.targetField
+            })
+        assertEquals(setOf("product", "report", "input", "completeness", "diagnostics", "findings", "truncation",
+            "summary", "structural_parse", "semantic_validation", "features_and_proposals", "runtime_compatibility"),
+            ValidateAndExplainResultClass.fields.mapTo(mutableSetOf()) { it.schemaKey })
+        assertEquals(setOf("product", "report", "input", "completeness", "diagnostics", "findings", "truncation",
+            "custom_sections", "typed_metadata", "enabled_features"),
+            MetadataAuditResultClass.fields.mapTo(mutableSetOf()) { it.schemaKey })
+        assertEquals(setOf("product", "report", "input", "completeness", "diagnostics", "findings", "truncation",
+            "component", "types", "dependencies", "wit"),
+            ComponentWitReportResultClass.fields.mapTo(mutableSetOf()) { it.schemaKey })
     }
 
     @Test
@@ -503,17 +545,17 @@ class HexanaToolsTest {
         for (spec in HexanaTools) {
             assertTrue(spec.summary.isNotBlank(), "summary blank for ${spec.name}")
             assertTrue(spec.input.fields.isNotEmpty(), "empty input class for ${spec.name}")
-            assertTrue(
-                spec.output.kotlinFqn != null,
-                "output class ${spec.output.name} missing kotlinPackage for ${spec.name}",
-            )
+            if (spec.id !in setOf(ValidateAndExplainToolId, MetadataAuditToolId, ComponentWitReportToolId)) {
+                assertTrue(spec.output.kotlinFqn != null,
+                    "output class ${spec.output.name} missing kotlinPackage for ${spec.name}")
+            }
             assertTrue(spec.output.fields.isNotEmpty(), "empty output class for ${spec.name}")
         }
     }
 
     @Test
     fun `tool output Kotlin FQNs point at matching result classes`() {
-        HexanaTools.forEach { spec ->
+        HexanaTools.filterNot { it.id in setOf(ValidateAndExplainToolId, MetadataAuditToolId, ComponentWitReportToolId) }.forEach { spec ->
             val outputFqn = requireNotNull(spec.output.kotlinFqn)
             assertEquals(spec.output.name, outputFqn.substringAfterLast('.'), "bad output FQN for ${spec.name}")
             assertTrue(
@@ -689,6 +731,8 @@ class HexanaToolsTest {
                     OutputConversionCapability.Sarif,
                 )
                 "run_script_suite" -> setOf(OutputConversionCapability.RawText)
+                "validate_and_explain", "metadata_audit", "component_wit_report" ->
+                    setOf(OutputConversionCapability.SemanticJson, OutputConversionCapability.Pretty)
                 else -> setOf(OutputConversionCapability.SemanticJson, OutputConversionCapability.McpWrapper)
             }
             assertEquals(
