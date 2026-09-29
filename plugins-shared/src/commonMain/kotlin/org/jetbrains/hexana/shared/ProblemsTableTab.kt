@@ -71,7 +71,7 @@ fun problemsTableTab(problems: List<BinaryProblem>, navigator: ProblemNavigator?
                 // Sorting on the ordinal puts errors first when ascending.
                 CellValue(severity.ordinal, severity.label)
             },
-            col("Kind", ColumnWidth.MeasuredMin("Unknown opcode")) { index ->
+            col("Kind", ColumnWidth.MeasuredMin("Unknown opcode".repeat(2))) { index ->
                 CellValue(problems[index].kind)
             },
             col("Location", ColumnWidth.MeasuredMin("func 9999")) { index ->
