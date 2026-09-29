@@ -422,6 +422,16 @@ interface NativeBinaryProvider extends BinaryProvider {
       sampleFiles: string[];
     };
   };
+  parseDiagnostics?: {
+    code: string;
+    message: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    severity: "Info" | "Warning" | "Error";
+  }[];
   sharedBytes: {
     indices: {
       endExclusive: number;
@@ -583,6 +593,16 @@ interface CoffBinaryProvider extends NativeBinaryProvider {
     symbolIndex: number;
     thunkLike: boolean;
     virtualAddress: number;
+  }[];
+  parseDiagnostics: {
+    code: string;
+    message: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    severity: "Info" | "Warning" | "Error";
   }[];
   sections?: {
     characteristics: number;
@@ -831,6 +851,16 @@ interface ElfBinaryProvider extends NativeBinaryProvider {
       sampleFiles: string[];
     };
   };
+  parseDiagnostics: {
+    code: string;
+    message: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    severity: "Info" | "Warning" | "Error";
+  }[];
   programHeaders?: {
     alignment: number;
     fileOffset: number;
@@ -983,6 +1013,16 @@ interface FatMachOBinaryProvider extends NativeBinaryProvider {
     endian: "Little" | "Big" | "Unknown";
     wordSize: "Bits32" | "Bits64" | "Unknown";
   };
+  parseDiagnostics: {
+    code: string;
+    message: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    severity: "Info" | "Warning" | "Error";
+  }[];
   sizeAnalysis?: {
     children: BinarySizeNode[];
     name: string;
@@ -1162,6 +1202,16 @@ interface MachOBinaryProvider extends NativeBinaryProvider {
       sampleFiles: string[];
     };
   };
+  parseDiagnostics: {
+    code: string;
+    message: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    severity: "Info" | "Warning" | "Error";
+  }[];
   relocations?: {
     address: number;
     external: boolean;
@@ -1527,6 +1577,16 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     subsystem: number;
     wordSize: "Bits32" | "Bits64" | "Unknown";
   };
+  parseDiagnostics: {
+    code: string;
+    message: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    severity: "Info" | "Warning" | "Error";
+  }[];
   sections?: {
     characteristics: number;
     contentRange?: {
