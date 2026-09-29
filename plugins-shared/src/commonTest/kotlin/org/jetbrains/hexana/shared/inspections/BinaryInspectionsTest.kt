@@ -12,6 +12,7 @@ import org.jetbrains.hexana.shared.BinaryProblemsTableTabsProvider
 import org.jetbrains.hexana.shared.PROBLEMS_TAB_NAME
 import org.jetbrains.hexana.shared.ProblemMenuItem
 import org.jetbrains.hexana.shared.ProblemNavigator
+import org.jetbrains.hexana.shared.RowSelectionData
 import org.jetbrains.hexana.shared.TableTabsContext
 import org.jetbrains.hexana.shared.WasmBinaryWriter
 import org.jetbrains.hexana.shared.features.RuntimeTarget
@@ -211,32 +212,56 @@ class BinaryInspectionsTest {
             menuItems = listOf(ProblemMenuItem("Show function", isVisible = { it.funcIdx != null }) {}),
         )
 
-        val tab = assertNotNull(problemsTableTab(listOf(inFunction, fileLevel), navigator))
+        val tab = assertNotNull(problemsTableTab(listOf(inFunction, fileLevel), FILE_SIZE, navigator))
         tab.rowClickAction!!(0)
         assertEquals(listOf(inFunction), opened)
         assertTrue(tab.contextMenuItems.single().isVisible(0))
         assertFalse(tab.contextMenuItems.single().isVisible(1))
         assertNull(tab.rowSelectionProvider(1), "a file-level problem has no bytes to select")
 
-        val plain = assertNotNull(problemsTableTab(listOf(inFunction)))
+        val plain = assertNotNull(problemsTableTab(listOf(inFunction), FILE_SIZE))
         assertNull(plain.rowClickAction)
         assertEquals(emptyList(), plain.contextMenuItems)
     }
 
     @Test
     fun `the errors-and-warnings filter appears only when there are notes to hide`() {
-        val withNote = assertNotNull(problemsTableTab(listOf(problem(ProblemSeverity.Info, 0), problem(ProblemSeverity.Error, 1))))
+        val withNote = assertNotNull(problemsTableTab(listOf(problem(ProblemSeverity.Info, 0), problem(ProblemSeverity.Error, 1)), FILE_SIZE))
         val filter = withNote.predefinedFilters.single()
         assertFalse(filter.predicate(0))
         assertTrue(filter.predicate(1))
         assertTrue(withNote.defaultFilterShowAll, "notes are listed until the user filters them out")
 
-        assertEquals(emptyList(), assertNotNull(problemsTableTab(listOf(problem(ProblemSeverity.Error, 0)))).predefinedFilters)
+        assertEquals(emptyList(), assertNotNull(problemsTableTab(listOf(problem(ProblemSeverity.Error, 0)), FILE_SIZE)).predefinedFilters)
+    }
+
+    @Test
+    fun `a range becomes a selection only inside the file, clipped and at least one byte wide`() {
+        assertEquals(4 to 8, ProblemByteRange(4, 8).selectionIn(16).pair())
+        assertEquals(12 to 4, ProblemByteRange(12, 100).selectionIn(16).pair(), "clipped to the file end")
+        assertEquals(5 to 1, ProblemByteRange(5, 0).selectionIn(16).pair(), "a point marks its byte")
+        assertNull(ProblemByteRange(16, 1).selectionIn(16), "starts past the end")
+        assertNull(ProblemByteRange(-1, 4).selectionIn(16), "starts before the file")
+        assertNull(ProblemByteRange(Int.MAX_VALUE + 1L, 1).selectionIn(16), "would wrap in an Int")
+    }
+
+    @Test
+    fun `the problems table selects no bytes for a range outside the file`() {
+        val tab = assertNotNull(problemsTableTab(listOf(problem(ProblemSeverity.Error, offset = 99)), fileSize = 16))
+        assertNull(tab.rowSelectionProvider(0))
     }
 
     // ---------------------------------------------------------------------
     // Fixtures
     // ---------------------------------------------------------------------
+
+    /** [RowSelectionData] has no equality; compare it through its fields. */
+    private fun RowSelectionData?.pair(): Pair<Int, Int>? = this?.let { it.offset to it.size }
+
+    private companion object {
+        /** Large enough for every offset the table fixtures use. */
+        const val FILE_SIZE = 1024
+    }
 
     private fun problem(severity: ProblemSeverity, offset: Long?) = BinaryProblem(
         inspectionId = "test",

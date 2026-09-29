@@ -412,8 +412,9 @@ private fun Server.registerInspectBinaryTool(handlers: HexanaToolHandlers) {
     name = "inspect_binary",
     description = """
   |Report errors and warnings found in a Wasm or native binary.
-  |Runs the same inspections as the Hexana Problems tab in IntelliJ and VS Code: WebAssembly parse problems, ELF/Mach-O/PE parser diagnostics and unknown record types, and, when `runtimeTargetsPath` names a `.hexana/runtimes.json`, proposals a declared runtime cannot run.
-  |Each problem carries a stable `code`, a `severity`, and a byte range or `funcidx` when it has a position; follow up with `query_binary` or the Wasm function tools to inspect the affected region.
+  |Runs the same inspections as the Hexana Problems tab in IntelliJ and VS Code: WebAssembly parse problems, ELF/Mach-O/PE headers and tables the parser could not read, and, when `runtimeTargetsPath` names a `.hexana/runtimes.json`, proposals a declared runtime cannot run.
+  |Each problem carries a stable `code`, a `severity`, and, when it has a position, an absolute `byteOffset`/`byteLength` and, inside a Wasm function, a `funcidx`.
+  |Follow a `funcidx` up with `get_instructions_for_functions`; `query_binary` finds the enclosing section or record by name, but its `offset` pages records and is not a byte offset.
   |Runtime verdicts come from the WebAssembly feature catalog snapshot bundled with Hexana.
   """.trimMargin(),
     inputSchema = ToolSchema(

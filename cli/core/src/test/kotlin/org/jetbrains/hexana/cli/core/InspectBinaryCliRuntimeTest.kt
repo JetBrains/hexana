@@ -104,6 +104,39 @@ class InspectBinaryCliRuntimeTest {
     }
 
     @Test
+    fun sarifFingerprintsStayDistinctForProblemsWithoutAPosition() {
+        val binary = file("sign-ext.wasm", SIGN_EXTENSION_MODULE)
+        val targets = file("runtimes.json", """{"targets":[{"runtime":"Chrome","version":"1"}]}""".toByteArray())
+        val result = decode(inspect(binary, ToolOutputFormat.JSON, runtimeTargets = targets))
+        // Two proposal warnings share their code and carry no location or byte range.
+        val problem = result.problems.single()
+        val twoProposals = result.copy(problems = listOf(problem, problem.copy(message = "Other proposal: Chrome 1")))
+
+        val fingerprints = HexanaJson.compact.parseToJsonElement(renderInspectBinarySarif(twoProposals))
+            .jsonObject["runs"]!!.jsonArray.single().jsonObject["results"]!!.jsonArray
+            .map { it.jsonObject["partialFingerprints"]!!.jsonObject["hexanaProblem/v1"]!!.jsonPrimitive.content }
+
+        assertEquals(2, fingerprints.toSet().size, fingerprints.toString())
+    }
+
+    @Test
+    fun sarifReportsTheRequestedToolVersion() {
+        val sarif = standardCli(
+            StandardCliRequest(
+                toolName = INSPECT_BINARY_TOOL_NAME,
+                sourceSelections = listOf(ToolInputSourceSelection.Path(file("empty.wasm", EMPTY_MODULE).toString(), "binary")),
+                format = ToolOutputFormat.SARIF,
+                toolVersion = "1.2.3",
+            ),
+            DefaultHexanaAnalysisService(),
+        ).text()
+
+        val driver = HexanaJson.compact.parseToJsonElement(sarif).jsonObject["runs"]!!.jsonArray.single()
+            .jsonObject["tool"]!!.jsonObject["driver"]!!.jsonObject
+        assertEquals("1.2.3", driver["version"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun tableListsOneRowPerProblem() {
         val text = inspect(file("truncated.wasm", TRUNCATED_CODE_SECTION), ToolOutputFormat.TABLE).text()
 

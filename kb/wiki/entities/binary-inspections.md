@@ -71,6 +71,21 @@ The IntelliJ and web-ui Problems enrichers (`enrichWasmProblemsTab`, `enrichProb
   `ScriptFindingsStore.changes`, and `replacePlaceholder` inserts it when absent. Before this,
   script findings on a module with no parse problems were never shown at all, and a finished
   run did not refresh the tab.
+- **Problem ranges are untrusted.** A script can anchor a finding anywhere (negative, past EOF,
+  zero-length, above `Int.MAX_VALUE`). The data keeps what was reported (CLI/SARIF show it as
+  is); every host navigates through `ProblemByteRange.selectionIn(fileSize)`, which clips to the
+  file, widens a point to one byte, and returns `null` outside it. Never `toInt()` a range for
+  selection directly.
+- **SARIF fingerprints must be unique within a run.** The base hash (code, range, funcidx,
+  location) collides for position-less problems such as two proposal warnings; repeats get
+  `:<occurrence>` appended. The SARIF `tool.driver.version` comes from
+  `StandardCliRequest.toolVersion` (`HEXANA_CLI_VERSION` in `hexana-cli`).
+- **`ScriptFindingsStore.findingsFor(path)` compares with `FileUtil.pathsEqual`.** The editor
+  passes a NIO path (`\` on Windows); `VirtualFile.path` always uses `/`.
+- **The VS Code badge is counted in `BinaryEditorContent`, not the toolbar**, from
+  `liveProvider` in a `LaunchedEffect`: the toolbar's `provider` is the one the file opened
+  with, which a reparse after an edit replaces, and inspecting during composition blocks the
+  first frame.
 - **Approval pins.** Adding an inspection tool touched `HexanaToolsTest` inventories,
   `HexanaToolCompatibilityTest` fingerprints, `OutputSchemaConformanceTest`'s serializer list,
   `HexanaMcpServerSchemaTest` profile counts, and the fake executors in `HexanaProductCliTest`.

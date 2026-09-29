@@ -1,10 +1,8 @@
 package org.jetbrains.hexana.vscode
 
 import org.jetbrains.hexana.shared.inspections.BinaryProblem
-import org.jetbrains.hexana.shared.inspections.InspectionContext
 import org.jetbrains.hexana.shared.inspections.ProblemSeverity
 import org.jetbrains.hexana.shared.inspections.counts
-import org.jetbrains.hexana.shared.inspections.inspectBinary
 import androidx.compose.runtime.*
 import org.jetbrains.compose.web.css.Color
 import org.jetbrains.compose.web.css.DisplayStyle
@@ -74,6 +72,12 @@ fun EditorToolbar(
     runtimeCompatibility: WasmRuntimeCompatibility? = null,
     /** Selects the Compatibility tab, where the matrix and the documentation links live. */
     onOpenCompatibilityTab: (() -> Unit)? = null,
+    /**
+     * What the problems badge counts. Inspected by the caller, from the provider the Problems
+     * tab is built from and outside composition; this toolbar's own [provider] is the one
+     * the file opened with, which a reparse after an edit replaces.
+     */
+    problems: List<BinaryProblem> = emptyList(),
     /**
      * Selects the Problems tab. `null` hides the problems badge — the webapp's worker route
      * passes null, because counting would parse the binary on the UI thread it offloads.
@@ -433,11 +437,6 @@ fun EditorToolbar(
             }
 
             if (onOpenProblemsTab != null) {
-                // The same inputs the Problems tab is built from, so the count matches it.
-                val problems = remember(provider, runtimeCompatibility) {
-                    runCatching { inspectBinary(provider, InspectionContext(runtimeCompatibility)) }
-                        .getOrDefault(emptyList())
-                }
                 ProblemsBadge(problems, onOpenProblemsTab)
             }
         }

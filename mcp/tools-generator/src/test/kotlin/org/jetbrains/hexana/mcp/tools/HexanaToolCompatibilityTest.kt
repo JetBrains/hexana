@@ -448,13 +448,20 @@ class HexanaToolCompatibilityTest {
         // any MCP or standalone profile). Its suiteFiles input is a positional parameter,
         // and the guidance text describes the ESM-only import resolution. Combined here
         // with the field-presence snapshot extension that arrived from master.
-        const val EXPECTED_SEMANTIC = "5400f3de10d8700b3425c6d0e20e09cc5f19626403f010935639f275a02818e8"
-        const val EXPECTED_IDEA = "714da9778528306fde04001169ecf03acb957ef9e43959f90d245b0fc4ca539d"
-        const val EXPECTED_STANDALONE = "dd0f31cd4e78e695abd10fca5a78ac31cd8602e4ba01a92688295fac45f16a41"
+        // Reviewed: `inspect_binary` guidance corrected — native inspection reports unreadable
+        // headers and tables (not unknown record types), and a problem's `funcidx` leads to
+        // `get_instructions_for_functions` rather than to `query_binary`, whose `offset` pages
+        // records instead of addressing bytes. Description-only; inputs and outputs are unchanged.
+        // Reviewed: `inspect_binary` is in the standalone advanced profile and the hexana-cli
+        // product, but not in the IDEA toolset (whose binary-only input pattern cannot carry
+        // `runtimeTargetsPath`), so the IDEA snapshot is unchanged from before the tool existed.
+        const val EXPECTED_SEMANTIC = "7f725ea47b0cf1041b78b62a83fa0931a706e3258ea1514062913b9a270dc8be"
+        const val EXPECTED_IDEA = "61a577f8701b4778a5688ce89769913bbef589dce14df69aba7197a2c4a63256"
+        const val EXPECTED_STANDALONE = "4844e2b72c3cf2c54e9f2824ea43e5dfc4a8001c985833a2cfe97817c96073c5"
         const val EXPECTED_MCPB = "d530ca73ea6bdcd8a8244ab0960e10c348d37932c02ff7bee2053a72760abe84"
-        const val EXPECTED_MCP_PRODUCTS = "13bc46a83aa5707e526842837ab9f0ac472229483024dba827b7cc35014f8903"
-        const val EXPECTED_CLI = "78c54bcff7ec202f6ae4b355148237baa8a2a0e28d080cf32e661f6c7b8b509a"
-        const val EXPECTED_HEXANA_CLI = "db8dba08f15faf3153d25f51a7cd530ef2fab2aa343964ff00be4450d361150b"
+        const val EXPECTED_MCP_PRODUCTS = "02ced32a8ad7664ddbed8b328d0b803f8b69e89f00045e7e579324f5d6161005"
+        const val EXPECTED_CLI = "d56254684fce4a3cf98f3563dddfcd410c5785ddc1693f588fbe219feac0f442"
+        const val EXPECTED_HEXANA_CLI = "0df0a4e2ceeb59d4e81ccb17d54504d0073a157d69f91b8c57fa01d75f71a632"
         const val EXPECTED_HEXANA_CLI_SCRIPT = "5ae8d15bdd2814e7e50481a8fee97ccc30884f02b22e3e84fe723b57f1b56b23"
     }
 }

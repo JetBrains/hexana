@@ -11,6 +11,7 @@ import org.jetbrains.hexana.shared.ProblemMenuItem
 import org.jetbrains.hexana.shared.ProblemNavigator
 import org.jetbrains.hexana.shared.inspections.BinaryProblem
 import org.jetbrains.hexana.shared.inspections.InspectionContext
+import org.jetbrains.hexana.shared.inspections.selectionIn
 import org.jetbrains.hexana.shared.inspections.toBinaryProblem
 
 /**
@@ -39,19 +40,21 @@ internal fun BinaryProvider.problemNavigator(state: HexViewStateHolder): Problem
     val wasm = this as? WasmBinaryVirtualFileProvider
     val project = state.project
 
+    val fileSize = bytes.size
+
     fun revealBytes(problem: BinaryProblem) {
-        val range = problem.byteRange ?: return
-        state.scrollHexViewTo(range.offset.toInt(), range.size.toInt())
+        val selection = problem.byteRange?.selectionIn(fileSize) ?: return
+        state.scrollHexViewTo(selection.offset, selection.size)
     }
 
     fun showInPlainWat(problem: BinaryProblem) {
         val provider = wasm ?: return
-        val range = problem.byteRange ?: return
+        val selection = problem.byteRange?.selectionIn(fileSize) ?: return
         // The plain Wat tab's editor scrolls to the nearest annotated line through the same
         // channel the virtualized panel uses for structural navigation.
         FileEditorManager.getInstance(project).openFile(provider.file, false)
             .filterIsInstance<HexanaFileEditor>().firstOrNull()
-            ?.requestWasmByteOffsetNav(range.offset.toInt())
+            ?.requestWasmByteOffsetNav(selection.offset)
         state.requestSelectTabByDescription("Wat")
     }
 
@@ -72,7 +75,7 @@ internal fun BinaryProvider.problemNavigator(state: HexViewStateHolder): Problem
             ),
             ProblemMenuItem(
                 label = "Show in Wat",
-                isVisible = { it.byteRange != null },
+                isVisible = { it.byteRange?.selectionIn(fileSize) != null },
                 action = ::showInPlainWat,
             ),
         ),

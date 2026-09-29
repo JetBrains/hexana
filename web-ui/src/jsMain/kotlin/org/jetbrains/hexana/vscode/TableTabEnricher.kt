@@ -5,6 +5,7 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.*
+import org.jetbrains.hexana.shared.inspections.selectionIn
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 import org.jetbrains.hexana.wasm.sections.WasmValueType
 
@@ -178,15 +179,14 @@ internal fun problemNavigator(
 ): ProblemNavigator = ProblemNavigator(
     open = { problem ->
         val funcIdx = problem.funcIdx
-        val range = problem.byteRange
+        val bytes = problem.byteRange?.selectionIn(provider.bytes.size)
         if (funcIdx != null && provider is WasmBinaryProvider) {
             onNavigateToWatFunc(funcIdx)
-        } else if (range != null) {
-            val offset = range.offset.toInt()
-            selection.anchorIndex = offset
-            selection.activeIndex = offset + range.size.toInt() - 1
-            selection.cursorIndex = offset
-            scrollHexViewerTo(offset)
+        } else if (bytes != null) {
+            selection.anchorIndex = bytes.offset
+            selection.activeIndex = bytes.offset + bytes.size - 1
+            selection.cursorIndex = bytes.offset
+            scrollHexViewerTo(bytes.offset)
         }
     },
 )

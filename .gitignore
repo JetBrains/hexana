@@ -19,3 +19,4 @@ wasm-modules/webapp_server/target
 wasm-modules/webapp_server/Cargo.lock
 /plugins/hexana/
 ui-driver-tests/allure-results/
+.DS_Store

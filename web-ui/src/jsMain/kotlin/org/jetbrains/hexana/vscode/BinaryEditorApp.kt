@@ -1,6 +1,9 @@
 package org.jetbrains.hexana.vscode
 
 import org.jetbrains.hexana.shared.PROBLEMS_TAB_NAME
+import org.jetbrains.hexana.shared.inspections.BinaryProblem
+import org.jetbrains.hexana.shared.inspections.InspectionContext
+import org.jetbrains.hexana.shared.inspections.inspectBinary
 import androidx.compose.runtime.*
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
@@ -251,6 +254,19 @@ fun BinaryEditorContent(
         selection.showRowDetail = false
     }
 
+    // A worker presentation means the binary was parsed off the UI thread; counting
+    // problems here would parse it again on this one.
+    val countsProblems = workerWasmToolbarPresentation == null && workerNativeImageToolbarPresentation == null
+    // The toolbar's problems badge. Counted from `liveProvider` - the provider the Problems
+    // tab is built from, so a reparse after an edit updates both - and in an effect, because
+    // inspecting is a whole-file parse that must not hold up the frame that shows the file.
+    var problems by remember(liveProvider, runtimeCompatibility) { mutableStateOf<List<BinaryProblem>>(emptyList()) }
+    LaunchedEffect(liveProvider, runtimeCompatibility, countsProblems) {
+        if (!countsProblems) return@LaunchedEffect
+        problems = runCatching { inspectBinary(liveProvider, InspectionContext(runtimeCompatibility)) }
+            .getOrDefault(emptyList())
+    }
+
     Div({
         classes("hexana-editor")
         style {
@@ -280,9 +296,8 @@ fun BinaryEditorContent(
             } else {
                 null
             },
-            // A worker presentation means the binary was parsed off the UI thread; counting
-            // problems here would parse it again on this one.
-            onOpenProblemsTab = if (workerWasmToolbarPresentation == null && workerNativeImageToolbarPresentation == null) {
+            problems = problems,
+            onOpenProblemsTab = if (countsProblems) {
                 { activeTab = PROBLEMS_TAB_NAME }
             } else {
                 null

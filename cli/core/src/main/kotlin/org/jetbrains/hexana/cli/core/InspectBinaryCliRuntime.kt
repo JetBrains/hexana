@@ -31,6 +31,9 @@ import java.security.MessageDigest
 
 public const val INSPECT_BINARY_TOOL_NAME: String = "inspect_binary"
 
+/** Reported as the SARIF tool version when the caller does not name the running product's. */
+internal const val UNKNOWN_TOOL_VERSION = "0.0.0"
+
 private const val RUNTIME_TARGETS_PATH_PARAM = "runtimeTargetsPath"
 private const val SARIF_CONTENT_TYPE = "application/sarif+json; charset=utf-8"
 private const val SARIF_SCHEMA =
@@ -79,7 +82,8 @@ internal fun inspectBinaryExitCode(semanticResult: JsonElement): Int {
     return if (result.counts.errors > 0) INSPECT_BINARY_ERRORS_EXIT_CODE else 0
 }
 
-internal object InspectBinaryRenderer : FormatAwareToolOutputRenderer {
+/** [toolVersion] is the running product's version, reported as the SARIF `tool.driver.version`. */
+internal class InspectBinaryRenderer(toolVersion: String = UNKNOWN_TOOL_VERSION) : FormatAwareToolOutputRenderer {
     private val delegate = JsonBackedTypedToolOutputRenderer(
         toolName = INSPECT_BINARY_TOOL_NAME,
         plan = TypedToolOutputPlan(
@@ -92,7 +96,7 @@ internal object InspectBinaryRenderer : FormatAwareToolOutputRenderer {
                     TypedToolOutput.Table(inspectBinaryTable(result))
                 },
                 TypedToolOutputProjection(ToolOutputFormat.SARIF) { result, _ ->
-                    TypedToolOutput.Text(renderInspectBinarySarif(result), SARIF_CONTENT_TYPE)
+                    TypedToolOutput.Text(renderInspectBinarySarif(result, toolVersion), SARIF_CONTENT_TYPE)
                 },
             ),
         ),
@@ -155,7 +159,7 @@ public fun inspectBinaryTable(result: InspectBinaryResult): CliTable = CliTable(
  * region; a problem inside a Wasm function adds a function logical location, the same
  * shape `run-script --format sarif` emits for a function-anchored finding.
  */
-public fun renderInspectBinarySarif(result: InspectBinaryResult, toolVersion: String = "0.0.0"): String {
+public fun renderInspectBinarySarif(result: InspectBinaryResult, toolVersion: String = UNKNOWN_TOOL_VERSION): String {
     val knownRules = result.inspections.map { it.id }.toSet()
     val rules = result.inspections.map { inspection ->
         buildJsonObject {
@@ -166,12 +170,13 @@ public fun renderInspectBinarySarif(result: InspectBinaryResult, toolVersion: St
     } + result.problems.map { it.inspectionId }.distinct().filterNot { it in knownRules }.map { id ->
         buildJsonObject { put("id", id) }
     }
-    val results = result.problems.map { problem ->
+    val fingerprints = result.problems.fingerprints()
+    val results = result.problems.mapIndexed { index, problem ->
         buildJsonObject {
             put("ruleId", problem.inspectionId)
             put("level", problem.severity.toSarifLevel())
             put("message", buildJsonObject { put("text", problem.message) })
-            put("partialFingerprints", buildJsonObject { put("hexanaProblem/v1", problem.fingerprint()) })
+            put("partialFingerprints", buildJsonObject { put("hexanaProblem/v1", fingerprints[index]) })
             put("properties", buildJsonObject { put("code", problem.code) })
             put("locations", buildJsonArray {
                 add(buildJsonObject {
@@ -236,6 +241,23 @@ private fun String.toSarifLevel(): String = when (this) {
     "error" -> "error"
     "warning" -> "warning"
     else -> "note"
+}
+
+/**
+ * One fingerprint per problem, unique within the run: a SARIF consumer that sees two results
+ * share a fingerprint treats them as one. Problems without a distinguishing position (two
+ * proposal warnings carry the same code and no range) repeat a [fingerprint], so each repeat
+ * gets its occurrence number appended; inspections report in a stable order, so the number is
+ * stable too.
+ */
+private fun List<BinaryProblemResult>.fingerprints(): List<String> {
+    val seen = mutableMapOf<String, Int>()
+    return map { problem ->
+        val base = problem.fingerprint()
+        val occurrence = seen[base] ?: 0
+        seen[base] = occurrence + 1
+        if (occurrence == 0) base else "$base:$occurrence"
+    }
 }
 
 /**

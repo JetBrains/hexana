@@ -3,6 +3,7 @@ package org.jetbrains.hexana.ui.panel
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.vfs.VirtualFile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -69,12 +70,15 @@ class ScriptFindingsStore {
     fun findingsFor(file: VirtualFile): List<CheckFinding> = store[file]?.findings ?: emptyList()
 
     /**
-     * Findings for the file at [path], matched on [VirtualFile.getPath]; for callers that
-     * know the editor's path but not its [VirtualFile]. Empty for a `null` path.
+     * Findings for the file at [path]; for callers that know the editor's path but not its
+     * [VirtualFile]. Empty for a `null` path.
+     *
+     * [path] may be OS-native (`C:\dir\m.wasm` from a NIO path) while [VirtualFile.getPath]
+     * always uses `/`, so the two are compared as paths, not as strings.
      */
     fun findingsFor(path: String?): List<CheckFinding> {
         if (path.isNullOrEmpty()) return emptyList()
-        return store.entries.firstOrNull { it.key.path == path }?.value?.findings ?: emptyList()
+        return store.entries.firstOrNull { FileUtil.pathsEqual(it.key.path, path) }?.value?.findings ?: emptyList()
     }
 
     /** Removes all stored findings (e.g. on project close). */

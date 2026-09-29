@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.ui
 
+import com.intellij.openapi.util.io.FileUtil
 import com.intellij.testFramework.LightVirtualFile
 import com.intellij.testFramework.UsefulTestCase
 import org.jetbrains.hexana.mcp.scripting.HexanaScriptDiagnostic
@@ -301,6 +302,17 @@ class ScriptV2ModelTest : UsefulTestCase() {
 
         assertTrue("b has no findings", store.findingsFor(fileB).isEmpty())
         assertEquals("a still has its finding", 1, store.findingsFor(fileA).size)
+    }
+
+    fun testStoreFindsAFileByItsOsNativePath() {
+        val store = ScriptFindingsStore()
+        val file = LightVirtualFile("e.wasm")
+        store.replaceFindings(file, "s.mjs", listOf(CheckFinding("user:x", CheckSeverity.ERROR, "msg")))
+
+        // The editor passes a NIO path, which uses `\` on Windows; VirtualFile paths never do.
+        val nativePath = FileUtil.toSystemDependentName(file.path)
+        assertEquals("found by the OS-native path", 1, store.findingsFor(nativePath).size)
+        assertTrue("no match for another file", store.findingsFor(FileUtil.toSystemDependentName("/other.wasm")).isEmpty())
     }
 
     fun testStoreClearAll() {

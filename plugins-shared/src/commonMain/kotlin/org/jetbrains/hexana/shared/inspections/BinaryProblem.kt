@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.shared.inspections
 
+import org.jetbrains.hexana.shared.RowSelectionData
+
 /**
  * How much a [BinaryProblem] matters. Declared most severe first, so the natural enum
  * order is the order problems are listed in.
@@ -17,6 +19,18 @@ enum class ProblemSeverity(val label: String) {
 
 /** A byte region of the inspected file. Offsets are absolute file offsets. */
 data class ProblemByteRange(val offset: Long, val size: Long)
+
+/**
+ * The bytes a host selects to show this range in a file of [fileSize] bytes: clipped to the
+ * file and at least one byte wide, or `null` when the range starts outside it.
+ *
+ * Ranges are reported as found — a user script can anchor a finding anywhere, a zero-length
+ * anchor marks a point — so a host must not turn one into a selection unchecked.
+ */
+fun ProblemByteRange.selectionIn(fileSize: Int): RowSelectionData? {
+    if (offset < 0 || offset >= fileSize) return null
+    return RowSelectionData(offset.toInt(), size.coerceIn(1L, fileSize - offset).toInt())
+}
 
 /**
  * One problem found in a binary, in the form every host renders: the IntelliJ and VS Code

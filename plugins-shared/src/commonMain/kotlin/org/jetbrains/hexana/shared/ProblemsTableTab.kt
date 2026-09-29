@@ -6,6 +6,7 @@ import org.jetbrains.hexana.shared.inspections.InspectionContext
 import org.jetbrains.hexana.shared.inspections.ProblemSeverity
 import org.jetbrains.hexana.shared.inspections.inspectBinary
 import org.jetbrains.hexana.shared.inspections.mayHaveProblems
+import org.jetbrains.hexana.shared.inspections.selectionIn
 
 const val PROBLEMS_TAB_NAME = "Problems"
 
@@ -56,12 +57,12 @@ class BinaryProblemsTableTabsProvider : TableTabsProvider {
     override fun singleTab(name: String, provider: BinaryProvider, context: TableTabsContext): TableTabDescriptor? {
         if (name != PROBLEMS_TAB_NAME) return null
         // Forces the lazy parses the inspections read; singleTab is always called off the UI thread.
-        return problemsTableTab(inspectBinary(provider, context.inspectionContext()), context.problemNavigator)
+        return problemsTableTab(inspectBinary(provider, context.inspectionContext()), provider.bytes.size, context.problemNavigator)
     }
 }
 
-/** The Problems table over [problems]; `null` when there are none. */
-fun problemsTableTab(problems: List<BinaryProblem>, navigator: ProblemNavigator? = null): TableTabDescriptor? {
+/** The Problems table over [problems] in a file of [fileSize] bytes; `null` when there are none. */
+fun problemsTableTab(problems: List<BinaryProblem>, fileSize: Int, navigator: ProblemNavigator? = null): TableTabDescriptor? {
     if (problems.isEmpty()) return null
     return TableTabDescriptor(
         name = PROBLEMS_TAB_NAME,
@@ -91,10 +92,7 @@ fun problemsTableTab(problems: List<BinaryProblem>, navigator: ProblemNavigator?
             },
         ),
         rowCount = problems.size,
-        rowSelectionProvider = { index ->
-            val range = problems.getOrNull(index)?.byteRange ?: return@TableTabDescriptor null
-            RowSelectionData(range.offset.toInt(), range.size.toInt())
-        },
+        rowSelectionProvider = { index -> problems.getOrNull(index)?.byteRange?.selectionIn(fileSize) },
         // Without a navigator the host's default applies: select the row's bytes.
         rowClickAction = navigator?.let { nav -> { index -> problems.getOrNull(index)?.let(nav.open) } },
         contextMenuItems = navigator?.menuItems.orEmpty().map { item ->

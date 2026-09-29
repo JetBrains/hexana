@@ -60,6 +60,8 @@ public data class StandardCliRequest(
     val maxInlineWasmBytes: Int = HexanaAnalysisLimits.MAX_INLINE_WASM_BYTES,
     val maxFileWasmBytes: Int = HexanaAnalysisLimits.MAX_FILE_WASM_BYTES,
     val allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
+    /** The running product's version, for outputs that report it (SARIF `tool.driver.version`). */
+    val toolVersion: String = UNKNOWN_TOOL_VERSION,
 )
 
 internal class SingleSourceInputConverter(
@@ -273,7 +275,7 @@ public fun standardCliSupportedOutputFormats(toolName: String): Set<ToolOutputFo
         SUMMARIZE_BINARY_TOOL_NAME -> SummarizeBinaryJsonRenderer.supportedFormats
         SUMMARIZE_MODULE_TOOL_NAME -> SummarizeModuleRenderer.supportedFormats
         WASM_TO_WAT_TOOL_NAME -> WasmToWatRenderer.supportedFormats
-        INSPECT_BINARY_TOOL_NAME -> InspectBinaryRenderer.supportedFormats
+        INSPECT_BINARY_TOOL_NAME -> InspectBinaryRenderer().supportedFormats
         else -> error("Standard CLI tool '$toolName' is not registered.")
     }
 
@@ -337,6 +339,7 @@ public fun standardCli(
         maxInlineWasmBytes = request.maxInlineWasmBytes,
         maxFileWasmBytes = request.maxFileWasmBytes,
         allowedFilePolicy = request.allowedFilePolicy,
+        toolVersion = request.toolVersion,
     )
     val binding = registry.binding(context.toolName)
     val sources = ToolInputSources(sourceSelections = request.sourceSelections)
@@ -384,6 +387,7 @@ internal fun standardRuntimeRegistry(
     maxFileWasmBytes: Int = HexanaAnalysisLimits.MAX_FILE_WASM_BYTES,
     allowedFilePolicy: AllowedFilePolicy = AllowedFilePolicy.allowAll,
     wasmPrinter: (ByteArray) -> WatWithWarnings = ::printWat,
+    toolVersion: String = UNKNOWN_TOOL_VERSION,
 ): CliToolRuntimeRegistry =
     CliToolRuntimeRegistry.create(
         expectedTools = STANDARD_ANALYSIS_TOOL_NAMES,
@@ -408,7 +412,7 @@ internal fun standardRuntimeRegistry(
             SUMMARIZE_BINARY_TOOL_NAME to SummarizeBinaryJsonRenderer,
             SUMMARIZE_MODULE_TOOL_NAME to SummarizeModuleRenderer,
             WASM_TO_WAT_TOOL_NAME to WasmToWatRenderer,
-            INSPECT_BINARY_TOOL_NAME to InspectBinaryRenderer,
+            INSPECT_BINARY_TOOL_NAME to InspectBinaryRenderer(toolVersion),
         ),
         exitCodes = mapOf(INSPECT_BINARY_TOOL_NAME to ::inspectBinaryExitCode),
     )

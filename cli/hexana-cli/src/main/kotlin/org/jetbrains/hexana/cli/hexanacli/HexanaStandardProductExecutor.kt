@@ -54,6 +54,7 @@ internal object HexanaStandardProductExecutor : HexanaProductToolExecutor {
                 maxInlineWasmBytes = request.resourceLimits.maxInlineWasmBytes,
                 maxFileWasmBytes = request.resourceLimits.maxFileWasmBytes,
                 allowedFilePolicy = allowedFilePolicy(request.allowedRoots),
+                toolVersion = HEXANA_CLI_VERSION,
             ),
             analysisService(request.allowedRoots, request.resourceLimits),
         )
