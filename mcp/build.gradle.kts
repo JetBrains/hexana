@@ -2577,6 +2577,7 @@ tasks.register("assembleNativeMcpReleaseArtifacts") {
     dependsOn(
         ":cli:hexana-cli:nativeIntegrationTest",
         ":cli:hexana-cli-script:nativeIntegrationTest",
+        ":cli:hexana-wasm-tools:nativeIntegrationTest",
         ":mcp:server:nativeMcpVersionSmoke",
         ":mcp:server:nativeMcpStdioSmoke",
         ":mcp:server:nativeMcpHttpSmoke",

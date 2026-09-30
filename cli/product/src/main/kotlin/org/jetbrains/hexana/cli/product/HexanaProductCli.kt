@@ -27,6 +27,7 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.HexanaResourceLimits
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URI
@@ -57,6 +58,9 @@ public class HexanaProductCli private constructor(
     private val executor: HexanaProductToolExecutor,
     private val selectedTools: Map<String, HexanaCliToolSpec>,
 ) {
+    private val focusedWasmProduct: Boolean
+        get() = product.productId == HexanaGeneratedCliProducts.HEXANA_WASM_TOOLS.productId
+
     public constructor(product: HexanaCliProductDescriptor, executor: HexanaProductToolExecutor) :
         this(product, executor, selectedProductTools(product, executor.bindings))
 
@@ -76,6 +80,8 @@ public class HexanaProductCli private constructor(
             parse(args.toList(), stdin, env)
         } catch (error: ProductUsageException) {
             return ProductCliResult(stderr = "${error.message}\n", exitCode = USAGE_EXIT_CODE)
+        } catch (error: ProductInputRefusalException) {
+            return ProductCliResult(stderr = "${error.message}\n", exitCode = 3)
         }
 
         return withCliAnalytics(product, parsed.analytics, parsed.commandName) {
@@ -229,9 +235,15 @@ public class HexanaProductCli private constructor(
                 "--allowed-root" -> options.allowedRoots += args.requireValue(arg)
                 "--max-file-bytes" -> options.maxFileBytes = args.requirePositiveInt(arg)
                 "--max-inline-bytes" -> options.maxInlineBytes = args.requirePositiveInt(arg)
+                "--max-input-bytes" -> {
+                    val limit = args.requirePositiveInt(arg)
+                    options.maxFileBytes = limit
+                    options.maxInlineBytes = limit
+                }
                 "--max-text-file-bytes" -> options.maxTextFileBytes = args.requirePositiveInt(arg)
                 "--max-output-bytes" -> options.maxOutputBytes = args.requirePositiveInt(arg)
                 "--max-candidate-count" -> options.maxCandidateCount = args.requirePositiveInt(arg)
+                "--max-items" -> options.maxCandidateCount = args.requirePositiveInt(arg)
                 "--max-scan-roots" -> options.maxScanRoots = args.requirePositiveInt(arg)
                 "--max-scan-depth" -> options.maxScanDepth = args.requirePositiveInt(arg)
                 "--terminal-width" -> {
@@ -243,15 +255,28 @@ public class HexanaProductCli private constructor(
                 "--telemetry-enabled" -> analytics.enabled = parseBoolean("--telemetry-enabled", args.requireValue(arg))
                 "--telemetry-key" -> analytics.key = args.requireValue(arg)
                 "--telemetry-host" -> analytics.host = args.requireValue(arg)
-                // Scripting flags (accepted silently for non-scripting tools too;
-                // they are ignored by non-scripting executors)
-                "--input" -> extraInputPaths += args.requireValue(arg)
-                "--script-arg" -> scriptArgs += args.requireValue(arg)
-                "--baselines-dir" -> baselinesDir = Path.of(args.requireValue(arg))
-                "--update-baselines" -> updateBaselines = true
-                "--sarif-out" -> sarifOut = Path.of(args.requireValue(arg))
+                "--input" -> {
+                    requireScriptOption(spec, arg)
+                    extraInputPaths += args.requireValue(arg)
+                }
+                "--script-arg" -> {
+                    requireScriptOption(spec, arg)
+                    scriptArgs += args.requireValue(arg)
+                }
+                "--baselines-dir" -> {
+                    requireScriptOption(spec, arg)
+                    baselinesDir = Path.of(args.requireValue(arg))
+                }
+                "--update-baselines" -> {
+                    requireScriptOption(spec, arg)
+                    updateBaselines = true
+                }
+                "--sarif-out" -> {
+                    requireScriptOption(spec, arg)
+                    sarifOut = Path.of(args.requireValue(arg))
+                }
                 "--" -> {
-                    // Everything after "--" is passed verbatim as script argv tokens.
+                    requireScriptOption(spec, arg)
                     scriptArgs += args.toList()
                     args.clear()
                 }
@@ -363,6 +388,7 @@ public class HexanaProductCli private constructor(
             base64Source = base64Source,
             stdin = stdin,
             resourceLimits = resourceLimits,
+            refuseOversizedStdin = focusedWasmProduct,
         )
 
         return ParsedCommand.Executable(
@@ -394,14 +420,28 @@ public class HexanaProductCli private constructor(
     private fun executeTool(command: ParsedCommand.Executable): ProductCliResult {
         val output = executor.execute(command.toExecutionRequest())
             .normalize(command.format)
-            .requireWithinOutputLimit(command)
+            .requireWithinOutputLimit(command, focusedWasmProduct)
         command.outputPath?.let { path ->
-            path.toAbsolutePath().parent?.let(Files::createDirectories)
-            Files.write(path, output.stdout.toByteArray(StandardCharsets.UTF_8))
-            return ProductCliResult(stderr = output.stderr, exitCode = output.exitCode)
+            if (output.exitCode == SUCCESS_EXIT_CODE || output.stdout.isNotEmpty()) {
+                try {
+                    path.toAbsolutePath().parent?.let(Files::createDirectories)
+                    Files.write(path, output.stdout.toByteArray(StandardCharsets.UTF_8))
+                } catch (_: IOException) {
+                    return outputWriteRefusal(command)
+                } catch (_: SecurityException) {
+                    return outputWriteRefusal(command)
+                }
+                return ProductCliResult(stderr = output.stderr, exitCode = output.exitCode)
+            }
         }
         return output
     }
+
+    private fun outputWriteRefusal(command: ParsedCommand.Executable): ProductCliResult =
+        ProductCliResult(
+            stderr = "Output path cannot be written.\n".take(command.resourceLimits.maxOutputBytes),
+            exitCode = if (focusedWasmProduct) 3 else FAILURE_EXIT_CODE,
+        )
 
     private fun helpText(topic: String?): String {
         if (topic == null) {
@@ -459,9 +499,11 @@ public class HexanaProductCli private constructor(
                     appendLine("  --allowed-root <path>")
                     appendLine("  --max-file-bytes <n>")
                     appendLine("  --max-inline-bytes <n>")
+                    appendLine("  --max-input-bytes <n>")
                     appendLine("  --max-text-file-bytes <n>")
                     appendLine("  --max-output-bytes <n>")
                     appendLine("  --max-candidate-count <n>")
+                    appendLine("  --max-items <n>")
                     appendLine("  --max-scan-roots <n>")
                     appendLine("  --max-scan-depth <n>")
                     if (ToolOutputFormat.TABLE in spec.outputFormats) {
@@ -705,6 +747,7 @@ private class CommandOptions private constructor(
 }
 
 private class ProductUsageException(message: String) : RuntimeException(message)
+private class ProductInputRefusalException(message: String) : RuntimeException(message)
 
 private class ScriptSourceOptions {
     private var scriptPath: String? = null
@@ -800,6 +843,7 @@ private fun selectSource(
     base64Source: String?,
     stdin: InputStream,
     resourceLimits: HexanaResourceLimits,
+    refuseOversizedStdin: Boolean,
 ): ToolInputSourceSelection {
     val sourceCount = listOf(pathArgument, base64Source).count { it != null } + if (stdinRequested) 1 else 0
     if (sourceCount > 1) {
@@ -819,12 +863,12 @@ private fun selectSource(
         }
     }
     if (pathArgument == "-") {
-        return ToolInputSourceSelection.StdinBytes(readStdinBytes(stdin, maxInlineBytes(slotName, resourceLimits)), slotName)
+        return ToolInputSourceSelection.StdinBytes(readStdinBytes(stdin, maxInlineBytes(slotName, resourceLimits), refuseOversizedStdin), slotName)
     }
     pathArgument?.let { return ToolInputSourceSelection.Path(it, slotName) }
     base64Source?.let { return ToolInputSourceSelection.Base64(it, slotName) }
     if (stdinRequested) {
-        return ToolInputSourceSelection.StdinBytes(readStdinBytes(stdin, maxInlineBytes(slotName, resourceLimits)), slotName)
+        return ToolInputSourceSelection.StdinBytes(readStdinBytes(stdin, maxInlineBytes(slotName, resourceLimits), refuseOversizedStdin), slotName)
     }
     val autoBytes = if (spec.autoStdin) readAutoStdinBytes(stdin, maxInlineBytes(slotName, resourceLimits)) else null
     if (autoBytes != null) {
@@ -841,10 +885,12 @@ private fun selectSource(
 private fun maxInlineBytes(slotName: String, resourceLimits: HexanaResourceLimits): Int =
     if (slotName == "wasm") resourceLimits.maxInlineWasmBytes else resourceLimits.maxInlineBinaryBytes
 
-private fun readStdinBytes(stdin: InputStream, maxBytes: Int): ByteArray {
+private fun readStdinBytes(stdin: InputStream, maxBytes: Int, refuseOversizedStdin: Boolean = false): ByteArray {
     val bytes = stdin.readAtMost(maxBytes)
     if (bytes.size > maxBytes) {
-        throw ProductUsageException("Inline bytes exceed maximum size of $maxBytes bytes.")
+        val message = "Inline bytes exceed maximum size of $maxBytes bytes."
+        if (refuseOversizedStdin) throw ProductInputRefusalException(message)
+        throw ProductUsageException(message)
     }
     return bytes
 }
@@ -985,18 +1031,28 @@ private fun sendCliAnalytics(
 }
 
 private fun ProductCliResult.normalize(format: ToolOutputFormat): ProductCliResult =
-    if (format == ToolOutputFormat.RAW) {
+    if (format == ToolOutputFormat.RAW || stdout.isEmpty()) {
         this
     } else {
         copy(stdout = stdout.trimEnd('\r', '\n') + "\n")
     }
 
-private fun ProductCliResult.requireWithinOutputLimit(command: ParsedCommand.Executable): ProductCliResult {
+private fun ProductCliResult.requireWithinOutputLimit(
+    command: ParsedCommand.Executable,
+    focusedWasmProduct: Boolean,
+): ProductCliResult {
     val byteSize = stdout.toByteArray(StandardCharsets.UTF_8).size + stderr.toByteArray(StandardCharsets.UTF_8).size
-    if (byteSize > command.resourceLimits.maxOutputBytes) {
+    val maxBytes = command.resourceLimits.maxOutputBytes
+    if (byteSize > maxBytes) {
+        if (exitCode != SUCCESS_EXIT_CODE) {
+            return ProductCliResult(
+                stderr = "Output limit exceeded.\n".take(maxBytes),
+                exitCode = if (focusedWasmProduct) 3 else exitCode,
+            )
+        }
         throw HexanaAnalysisException(
             HexanaAnalysisErrorCode.RESOURCE_LIMIT_EXCEEDED,
-            "${command.spec.commandName} output is $byteSize bytes, exceeding maxOutputBytes=${command.resourceLimits.maxOutputBytes}."
+            "${command.spec.commandName} output is $byteSize bytes, exceeding maxOutputBytes=$maxBytes."
         )
     }
     return this
@@ -1022,6 +1078,9 @@ private fun requireSourceMode(spec: HexanaCliToolSpec, mode: HexanaCliInputMode,
 }
 
 private fun requireBase64SourceOption(spec: HexanaCliToolSpec, optionName: String) {
+    if (spec.inputOptions.none { it.name == optionName && it.valueType == "base64" }) {
+        throw ProductUsageException("Unsupported ${spec.commandName} option: $optionName")
+    }
     when (optionName) {
         "--binary-base64" -> requireSourceMode(spec, HexanaCliInputMode.BINARY_PATH, optionName)
         "--bytes-base64" -> {

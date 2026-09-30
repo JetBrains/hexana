@@ -74,6 +74,9 @@ All agents — the main session and every subagent it dispatches — MUST treat 
   product `tools`, `version`, and `help`. It provides the standard product executor.
 - `cli/hexana-cli-script/`: JVM application distribution for `run-script`, plus product `tools`, `version`, and `help`.
   It provides the script product executor.
+- `cli/hexana-wasm-tools/`: JVM/native application distribution for `validate-and-explain`, `metadata-audit`, and
+  `component-wit-report`. It binds the focused workflow core to generated product metadata and verifies its
+  installed dependency boundary.
 - `cli/integration-tests/`: test-only black-box support for installed CLI products: process execution, deterministic
   environment setup, local telemetry fixtures, and focused runner tests. Product behavior contracts live with their
   respective `hexana-cli` and `hexana-cli-script` distributions.
@@ -132,6 +135,7 @@ Run the narrowest command that proves your change.
 - Run neutral CLI core tests: `./gradlew :cli:core:test`
 - Run installed standard CLI tests: `./gradlew :cli:hexana-cli:integrationTest`
 - Run installed script CLI tests: `./gradlew :cli:hexana-cli-script:integrationTest`
+- Run installed focused Wasm CLI tests: `./gradlew :cli:hexana-wasm-tools:integrationTest`
 - Run shared CLI process support tests (part of the TeamCity CLI JVM gate): `./gradlew :cli:integration-tests:test`
 - Run the dedicated TeamCity CLI JVM gate: `./gradlew teamcityCliTests`
 - Run the TeamCity-ready shared/core aggregate intended for the next rollout step: `./gradlew teamcityCoreTests`
@@ -182,6 +186,7 @@ Run the narrowest command that proves your change.
   names use an explicit ASCII segment policy so TSV delimiters and control characters cannot be emitted.
 - Run native standard CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli:nativeIntegrationTest`
 - Run native script CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-cli-script:nativeIntegrationTest`
+- Run native focused Wasm CLI contracts (GraalVM 25+): `./gradlew :cli:hexana-wasm-tools:nativeIntegrationTest`
 - Run TeamCity native integration surfaces: `./gradlew :mcp:assembleNativeMcpReleaseArtifacts`
 - Run buffer abstraction tests: `./gradlew :encdec:test`
 - Compile UI-driver tests: `./gradlew :ui-driver-tests:compileTestKotlin`

@@ -62,6 +62,8 @@ input, 1,000,000 bytes for text files, 60,000 output bytes, 500 candidates, 8 sc
 Use the matching `--max-file-bytes`, `--max-inline-bytes`, `--max-text-file-bytes`, `--max-output-bytes`,
 `--max-candidate-count`, `--max-scan-roots`, and `--max-scan-depth` options, or the `HEXANA_CLI_MAX_*` environment
 variables shown by command help, to lower or raise those positive limits.
+`--max-input-bytes` sets both the file and inline binary limits; `--max-items` is an alias for
+`--max-candidate-count`. When combined with the individual limit options, the last occurrence for each limit wins.
 
 ## Telemetry
 

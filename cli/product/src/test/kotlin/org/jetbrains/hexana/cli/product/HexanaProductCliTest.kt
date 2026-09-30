@@ -194,6 +194,56 @@ class HexanaProductCliTest {
     }
 
     @Test
+    fun scriptOnlyOptionsRejectCommandsThatDoNotConsumeThem() {
+        val commands = listOf(
+            HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI, FailOnExecuteExecutor) to
+                listOf("summarize-binary", "fixture.wasm"),
+            HexanaProductCli(
+                HexanaGeneratedCliProducts.HEXANA_WASM_TOOLS,
+                RecordingProductExecutor(toolNames = listOf("validate_and_explain", "metadata_audit", "component_wit_report")),
+            ) to listOf("metadata-audit", "fixture.wasm"),
+            HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI_SCRIPT, FailOnScriptExecuteExecutor) to
+                listOf("test", "fixture.test.js"),
+        )
+        val rejectedOptions = listOf(
+            listOf("--input", "extra.wasm"),
+            listOf("--script-arg", "value"),
+            listOf("--baselines-dir", "baselines"),
+            listOf("--update-baselines"),
+            listOf("--sarif-out", "report.sarif"),
+            listOf("--", "value"),
+        )
+        for ((cli, command) in commands) {
+            for (option in rejectedOptions) {
+                val result = cli.run((command + option).toTypedArray(), FailOnReadInputStream, fixtureEnv)
+                assertEquals(USAGE_EXIT_CODE, result.exitCode, "${command.first()} ${option.first()}: ${result.stderr}")
+                assertEquals("Unsupported ${command.first()} option: ${option.first()}\n", result.stderr)
+            }
+        }
+    }
+
+    @Test
+    fun runScriptPassesItsOptionsToTheExecutor() {
+        val executor = RecordingProductExecutor(toolNames = listOf("run_binary_script", "run_script_suite"))
+        val result = HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI_SCRIPT, executor).run(
+            arrayOf(
+                "run-script", "fixture.wasm", "--script-text", "print(1)",
+                "--input", "extra.wasm", "--script-arg", "first", "--baselines-dir", "baselines",
+                "--update-baselines", "--sarif-out", "report.sarif", "--", "second", "--literal",
+            ),
+            FailOnReadInputStream,
+            fixtureEnv,
+        )
+        assertEquals(SUCCESS_EXIT_CODE, result.exitCode, result.stderr)
+        val request = executor.singleRequest()
+        assertEquals(listOf("extra.wasm"), request.extraInputPaths)
+        assertEquals(listOf("first", "second", "--literal"), request.scriptArgs)
+        assertEquals(java.nio.file.Path.of("baselines"), request.baselinesDir)
+        assertTrue(request.updateBaselines)
+        assertEquals(java.nio.file.Path.of("report.sarif"), request.sarifOut)
+    }
+
+    @Test
     fun selectedProductToolsRejectInvalidMetadataAndExecutorBindings() {
         val selections = HexanaGeneratedCliProducts.SELECTIONS.getValue(HexanaGeneratedCliProducts.HEXANA_CLI.productId)
         val registry = HexanaGeneratedCliToolRegistry.TOOLS
@@ -430,6 +480,62 @@ class HexanaProductCliTest {
 
         assertEquals(USAGE_EXIT_CODE, result.exitCode, result.stderr)
         assertTrue(result.stderr.contains("Inline bytes exceed maximum size of 1 bytes."), result.stderr)
+    }
+
+    @Test
+    fun sharedInputAliasPreservesExistingProductsUsageExit() {
+        val products = listOf(
+            HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI, FailOnExecuteExecutor) to
+                listOf("summarize-module", "--stdin"),
+            HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI_SCRIPT, FailOnScriptExecuteExecutor) to
+                listOf("run-script", "--stdin", "--script-text", "print(1)"),
+        )
+        for ((cli, command) in products) {
+            for (limits in listOf(
+                listOf("--max-input-bytes", "7"),
+                listOf("--max-input-bytes", "1", "--max-inline-bytes", "7"),
+            )) {
+                val result = cli.run(
+                    args = (command + limits).toTypedArray(),
+                    stdin = ByteArrayInputStream(MINIMAL_WASM_MODULE),
+                    env = fixtureEnv,
+                )
+                assertEquals(USAGE_EXIT_CODE, result.exitCode, result.stderr)
+                assertTrue(result.stderr.contains("Inline bytes exceed maximum size of 7 bytes."), result.stderr)
+            }
+        }
+    }
+
+    @Test
+    fun failedExecutorOutputIsBoundedEvenWithoutStdout() {
+        val cli = HexanaProductCli(
+            HexanaGeneratedCliProducts.HEXANA_CLI,
+            RecordingProductExecutor(ProductCliResult(stderr = "x".repeat(1024), exitCode = FAILURE_EXIT_CODE)),
+        )
+        val result = cli.run(
+            args = arrayOf("summarize-binary", "fixture.wasm", "--max-output-bytes", "10"),
+            stdin = FailOnReadInputStream,
+            env = fixtureEnv,
+        )
+        assertEquals(FAILURE_EXIT_CODE, result.exitCode, result.stderr)
+        assertEquals("", result.stdout)
+        assertTrue(result.stderr.startsWith("Output lim"), result.stderr)
+        assertTrue(result.stderr.toByteArray().size <= 10, result.stderr)
+        assertTrue('x' !in result.stderr, result.stderr)
+    }
+
+    @Test
+    fun existingProductOutputWriteFailureKeepsOperationalExit() {
+        val outputDirectory = temporaryFolder.newFolder("output-directory")
+        val cli = HexanaProductCli(HexanaGeneratedCliProducts.HEXANA_CLI, RecordingProductExecutor())
+        val result = cli.run(
+            args = arrayOf("summarize-binary", "fixture.wasm", "--output", outputDirectory.absolutePath),
+            stdin = FailOnReadInputStream,
+            env = fixtureEnv,
+        )
+        assertEquals(FAILURE_EXIT_CODE, result.exitCode, result.stderr)
+        assertEquals("", result.stdout)
+        assertEquals("Output path cannot be written.\n", result.stderr)
     }
 
     @Test

@@ -401,6 +401,8 @@ val teamcityCliTestTaskPaths = listOf(
     ":cli:hexana-cli:integrationTest",
     ":cli:hexana-cli-script:check",
     ":cli:hexana-cli-script:integrationTest",
+    ":cli:hexana-wasm-tools:check",
+    ":cli:hexana-wasm-tools:integrationTest",
     ":mcp:verifyCliR8ReleaseArchives",
 )
 
@@ -785,6 +787,8 @@ tasks.register("verifyTeamcityCliTestsReleaseGateCoverage") {
             ":cli:hexana-cli:integrationTest",
             ":cli:hexana-cli-script:check",
             ":cli:hexana-cli-script:integrationTest",
+            ":cli:hexana-wasm-tools:check",
+            ":cli:hexana-wasm-tools:integrationTest",
             ":mcp:verifyCliR8ReleaseArchives",
         )
         verifyExactTaskPaths("teamcityCliTests inventory", requiredTaskPaths, teamcityCliTestTaskPaths)

@@ -52,6 +52,9 @@ Use `--max-file-bytes`, `--max-inline-bytes`, `--max-text-file-bytes`, and `--ma
 `HEXANA_CLI_MAX_*` environment variables) to set positive byte limits. Paths are unrestricted unless
 `--allowed-root <path>` or `HEXANA_CLI_ALLOWED_ROOTS` with platform path-separator, comma, or newline-separated roots
 is set, which restricts both binary and script paths to those roots.
+`--max-input-bytes` sets both binary file and inline byte limits; when combined with either individual limit,
+the last occurrence for that limit wins. The shared parser also accepts `--max-items` as an alias for
+`--max-candidate-count`, but `run-script` has no candidate list; use `--max-output-bytes` to bound script output.
 
 ## Telemetry
 

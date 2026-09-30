@@ -20,6 +20,8 @@ This folder contains neutral CLI modules shared by current and future command-li
   plus `tools`, `version`, and `help`. It provides the standard product executor.
 - `hexana-cli-script/`: JVM application for `run-script` only, plus `tools`, `version`, and `help`. It provides the
   script product executor.
+- `hexana-wasm-tools/`: JVM/native application for the three generated structural Wasm report commands. It binds
+  `cli:wasm-tools-core` workflows through the shared product frontend and excludes scripting and MCP transports.
 - `integration-tests/`: test-only external-process support shared by product suites. Keep production metadata out of
   it; product behavior contracts belong in each installed product module and process cleanup stays behind its runner.
 - `packaging/`: CLI-only public-download release assembly and publication. It validates the generated release
@@ -33,6 +35,7 @@ This folder contains neutral CLI modules shared by current and future command-li
 - Run `./gradlew :cli:scripting:test` after changing the script-only contribution.
 - Run `./gradlew :cli:hexana-cli:integrationTest` after changing installed standard CLI behavior.
 - Run `./gradlew :cli:hexana-cli-script:integrationTest` after changing installed script CLI behavior.
+- Run `./gradlew :cli:hexana-wasm-tools:integrationTest` after changing installed focused Wasm CLI behavior.
 - Run `./gradlew :cli:integration-tests:test` for shared process-support tests.
 - Run `./gradlew teamcityCliTests` for the dedicated TeamCity CLI JVM gate; general verification remains under
   `./gradlew teamcityCiTests`.
@@ -40,4 +43,5 @@ This folder contains neutral CLI modules shared by current and future command-li
   `teamcityCliTests` and the Server/CLI Patronus lane.
 - Run `./gradlew :cli:hexana-cli:nativeIntegrationTest` and
   `./gradlew :cli:hexana-cli-script:nativeIntegrationTest` with GraalVM 25+ for native product contracts.
+- Run `./gradlew :cli:hexana-wasm-tools:nativeIntegrationTest` with GraalVM 25+ for its native product contract.
 - TeamCity keeps native integration tasks under `./gradlew :mcp:assembleNativeMcpReleaseArtifacts`.

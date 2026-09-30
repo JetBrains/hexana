@@ -176,6 +176,19 @@ class HexanaCliScriptProductContractTest {
     }
 
     @Test
+    fun failedScriptDiagnosticsStayWithinOutputLimit() {
+        val binary = binaryFile("failure-output-limit.bin")
+        val result = target.run(listOf(
+            "run-script", binary.toString(),
+            "--script-text", "throw new Error('${"x".repeat(1024)}');",
+            "--format", "raw",
+            "--max-output-bytes", "24",
+        ))
+        assertFailure(result, 1, "Output limit exceeded.")
+        assertTrue(result.stderr.toByteArray().size <= 24, result.describe())
+    }
+
+    @Test
     fun productsReportSharedTelemetryIdentityAndHonorExplicitOptOut() {
         val home = Files.createDirectories(temporaryFolder.root.toPath().resolve("shared-telemetry-home"))
         FakeCliTelemetryServer().use { server ->
