@@ -1110,7 +1110,7 @@ internal fun rowTintCss(tint: RowTint): String = when (tint) {
     RowTint.Removed -> "var(--vscode-diffEditor-removedTextBackground, rgba(255,0,0,0.1))"
     RowTint.Modified -> "rgba(255,165,0,0.1)"
     RowTint.Moved -> "rgba(100,149,237,0.1)"
-    RowTint.Warning -> "color-mix(in srgb, var(--vscode-editorWarning-foreground, #cca700) 22%, transparent)"
+    RowTint.Warning -> "color-mix(in srgb, var(--vscode-editorWarning-foreground, #cca700) 40%, transparent)"
 }
 
 private fun applyRowDetailVsc(descriptor: TableTabDescriptor, index: Int, selection: HexSelectionState) {

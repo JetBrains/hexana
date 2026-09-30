@@ -1973,8 +1973,10 @@ interface WasmBinaryProvider extends BinaryProvider {
   }[];
   functions: {
     hasDescriptorClause: boolean;
+    isFinal: boolean;
     offset: number;
     size: number;
+    superTypes: number[];
   }[];
   garbageAnalysis?: {
     codeSectionTotalBytes: number;
@@ -2021,6 +2023,13 @@ interface WasmBinaryProvider extends BinaryProvider {
     hasNameSection: boolean;
     isKotlinWasm: boolean;
   };
+  leafTypeRecords: {
+    hasDescriptorClause: boolean;
+    isFinal: boolean;
+    offset: number;
+    size: number;
+    superTypes: number[];
+  }[];
   minification: {
     confidence: number;
     evidence: string;
@@ -2285,6 +2294,35 @@ interface WasmBinaryProvider extends BinaryProvider {
     size: number;
     tabName?: string;
   }[];
+  typeGraphIndex?: {
+    fieldRefsOf: {
+      size: number;
+    };
+    hasGcTypes: boolean;
+    kinds: number[];
+    recGroupOf: number[];
+    recGroups: {
+      endExclusive: number;
+      endInclusive: number;
+      first: number;
+      last: number;
+      start: number;
+      step: number;
+    }[];
+    referencedByFuncs: {
+      size: number;
+    };
+    referencedByTypes: {
+      size: number;
+    };
+    subtypesOf: {
+      size: number;
+    };
+    superTypesOf: {
+      size: number;
+    };
+    typeCount: number;
+  };
   usedProposals: "SignExtensionOps" | "NonTrappingFloatToInt" | "MultiValue" | "ReferenceTypes" | "BulkMemoryOperations" | "SIMD" | "MutableGlobals" | "TailCall" | "TypedFunctionReferences" | "GarbageCollection" | "MultipleMemories" | "RelaxedSIMD" | "ExceptionHandling" | "Memory64" | "Threads" | "ExtendedConst" | "LegacyExceptionHandling" | "BranchHinting" | "JsStringBuiltins" | "ExtendedNameSection" | "CustomDescriptors" | "CustomPageSizes"[];
   wasmModule?: {
     codeSection?: {
@@ -3784,6 +3822,16 @@ interface AdjacencyAccessor {
   idToIndexPos: number;
   offsetPos: number;
   get(nodeId: number): number[] | null;
+}
+
+interface Array {
+  size: number;
+  clone(): {
+    size: number;
+  };
+  get(index: number): T;
+  iterator(): Iterator;
+  set(index: number, value: T): void;
 }
 
 interface ArrowEncapsulatedMessage {
@@ -10310,6 +10358,43 @@ interface ThrownSet {
   };
 }
 
+interface TypeGraphIndex {
+  fieldRefsOf: {
+    size: number;
+  };
+  hasGcTypes: boolean;
+  kinds: number[];
+  recGroupOf: number[];
+  recGroups: {
+    endExclusive: number;
+    endInclusive: number;
+    first: number;
+    last: number;
+    start: number;
+    step: number;
+  }[];
+  referencedByFuncs: {
+    size: number;
+  };
+  referencedByTypes: {
+    size: number;
+  };
+  subtypesOf: {
+    size: number;
+  };
+  superTypesOf: {
+    size: number;
+  };
+  typeCount: number;
+  directSubtypes(typeIdx: number): number[];
+  fieldRefs(typeIdx: number): number[];
+  kind(typeIdx: number): "STRUCT" | "ARRAY" | "FUNC";
+  recGroup(typeIdx: number): number;
+  referencingFuncs(typeIdx: number): number[];
+  referencingTypes(typeIdx: number): number[];
+  superTypes(typeIdx: number): number[];
+}
+
 interface WasmAliasSection {
   contentOffset: number;
   contentRange: {
@@ -12566,8 +12651,10 @@ interface WasmTagsNameSection {
 
 interface WasmTypeRecord {
   hasDescriptorClause: boolean;
+  isFinal: boolean;
   offset: number;
   size: number;
+  superTypes: number[];
 }
 
 interface WasmTypesNameSection {
