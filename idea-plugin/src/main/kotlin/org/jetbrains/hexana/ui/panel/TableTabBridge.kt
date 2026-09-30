@@ -397,6 +397,7 @@ private fun TableTabTable(
                 }
             }
         },
+        onRowDoubleClick = descriptor.rowDoubleClickAction?.let { action -> { rowIndex -> action(toOriginal(rowIndex)) } },
         alwaysShowSearch = descriptor.alwaysShowSearch,
         searchPlaceholder = descriptor.searchPlaceholder,
         searchBarLeading = searchBarLeading,

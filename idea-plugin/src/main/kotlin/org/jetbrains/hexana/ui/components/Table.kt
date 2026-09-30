@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -67,6 +68,7 @@ fun Table(
     onRowSelect: ((id: Int) -> Unit)? = null,
     rowColor: (id: Int) -> Color? = { null },
     onRow: (id: Int) -> Unit = {},
+    onRowDoubleClick: ((id: Int) -> Unit)? = null,
     alwaysShowSearch: Boolean = false,
     searchPlaceholder: String? = null,
     searchBarLeading: (@Composable () -> Unit)? = null,
@@ -109,6 +111,9 @@ fun Table(
 
     var selectedOriginalIndex: Int? by remember { mutableStateOf(null) }
     var hoveredOriginalIndex: Int? by remember { mutableStateOf(null) }
+    // Plain holder rather than state: nothing renders it, so writing it must not recompose.
+    val lastRowClick = remember { LastRowClick() }
+    val doubleClickTimeoutMillis = LocalViewConfiguration.current.doubleTapTimeoutMillis
 
     var searchQuery by remember { mutableStateOf(TextFieldValue("")) }
     var isSearchVisible by remember { mutableStateOf(alwaysShowSearch) }
@@ -496,6 +501,20 @@ fun Table(
                                 selectedOriginalIndex = id
                                 focusRequester.requestFocus()
                                 onRow(id)
+                                // Detected by hand rather than with combinedClickable, which
+                                // would hold back every single click until the double-click
+                                // timeout expired.
+                                val now = System.currentTimeMillis()
+                                if (onRowDoubleClick != null && lastRowClick.id == id &&
+                                    now - lastRowClick.at <= doubleClickTimeoutMillis
+                                ) {
+                                    // Reset, so a third click starts a new pair.
+                                    lastRowClick.id = null
+                                    onRowDoubleClick(id)
+                                } else {
+                                    lastRowClick.id = id
+                                    lastRowClick.at = now
+                                }
                             },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -582,6 +601,9 @@ fun Table(
     }
 
 }
+
+/** The row and time of a table's last click, for double-click detection. */
+private class LastRowClick(var id: Int? = null, var at: Long = 0L)
 
 /**
  * Height of one data row.

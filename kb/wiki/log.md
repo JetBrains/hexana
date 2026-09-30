@@ -123,3 +123,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-09-29 — `entities/binary-inspections` — Review fixes: untrusted problem ranges go through `selectionIn`, unique SARIF fingerprints and real tool version, OS-native path lookup for script findings, VS Code badge counted from `liveProvider` outside composition.
 - 2026-09-30 — `entities/binary-inspections`, `entities/wasm-runtime-compatibility` — Proposal badges warning-coloured (no icon) with ⚠ in tooltips; `CellValue.tint`/`RowTint.Warning` tints the failing runtime cell; runtime-compatibility Problems rows open the Compatibility tab via `ProblemNavigator.selectTab`.
 - 2026-09-30 — `entities/wasm-runtime-compatibility` — Proposal tooltips: affected proposals first, warning-coloured, with a shared remark; VS Code badge tooltip becomes a hover popover.
+- 2026-09-30 — `entities/binary-inspections` — Problems → Compatibility navigation moved to double click (`TableTabDescriptor.rowDoubleClickAction`).

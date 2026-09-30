@@ -227,7 +227,7 @@ class BinaryInspectionsTest {
     }
 
     @Test
-    fun `a runtime-compatibility problem opens the Compatibility tab when the host can select it`() {
+    fun `a runtime-compatibility problem opens the Compatibility tab on a double click when the host can select it`() {
         val incompatible = problem(ProblemSeverity.Warning, offset = null).copy(inspectionId = WasmRuntimeCompatibilityInspection.id)
         val other = problem(ProblemSeverity.Warning, offset = 0)
         assertEquals(COMPATIBILITY_TAB_NAME, incompatible.relatedTabName)
@@ -240,8 +240,11 @@ class BinaryInspectionsTest {
         )
         tab.rowClickAction!!(0)
         tab.rowClickAction!!(1)
-        assertEquals(listOf(COMPATIBILITY_TAB_NAME), selected)
+        assertEquals(emptyList(), selected, "a single click only selects the row")
         assertEquals(listOf(other), opened)
+        tab.rowDoubleClickAction!!(0)
+        tab.rowDoubleClickAction!!(1)
+        assertEquals(listOf(COMPATIBILITY_TAB_NAME), selected, "a double click navigates, and only for a related tab")
 
         val showInTab = tab.contextMenuItems.single()
         assertEquals("Show in Compatibility tab", showInTab.labelProvider(0))
@@ -252,6 +255,7 @@ class BinaryInspectionsTest {
         val noTabs = assertNotNull(problemsTableTab(listOf(incompatible), FILE_SIZE, ProblemNavigator(open = { opened += it })))
         noTabs.rowClickAction!!(0)
         assertEquals(listOf(other, incompatible), opened)
+        assertNull(noTabs.rowDoubleClickAction)
         assertEquals(emptyList(), noTabs.contextMenuItems)
     }
 

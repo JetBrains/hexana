@@ -217,6 +217,9 @@ class PredefinedFilter(
  * @param contextMenuItems per-row context menu items; empty list means no context menu
  * @param rowClickAction optional alternative row-click handler; when set, the UI layer
  *   calls this instead of scrolling to [rowSelectionProvider] data
+ * @param rowDoubleClickAction optional handler for a double-clicked row, called after the
+ *   single-click handling of the first click. For navigation that leaves the table (e.g.
+ *   selecting another tab), which on a single click would make the row impossible to select
  * @param dynamicContextMenuProvider optional provider of additional, per-row context
  *   menu entries whose count may vary by row (e.g. one entry per usage site). The UI
  *   layer renders these after [contextMenuItems]; `null` means none.
@@ -250,6 +253,7 @@ class TableTabDescriptor(
     val rowAction: RowActionDescriptor? = null,
     val contextMenuItems: List<RowContextMenuItemDescriptor> = emptyList(),
     val rowClickAction: ((index: Int) -> Unit)? = null,
+    val rowDoubleClickAction: ((index: Int) -> Unit)? = null,
     val dynamicContextMenuProvider: ((index: Int) -> List<RowMenuEntry>)? = null,
     val prologueText: String? = null,
     val prologueActions: List<PrologueActionDescriptor> = emptyList(),

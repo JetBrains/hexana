@@ -1663,6 +1663,7 @@ private fun PcapBinaryProvider.enrichPcapPacketsTab(
         rowAction = tab.rowAction,
         contextMenuItems = tab.contextMenuItems + openBodyItem,
         rowClickAction = tab.rowClickAction,
+        rowDoubleClickAction = tab.rowDoubleClickAction,
         dynamicContextMenuProvider = tab.dynamicContextMenuProvider,
         prologueText = tab.prologueText,
         emptyMessage = tab.emptyMessage,

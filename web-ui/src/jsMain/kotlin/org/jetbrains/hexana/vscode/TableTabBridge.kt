@@ -572,6 +572,7 @@ fun TableTabContent(
                                 // Snapshot taken after the handlers above updated the hex selection.
                                 clickedRow = ClickedRow(index, selection.anchorIndex, selection.activeIndex)
                             },
+                            onDoubleClick = descriptor.rowDoubleClickAction?.let { action -> { action(index) } },
                             onContextMenu = if (hasContextMenu) { { x, y ->
                                 contextMenuState = ContextMenuState(index, x, y)
                             } } else null,

@@ -54,10 +54,13 @@ The IntelliJ and web-ui Problems enrichers (`enrichWasmProblemsTab`, `enrichProb
   profile is also the IDEA toolset, and its `BinaryOnly` input pattern cannot carry
   `runtimeTargetsPath`; putting it there would have silently dropped the argument in IntelliJ.
 - **The badge hides notes.** Info-level problems appear in the tab only.
-- **A runtime-compatibility row opens the Compatibility tab**, not the hex view: it has no
-  byte range. `BinaryProblem.relatedTabName` names the tab, and a host that sets
-  `ProblemNavigator.selectTab` gets both the row click and a "Show in Compatibility tab" menu
-  item; a host that does not keeps calling `open`.
+- **A runtime-compatibility row opens the Compatibility tab on a double click**, not the hex
+  view: it has no byte range. `BinaryProblem.relatedTabName` names the tab, and a host that
+  sets `ProblemNavigator.selectTab` gets `TableTabDescriptor.rowDoubleClickAction` plus a
+  "Show in Compatibility tab" menu item; a host that does not keeps calling `open` on a
+  click. Not a single click: leaving the table on click made the row impossible to select
+  or copy. IntelliJ's `Table` detects the double click by hand (`LastRowClick`) because
+  `combinedClickable` would delay every single click by the double-click timeout.
 - **VS Code has no script findings to merge**: `defineCheck` needs the GraalJS runtime, which the
   webview does not have. `hostProblems` is how a host that does run them adds them.
 - **The webapp worker route shows no badge** (`onOpenProblemsTab = null` when a worker

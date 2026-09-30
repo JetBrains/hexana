@@ -19,7 +19,8 @@ const val PROBLEMS_TAB_NAME = "Problems"
  *   a [BinaryProblem.funcIdx], otherwise its bytes in the hex view
  * @param menuItems extra row context-menu entries
  * @param selectTab selects another editor tab by name. When set, a problem that another tab
- *   explains in full ([relatedTabName]) opens that tab instead of calling [open]
+ *   explains in full ([relatedTabName]) opens that tab on a double click instead of calling
+ *   [open]; a single click only selects the row, so it can be read or copied first
  */
 class ProblemNavigator(
     val open: (BinaryProblem) -> Unit,
@@ -107,6 +108,9 @@ fun problemsTableTab(problems: List<BinaryProblem>, fileSize: Int, navigator: Pr
         rowSelectionProvider = { index -> problems.getOrNull(index)?.byteRange?.selectionIn(fileSize) },
         // Without a navigator the host's default applies: select the row's bytes.
         rowClickAction = navigator?.let { nav -> { index -> problems.getOrNull(index)?.let(nav::navigate) } },
+        rowDoubleClickAction = navigator?.selectTab?.let { selectTab ->
+            { index -> problems.getOrNull(index)?.relatedTabName?.let(selectTab) }
+        },
         contextMenuItems = navigator?.menuItems.orEmpty().map { item ->
             RowContextMenuItemDescriptor(
                 labelProvider = { item.label },
@@ -129,9 +133,10 @@ fun problemsTableTab(problems: List<BinaryProblem>, fileSize: Int, navigator: Pr
     )
 }
 
-/** A row click: the related tab when there is one and the host can select it, otherwise [ProblemNavigator.open]. */
+/**
+ * A single row click: [ProblemNavigator.open], except for a problem whose related tab the
+ * host can select — that one waits for a double click, so the click only selects the row.
+ */
 private fun ProblemNavigator.navigate(problem: BinaryProblem) {
-    val tab = problem.relatedTabName
-    val select = selectTab
-    if (tab != null && select != null) select(tab) else open(problem)
+    if (problem.relatedTabName == null || selectTab == null) open(problem)
 }
