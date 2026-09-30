@@ -9,6 +9,7 @@ import org.jetbrains.hexana.providers.ElfBinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.shared.BinaryProblemsTableTabsProvider
+import org.jetbrains.hexana.shared.COMPATIBILITY_TAB_NAME
 import org.jetbrains.hexana.shared.PROBLEMS_TAB_NAME
 import org.jetbrains.hexana.shared.ProblemMenuItem
 import org.jetbrains.hexana.shared.ProblemNavigator
@@ -20,6 +21,7 @@ import org.jetbrains.hexana.shared.features.RuntimeTargets
 import org.jetbrains.hexana.shared.features.WasmFeatureCatalog
 import org.jetbrains.hexana.shared.features.WasmRuntimeCompatibility
 import org.jetbrains.hexana.shared.problemsTableTab
+import org.jetbrains.hexana.shared.relatedTabName
 import org.jetbrains.hexana.shared.scripting.CheckFinding
 import org.jetbrains.hexana.shared.scripting.CheckSeverity
 import org.jetbrains.hexana.shared.scripting.ScriptAnchor
@@ -222,6 +224,35 @@ class BinaryInspectionsTest {
         val plain = assertNotNull(problemsTableTab(listOf(inFunction), FILE_SIZE))
         assertNull(plain.rowClickAction)
         assertEquals(emptyList(), plain.contextMenuItems)
+    }
+
+    @Test
+    fun `a runtime-compatibility problem opens the Compatibility tab when the host can select it`() {
+        val incompatible = problem(ProblemSeverity.Warning, offset = null).copy(inspectionId = WasmRuntimeCompatibilityInspection.id)
+        val other = problem(ProblemSeverity.Warning, offset = 0)
+        assertEquals(COMPATIBILITY_TAB_NAME, incompatible.relatedTabName)
+        assertNull(other.relatedTabName)
+
+        val opened = mutableListOf<BinaryProblem>()
+        val selected = mutableListOf<String>()
+        val tab = assertNotNull(
+            problemsTableTab(listOf(incompatible, other), FILE_SIZE, ProblemNavigator(open = { opened += it }, selectTab = { selected += it })),
+        )
+        tab.rowClickAction!!(0)
+        tab.rowClickAction!!(1)
+        assertEquals(listOf(COMPATIBILITY_TAB_NAME), selected)
+        assertEquals(listOf(other), opened)
+
+        val showInTab = tab.contextMenuItems.single()
+        assertEquals("Show in Compatibility tab", showInTab.labelProvider(0))
+        assertTrue(showInTab.isVisible(0))
+        assertFalse(showInTab.isVisible(1))
+
+        // A host that cannot select tabs keeps its own navigation for every row.
+        val noTabs = assertNotNull(problemsTableTab(listOf(incompatible), FILE_SIZE, ProblemNavigator(open = { opened += it })))
+        noTabs.rowClickAction!!(0)
+        assertEquals(listOf(other, incompatible), opened)
+        assertEquals(emptyList(), noTabs.contextMenuItems)
     }
 
     @Test

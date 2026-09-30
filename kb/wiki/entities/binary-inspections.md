@@ -28,7 +28,7 @@ Everything host-neutral is in `plugins-shared/.../shared/inspections/` and
 |---|---|
 | Wasm `ParseProblem` → a Wasm/component-only Problems tab in `WasmTableTabs.kt` / `WasmComponentTableTabs.kt` | `WasmParseProblemsInspection` (`wasm.parse`) |
 | ELF/Mach-O/PE `NativeParserDiagnostic`s — computed by the whole-file parsers, read by nothing but `binary.raw` | `NativeParseDiagnosticsInspection` (`native.parse`), via `NativeBinaryProvider.parseDiagnostics` |
-| Runtime-compatibility warning state — only the yellow proposal badge | `WasmRuntimeCompatibilityInspection` (`wasm.runtime-compatibility`); the proposals badges no longer carry any warning state (icon, colour, "N unsupported", ⚠ in tooltips) — the problems badge is the one marker |
+| Runtime-compatibility warning state — only the yellow proposal badge | `WasmRuntimeCompatibilityInspection` (`wasm.runtime-compatibility`); the problems badge is the one icon and count; since 2026-09-30 an affected proposal badge (or the collapsed one) is warning-*coloured* with no icon, its tooltip puts ⚠ on the proposal and the failing runtimes, and the failing runtime's cell in the Compatibility tab is tinted (`CellValue.tint = RowTint.Warning`) |
 | Script `CheckFinding`s appended to the Wasm Problems tab by an IntelliJ enricher | `CheckFinding.toBinaryProblem()` → `hostProblems` |
 
 The IntelliJ and web-ui Problems enrichers (`enrichWasmProblemsTab`, `enrichProblemsTab`) and
@@ -54,6 +54,10 @@ The IntelliJ and web-ui Problems enrichers (`enrichWasmProblemsTab`, `enrichProb
   profile is also the IDEA toolset, and its `BinaryOnly` input pattern cannot carry
   `runtimeTargetsPath`; putting it there would have silently dropped the argument in IntelliJ.
 - **The badge hides notes.** Info-level problems appear in the tab only.
+- **A runtime-compatibility row opens the Compatibility tab**, not the hex view: it has no
+  byte range. `BinaryProblem.relatedTabName` names the tab, and a host that sets
+  `ProblemNavigator.selectTab` gets both the row click and a "Show in Compatibility tab" menu
+  item; a host that does not keeps calling `open`.
 - **VS Code has no script findings to merge**: `defineCheck` needs the GraalJS runtime, which the
   webview does not have. `hostProblems` is how a host that does run them adds them.
 - **The webapp worker route shows no badge** (`onOpenProblemsTab = null` when a worker

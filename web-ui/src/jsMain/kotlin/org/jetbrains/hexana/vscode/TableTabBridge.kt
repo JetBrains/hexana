@@ -609,6 +609,7 @@ fun TableTabContent(
                                         classes(cssClass)
                                         style {
                                             property("cursor", "pointer")
+                                            cell.tint?.let { property("background", rowTintCss(it)) }
                                         }
                                         attr("title", cell.tooltip ?: cell.representation)
                                     }) {
@@ -617,6 +618,7 @@ fun TableTabContent(
                                 } else {
                                     Td({
                                         classes(cssClass)
+                                        cell.tint?.let { tint -> style { property("background", rowTintCss(tint)) } }
                                         attr("title", cell.tooltip ?: cell.representation)
                                     }) {
                                         Text(cell.representation)
@@ -1099,12 +1101,16 @@ private fun FilterDropdownVsc(
  * detail clears the bytes but keeps the panel open: it says so, rather than
  * flickering shut or leaving the previous row's plaintext up.
  */
-/** The VS Code diff-editor colour for a [RowTint], falling back to a fixed tint outside VS Code. */
+/**
+ * The VS Code colour for a [RowTint] — the diff-editor colours, and the editor's warning
+ * colour thinned to a tint — falling back to a fixed tint outside VS Code.
+ */
 internal fun rowTintCss(tint: RowTint): String = when (tint) {
     RowTint.Added -> "var(--vscode-diffEditor-insertedTextBackground, rgba(0,255,0,0.1))"
     RowTint.Removed -> "var(--vscode-diffEditor-removedTextBackground, rgba(255,0,0,0.1))"
     RowTint.Modified -> "rgba(255,165,0,0.1)"
     RowTint.Moved -> "rgba(100,149,237,0.1)"
+    RowTint.Warning -> "color-mix(in srgb, var(--vscode-editorWarning-foreground, #cca700) 22%, transparent)"
 }
 
 private fun applyRowDetailVsc(descriptor: TableTabDescriptor, index: Int, selection: HexSelectionState) {
@@ -1899,6 +1905,7 @@ private fun TreeTableBody(
 
                                 Td({
                                     classes(cssClass)
+                                    cell.tint?.let { tint -> style { property("background", rowTintCss(tint)) } }
                                     attr("title", cell.tooltip ?: cell.representation)
                                 }) {
                                     if (colIndex == 0) {

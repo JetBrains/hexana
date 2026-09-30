@@ -170,13 +170,15 @@ private fun enrichWasmFunctionsTab(
  * How a Problems row navigates in the webview, mirroring IntelliJ: a problem inside a Wasm
  * function switches to the WAT tab at that function; anything else with a position
  * selects its bytes in the hex viewer, which is what the bridge does for a row without a
- * click action.
+ * click action. A runtime-compatibility problem selects the Compatibility tab instead.
  */
 internal fun problemNavigator(
     provider: BinaryProvider,
     selection: HexSelectionState,
+    onSelectTab: (String) -> Unit,
     onNavigateToWatFunc: (Int) -> Unit,
 ): ProblemNavigator = ProblemNavigator(
+    selectTab = onSelectTab,
     open = { problem ->
         val funcIdx = problem.funcIdx
         val bytes = problem.byteRange?.selectionIn(provider.bytes.size)

@@ -57,6 +57,11 @@ object HexanaTheme {
         @Composable
         get() = if (JewelTheme.isDark) Color(56, 139, 253, 70) else Color(56, 139, 253, 55)
 
+    /** Cell tint for a value that needs attention, e.g. a runtime that cannot run a proposal (translucent yellow). */
+    val warningTintColor: Color
+        @Composable
+        get() = if (JewelTheme.isDark) Color(224, 192, 112, 60) else Color(255, 193, 7, 70)
+
     val editedByteForegroundColor: Color
         @Composable
         get() = if (JewelTheme.isDark) Color(255, 165, 0) else Color(200, 90, 0)

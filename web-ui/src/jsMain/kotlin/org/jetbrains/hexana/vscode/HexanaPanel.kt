@@ -136,7 +136,7 @@ fun HexanaPanel(
                     runtimeCompatibility = runtimeCompatibility,
                     openUrl = { url -> host.openUrl(url) },
                     openRuntimeSettings = onConfigureRuntimes,
-                    problemNavigator = problemNavigator(provider, selection) { funcIdx ->
+                    problemNavigator = problemNavigator(provider, selection, onSelectTab = onActiveTabChange) { funcIdx ->
                         watNavFuncIdx.value = funcIdx
                         onActiveTabChange(FixedTab.Wat.label)
                     },

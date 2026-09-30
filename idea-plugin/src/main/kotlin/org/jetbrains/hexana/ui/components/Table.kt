@@ -4,6 +4,7 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -36,7 +37,13 @@ import java.awt.datatransfer.StringSelection
 import kotlin.math.floor
 import kotlin.math.log10
 
-class TableCellValue<T>(val value: T, val representation: String = value.toString(), val tooltip: String? = null)
+/** @param background tint for this cell alone, drawn over the row's own background */
+class TableCellValue<T>(
+    val value: T,
+    val representation: String = value.toString(),
+    val tooltip: String? = null,
+    val background: Color? = null,
+)
 class TableColumn(
     val title: String,
     val modifier: Modifier = Modifier,
@@ -523,8 +530,17 @@ fun Table(
                                 val tableCellValue = data[index]
                                 val text = tableCellValue.representation
                                 val tooltip = tableCellValue.tooltip
+                                val cellBackground = tableCellValue.background
 
-                                Box(modifier = Modifier.then(weightModifier(column))) {
+                                Box(
+                                    modifier = Modifier.then(weightModifier(column)).then(
+                                        if (cellBackground != null) {
+                                            Modifier.background(cellBackground, RoundedCornerShape(3.dp))
+                                        } else {
+                                            Modifier
+                                        },
+                                    ),
+                                ) {
                                     ContextMenuArea(items = { onRowContextMenu(id) }) {
                                         Box(modifier = Modifier.padding(horizontal = 4.dp).then(column.widthModifier()).then(column.modifier)) {
                                             var isOverflowed by remember { mutableStateOf(false) }

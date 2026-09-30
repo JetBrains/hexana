@@ -49,10 +49,13 @@ class ProposalRuntimeStatus(
             FeatureSupport.Unknown -> "?"
         }
 
+    /** The declared target, e.g. `Chrome 120`, or just `Wasmtime` for "any version". */
+    val target: String
+        get() = if (targetVersion.isNullOrBlank()) runtime else "$runtime $targetVersion"
+
     /** One-line description used in tooltips, e.g. `Chrome 120 — not supported, needs 133`. */
     val describe: String
         get() {
-            val target = if (targetVersion.isNullOrBlank()) runtime else "$runtime $targetVersion"
             val verdict = when (support) {
                 FeatureSupport.Supported -> "supported"
                 FeatureSupport.Unsupported ->
@@ -116,6 +119,26 @@ class ProposalCompatibility(
 
     /** Verdicts worth acting on, in the order the targets were declared. */
     val warnings: List<ProposalRuntimeStatus> get() = statuses.filter { it.support.isWarning }
+
+    /**
+     * What a [hasWarning] verdict means for the project, in a sentence, for the proposal
+     * tooltips; `null` when there is no warning. An outright `Unsupported` target is named
+     * first, since a module that does not load there outranks one that needs a flag.
+     */
+    val warningRemark: String?
+        get() {
+            val unsupported = statuses.filter { it.support == FeatureSupport.Unsupported }.map { it.target }
+            val flagged = statuses.filter { it.support == FeatureSupport.FlagRequired }.map { it.target }
+            return buildList {
+                if (unsupported.isNotEmpty()) {
+                    add("This module will not run on ${unsupported.joinToString(", ")}, which the project targets.")
+                }
+                if (flagged.isNotEmpty()) {
+                    val verb = if (flagged.size == 1) "runs" else "run"
+                    add("${flagged.joinToString(", ")} $verb it only with a feature flag enabled.")
+                }
+            }.takeIf { it.isNotEmpty() }?.joinToString(" ")
+        }
 
     /**
      * Supporting runtimes the table does not already give a column to — "where else does
@@ -239,3 +262,14 @@ class WasmRuntimeCompatibility(
         )
     }
 }
+
+/**
+ * Heading of the collapsed proposals tooltip when some proposals have a problem, e.g.
+ * `2 of 5 proposals are not supported by a target runtime:`.
+ */
+fun unsupportedProposalsSummary(unsupported: Int, total: Int): String =
+    if (unsupported == 1) {
+        "1 of $total proposals is not supported by a target runtime:"
+    } else {
+        "$unsupported of $total proposals are not supported by a target runtime:"
+    }

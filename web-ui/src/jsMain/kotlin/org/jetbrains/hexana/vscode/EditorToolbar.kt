@@ -21,6 +21,7 @@ import org.jetbrains.hexana.shared.hasWasiCliRunExport
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.jetbrains.hexana.shared.features.ProposalCompatibility
 import org.jetbrains.hexana.shared.features.WasmRuntimeCompatibility
+import org.jetbrains.hexana.shared.features.unsupportedProposalsSummary
 import org.jetbrains.hexana.wasm.analysis.WasmProposal
 import org.jetbrains.hexana.wasm.sections.WasmFunctionExportRecordEntry
 
@@ -532,9 +533,10 @@ private fun providerProposals(provider: BinaryProvider): List<WasmProposal> =
     }
 
 /**
- * The proposals a module uses, as informational badges. Deliberately carries no warning
- * state: a proposal a configured runtime cannot run is a runtime-compatibility problem,
- * counted by [ProblemsBadge] and listed in the Problems tab. Mirrors the IntelliJ badges in
+ * The proposals a module uses, as badges. A proposal a configured runtime cannot run turns
+ * its badge (or the collapsed badge) warning-coloured, without an icon: [ProblemsBadge]
+ * already carries the marker and the count, so this only says *which* proposal the problem
+ * is about. The tooltip marks the offending proposal with ⚠. Mirrors the IntelliJ badges in
  * `FileDescriptionBar.kt`.
  */
 @Composable
@@ -547,17 +549,20 @@ private fun ProposalBadges(
 
     if (proposals.size <= MAX_INDIVIDUAL_PROPOSAL_BADGES) {
         for (proposal in proposals) {
+            val entry = byProposal[proposal]
             ProposalBadge(
                 label = proposal.displayName,
-                tooltip = proposalTooltip(proposal, byProposal[proposal], onOpenCompatibilityTab != null),
+                tooltip = proposalTooltip(proposal, entry, onOpenCompatibilityTab != null),
+                hasWarning = entry?.hasWarning == true,
                 onClick = onOpenCompatibilityTab,
             )
         }
     } else {
-        // Collapsed form: one badge for the count.
+        // Collapsed form: one badge for the count, coloured when any proposal has a problem.
         ProposalBadge(
             label = "${proposals.size} proposals",
-            tooltip = collapsedProposalTooltip(proposals, onOpenCompatibilityTab != null),
+            tooltip = collapsedProposalTooltip(proposals, byProposal, onOpenCompatibilityTab != null),
+            hasWarning = proposals.any { byProposal[it]?.hasWarning == true },
             onClick = onOpenCompatibilityTab,
         )
     }
@@ -566,22 +571,32 @@ private fun ProposalBadges(
 @Composable
 private fun ProposalBadge(
     label: String,
-    tooltip: String,
+    tooltip: List<ProposalTooltipLine>,
+    hasWarning: Boolean,
     onClick: (() -> Unit)?,
 ) {
+    var hovered by remember { mutableStateOf(false) }
     Span({
         classes("hexana-proposal-badge")
-        attr("title", tooltip)
         style {
+            property("position", "relative")
             property("padding", "2px 8px")
             property("border-radius", "4px")
             property("font-size", "11px")
-            // The CSS class carries no colours in either host stylesheet today, so the inline
-            // fallbacks are what actually render.
-            property("background", "var(--hexana-proposal-badge-bg, #3D5040)")
-            property("color", "var(--hexana-proposal-badge-fg, #A8D8B0)")
+            if (hasWarning) {
+                // The same colours as the problems badge's warning form.
+                property("background", "var(--vscode-inputValidation-warningBackground, #5A4A2A)")
+                property("color", "var(--vscode-editorWarning-foreground, #E0C070)")
+            } else {
+                // The CSS class carries no colours in either host stylesheet today, so the inline
+                // fallbacks are what actually render.
+                property("background", "var(--hexana-proposal-badge-bg, #3D5040)")
+                property("color", "var(--hexana-proposal-badge-fg, #A8D8B0)")
+            }
             if (onClick != null) property("cursor", "pointer")
         }
+        onMouseEnter { hovered = true }
+        onMouseLeave { hovered = false }
         if (onClick != null) {
             onClick { event ->
                 event.stopPropagation()
@@ -590,6 +605,60 @@ private fun ProposalBadge(
         }
     }) {
         Text(label)
+        // A popover rather than a `title`, like the size label's: a native tooltip cannot
+        // colour the lines that carry the warning.
+        if (hovered) ProposalTooltipPopover(tooltip)
+    }
+}
+
+/**
+ * One line of a proposal tooltip.
+ *
+ * @param warning coloured with the editor's warning colour
+ * @param indented a remark under the line before it
+ * @param spaced preceded by a gap, separating it from the group above
+ */
+private class ProposalTooltipLine(
+    val text: String,
+    val warning: Boolean = false,
+    val indented: Boolean = false,
+    val spaced: Boolean = false,
+)
+
+@Composable
+private fun ProposalTooltipPopover(lines: List<ProposalTooltipLine>) {
+    Div({
+        style {
+            property("position", "absolute")
+            property("top", "100%")
+            property("left", "0")
+            property("z-index", "1000")
+            property("margin-top", "4px")
+            property("padding", "8px 12px")
+            property("border-radius", "4px")
+            property("background", "var(--vscode-editorHoverWidget-background, #2d2d30)")
+            property("border", "1px solid var(--vscode-editorHoverWidget-border, #454545)")
+            property("color", "var(--vscode-editorHoverWidget-foreground, #ccc)")
+            property("font-size", "12px")
+            // Wide enough for a runtime line on one row, narrow enough to wrap the remarks.
+            property("width", "max-content")
+            property("max-width", "360px")
+            property("white-space", "normal")
+            property("box-shadow", "0 2px 8px rgba(0,0,0,0.3)")
+            property("pointer-events", "none")
+        }
+    }) {
+        for (line in lines) {
+            Div({
+                style {
+                    if (line.warning) property("color", "var(--vscode-editorWarning-foreground, #E0C070)")
+                    if (line.indented) property("padding-left", "16px")
+                    if (line.spaced) property("margin-top", "6px")
+                }
+            }) {
+                Text(line.text)
+            }
+        }
     }
 }
 
@@ -642,23 +711,51 @@ private fun problemsTooltip(problems: List<BinaryProblem>): String = buildString
     append("\n\nClick for the Problems tab")
 }
 
+/**
+ * One badge's tooltip. A proposal with a problem is ⚠-marked and warning-coloured, its
+ * failing runtimes come first and are coloured the same, and a remark says what that means
+ * for the project. Mirrors `ProposalTooltip` in `FileDescriptionBar.kt`.
+ */
 private fun proposalTooltip(
     proposal: WasmProposal,
     entry: ProposalCompatibility?,
     canOpenCompatibilityTab: Boolean,
-): String = buildString {
-    append("Uses ").append(proposal.displayName).append(" proposal")
-    entry?.statuses?.forEach { status -> append('\n').append(status.describe) }
-    if (canOpenCompatibilityTab) append("\n\nClick for the full compatibility table")
+): List<ProposalTooltipLine> = buildList {
+    val hasWarning = entry?.hasWarning == true
+    add(ProposalTooltipLine(warningMarked("Uses ${proposal.displayName} proposal", hasWarning), warning = hasWarning))
+    // Stable sort: the failing runtimes first, each group in declaration order.
+    entry?.statuses?.sortedByDescending { it.support.isWarning }?.forEachIndexed { index, status ->
+        val isWarning = status.support.isWarning
+        add(ProposalTooltipLine(warningMarked(status.describe, isWarning), warning = isWarning, spaced = index == 0))
+    }
+    entry?.warningRemark?.let { add(ProposalTooltipLine(it, spaced = true)) }
+    if (canOpenCompatibilityTab) add(ProposalTooltipLine("Click for the full compatibility table", spaced = true))
 }
 
+/**
+ * The collapsed badge's tooltip: the proposals with a problem first, under a one-line
+ * summary, each followed by its remark; then the rest. Mirrors `CollapsedProposalTooltip`.
+ */
 private fun collapsedProposalTooltip(
     proposals: List<WasmProposal>,
+    byProposal: Map<WasmProposal, ProposalCompatibility>,
     canOpenCompatibilityTab: Boolean,
-): String = buildString {
-    append(proposals.joinToString("\n") { it.displayName })
-    if (canOpenCompatibilityTab) append("\n\nClick for the full compatibility table")
+): List<ProposalTooltipLine> = buildList {
+    val (warned, fine) = proposals.partition { byProposal[it]?.hasWarning == true }
+    if (warned.isNotEmpty()) {
+        add(ProposalTooltipLine(unsupportedProposalsSummary(warned.size, proposals.size)))
+        warned.forEachIndexed { index, proposal ->
+            add(ProposalTooltipLine(warningMarked(proposal.displayName, true), warning = true, spaced = index == 0))
+            byProposal[proposal]?.warningRemark?.let { add(ProposalTooltipLine(it, indented = true)) }
+        }
+    }
+    fine.forEachIndexed { index, proposal ->
+        add(ProposalTooltipLine(proposal.displayName, spaced = index == 0 && warned.isNotEmpty()))
+    }
+    if (canOpenCompatibilityTab) add(ProposalTooltipLine("Click for the full compatibility table", spaced = true))
 }
+
+private fun warningMarked(text: String, hasWarning: Boolean): String = if (hasWarning) "\u26A0 $text" else text
 
 private fun buildSizeTooltip(provider: BinaryProvider): List<Pair<String, String>>? {
     val sizeAnalysis = provider.sizeAnalysis ?: return null

@@ -322,7 +322,9 @@ private fun TableTabTable(
         )
     }
 
-    val columns = remember(descriptor, columnLayouts, filteredIndices) {
+    val rowTintColor = rowTintColors()
+
+    val columns = remember(descriptor, columnLayouts, filteredIndices, rowTintColor) {
         descriptor.columns.mapIndexed { i, col ->
             TableColumn(
                 title = col.name,
@@ -331,13 +333,12 @@ private fun TableTabTable(
                 weight = columnLayouts[i].weight,
             ) { index ->
                 val cell = col.cellProvider(toOriginal(index))
-                TableCellValue(cell.value, cell.representation, cell.tooltip)
+                TableCellValue(cell.value, cell.representation, cell.tooltip, cell.tint?.let(rowTintColor))
             }
         }
     }
 
     val actionColumnWidth = textMeasurer.measureWidthMonospace("__")
-    val rowTintColor = rowTintColors()
 
     Table(
         columns = columns,
@@ -536,7 +537,9 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
         )
     }
 
-    val columns = remember(descriptor, flatRows, columnLayouts) {
+    val rowTintColor = rowTintColors()
+
+    val columns = remember(descriptor, flatRows, columnLayouts, rowTintColor) {
         descriptor.columns.mapIndexed { colIndex, col ->
             val layout = columnLayouts[colIndex]
             TableColumn(
@@ -554,9 +557,9 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
                         row.hasChildren -> CHEVRON_RIGHT
                         else -> CHEVRON_PLACEHOLDER
                     }
-                    TableCellValue(cell.value, indent + chevron + cell.representation, cell.tooltip)
+                    TableCellValue(cell.value, indent + chevron + cell.representation, cell.tooltip, cell.tint?.let(rowTintColor))
                 } else {
-                    TableCellValue(cell.value, cell.representation, cell.tooltip)
+                    TableCellValue(cell.value, cell.representation, cell.tooltip, cell.tint?.let(rowTintColor))
                 }
             }
         }
@@ -744,12 +747,17 @@ private fun rowTintColors(): (RowTint) -> Color {
     val removed = HexanaTheme.diffRemovedColor
     val modified = HexanaTheme.diffModifiedColor
     val moved = HexanaTheme.diffMovedColor
-    return { tint ->
-        when (tint) {
-            RowTint.Added -> added
-            RowTint.Removed -> removed
-            RowTint.Modified -> modified
-            RowTint.Moved -> moved
+    val warning = HexanaTheme.warningTintColor
+    // Remembered so the column lists that capture it are not rebuilt on every recomposition.
+    return remember(added, removed, modified, moved, warning) {
+        { tint ->
+            when (tint) {
+                RowTint.Added -> added
+                RowTint.Removed -> removed
+                RowTint.Modified -> modified
+                RowTint.Moved -> moved
+                RowTint.Warning -> warning
+            }
         }
     }
 }

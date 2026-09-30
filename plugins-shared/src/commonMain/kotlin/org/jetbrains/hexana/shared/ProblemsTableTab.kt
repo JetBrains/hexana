@@ -4,6 +4,7 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.shared.inspections.BinaryProblem
 import org.jetbrains.hexana.shared.inspections.InspectionContext
 import org.jetbrains.hexana.shared.inspections.ProblemSeverity
+import org.jetbrains.hexana.shared.inspections.WasmRuntimeCompatibilityInspection
 import org.jetbrains.hexana.shared.inspections.inspectBinary
 import org.jetbrains.hexana.shared.inspections.mayHaveProblems
 import org.jetbrains.hexana.shared.inspections.selectionIn
@@ -17,11 +18,22 @@ const val PROBLEMS_TAB_NAME = "Problems"
  * @param open called when a row is clicked; typically the Wasm function for a problem with
  *   a [BinaryProblem.funcIdx], otherwise its bytes in the hex view
  * @param menuItems extra row context-menu entries
+ * @param selectTab selects another editor tab by name. When set, a problem that another tab
+ *   explains in full ([relatedTabName]) opens that tab instead of calling [open]
  */
 class ProblemNavigator(
     val open: (BinaryProblem) -> Unit,
     val menuItems: List<ProblemMenuItem> = emptyList(),
+    val selectTab: ((String) -> Unit)? = null,
 )
+
+/**
+ * The tab that shows this problem in more detail than its Problems row, or `null` when the
+ * row is all there is. A runtime-compatibility problem has no bytes to reveal, and the
+ * Compatibility tab holds the full per-runtime matrix it was derived from.
+ */
+val BinaryProblem.relatedTabName: String?
+    get() = COMPATIBILITY_TAB_NAME.takeIf { inspectionId == WasmRuntimeCompatibilityInspection.id }
 
 class ProblemMenuItem(
     val label: String,
@@ -94,14 +106,20 @@ fun problemsTableTab(problems: List<BinaryProblem>, fileSize: Int, navigator: Pr
         rowCount = problems.size,
         rowSelectionProvider = { index -> problems.getOrNull(index)?.byteRange?.selectionIn(fileSize) },
         // Without a navigator the host's default applies: select the row's bytes.
-        rowClickAction = navigator?.let { nav -> { index -> problems.getOrNull(index)?.let(nav.open) } },
+        rowClickAction = navigator?.let { nav -> { index -> problems.getOrNull(index)?.let(nav::navigate) } },
         contextMenuItems = navigator?.menuItems.orEmpty().map { item ->
             RowContextMenuItemDescriptor(
                 labelProvider = { item.label },
                 isVisible = { index -> problems.getOrNull(index)?.let(item.isVisible) == true },
                 action = { index -> problems.getOrNull(index)?.let(item.action) },
             )
-        },
+        } + listOfNotNull(navigator?.selectTab?.let { selectTab ->
+            RowContextMenuItemDescriptor(
+                labelProvider = { index -> "Show in ${problems[index].relatedTabName} tab" },
+                isVisible = { index -> problems.getOrNull(index)?.relatedTabName != null },
+                action = { index -> problems.getOrNull(index)?.relatedTabName?.let(selectTab) },
+            )
+        }),
         predefinedFilters = listOfNotNull(
             PredefinedFilter("Errors and warnings") { index ->
                 problems[index].severity != ProblemSeverity.Info
@@ -109,4 +127,11 @@ fun problemsTableTab(problems: List<BinaryProblem>, fileSize: Int, navigator: Pr
         ),
         defaultFilterShowAll = true,
     )
+}
+
+/** A row click: the related tab when there is one and the host can select it, otherwise [ProblemNavigator.open]. */
+private fun ProblemNavigator.navigate(problem: BinaryProblem) {
+    val tab = problem.relatedTabName
+    val select = selectTab
+    if (tab != null && select != null) select(tab) else open(problem)
 }

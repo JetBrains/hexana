@@ -58,7 +58,7 @@ internal fun compatibilityTabDescriptor(
             ) { index ->
                 val entry = rows[index]
                 // The warning marker is repeated per row so a sorted or filtered table still
-                // shows which rows the badge is warning about.
+                // shows which rows the runtime-compatibility problems are about.
                 val label = if (entry.hasWarning) "⚠ ${entry.proposal.displayName}" else entry.proposal.displayName
                 CellValue(entry.proposal.displayName, label, tooltip = proposalTooltip(entry))
             }
@@ -97,8 +97,14 @@ internal fun compatibilityTabDescriptor(
                     }
                     val status = entry.statuses.getOrNull(runtimeIndex)
                         ?: return@ColumnDescriptor CellValue("", "—")
-                    // Sort on the verdict so a click groups the failures together.
-                    CellValue(status.support.name, status.shortLabel, tooltip = status.note ?: status.describe)
+                    // Sort on the verdict so a click groups the failures together. The tint
+                    // points at the runtime that fails, not just the row that has a failure.
+                    CellValue(
+                        status.support.name,
+                        status.shortLabel,
+                        tooltip = status.note ?: status.describe,
+                        tint = RowTint.Warning.takeIf { status.support.isWarning },
+                    )
                 }
             )
         }

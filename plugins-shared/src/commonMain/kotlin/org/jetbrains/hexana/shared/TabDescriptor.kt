@@ -20,11 +20,14 @@ enum class TabPriority {
  * @param value the underlying data value (used for sorting)
  * @param representation the text shown in the cell
  * @param tooltip optional tooltip text, `null` if no tooltip is needed
+ * @param tint optional background tint for this cell alone, drawn over any row tint; used
+ *   to point at the one cell of a row that carries the verdict
  */
 class CellValue<T>(
     val value: T,
     val representation: String = value.toString(),
     val tooltip: String? = null,
+    val tint: RowTint? = null,
 )
 
 /**
@@ -90,12 +93,14 @@ enum class HexRangeRole { PRIMARY, SECONDARY }
 class HexRange(val offset: Long, val size: Int, val role: HexRangeRole = HexRangeRole.PRIMARY)
 
 /**
- * Background tint of a table row, produced by [TableTabDescriptor.rowTintProvider].
+ * Background tint of a table row, produced by [TableTabDescriptor.rowTintProvider], or of a
+ * single cell ([CellValue.tint]).
  *
  * A role rather than a colour, like [HexRangeRole]: IntelliJ maps it to a theme colour and
- * the web UI to a CSS variable. Used by the diff tables to mark what changed.
+ * the web UI to a CSS variable. The diff tables use the first four to mark what changed;
+ * [Warning] marks a cell that needs attention, such as a runtime that cannot run a proposal.
  */
-enum class RowTint { Added, Removed, Modified, Moved }
+enum class RowTint { Added, Removed, Modified, Moved, Warning }
 
 /**
  * What a [RowActionDescriptor] does, so each host can pick its own icon for it.
@@ -231,7 +236,8 @@ class PredefinedFilter(
  *   [rowSelectionProvider] path is used unchanged.
  * @param rowDetailProvider optional provider of out-of-file bytes for a given row index.
  *   When non-null, the UI layer shows the returned [RowDetailData] in a side panel beside
- *   the hex view on row select; `null` for a row means that row has nothing to show. * @param rowTintProvider optional background tint for a given row index; `null` for a row
+ *   the hex view on row select; `null` for a row means that row has nothing to show.
+ * @param rowTintProvider optional background tint for a given row index; `null` for a row
  *   means no tint. When the provider itself is `null`, rows are not tinted.
  */
 class TableTabDescriptor(

@@ -86,6 +86,22 @@ class WasmRuntimeCompatibilityTest {
     }
 
     @Test
+    fun `the warning remark names unsupported targets before flag-gated ones, and is absent without a warning`() {
+        fun entry(vararg statuses: ProposalRuntimeStatus) =
+            ProposalCompatibility(WasmProposal.GarbageCollection, docUrl = null, phase = null, statuses = statuses.toList())
+
+        val chrome = ProposalRuntimeStatus("Chrome", "100", FeatureSupport.Unsupported, sinceVersion = "119")
+        val node = ProposalRuntimeStatus("Node.js", null, FeatureSupport.FlagRequired)
+        val wasmtime = ProposalRuntimeStatus("Wasmtime", null, FeatureSupport.Supported)
+
+        assertEquals(
+            "This module will not run on Chrome 100, which the project targets. Node.js runs it only with a feature flag enabled.",
+            entry(node, wasmtime, chrome).warningRemark,
+        )
+        assertNull(entry(wasmtime).warningRemark)
+    }
+
+    @Test
     fun `no declared version takes the runtime at its best`() {
         val status = single(RuntimeTarget("Versioned"), WasmProposal.GarbageCollection)
         assertEquals(FeatureSupport.Supported, status.support)

@@ -1,7 +1,14 @@
 # Wasm runtime compatibility table
 
-> Since 2026-09-28 the warning is a problem in [[entities/binary-inspections]]: the proposals
-> badges are purely informational and the problems badge beside them counts the verdicts.
+> Since 2026-09-28 the warning is a problem in [[entities/binary-inspections]], counted by the
+> problems badge. Since 2026-09-30 the proposals badges are warning-coloured again (no icon),
+> with ⚠ in their tooltips, so it is visible *which* proposal the problem is about; the
+> failing runtime's cell in the Compatibility tab is tinted; and a Problems row for it opens
+> the Compatibility tab. The tooltips list affected proposals (and failing runtimes) first,
+> warning-coloured, with `ProposalCompatibility.warningRemark` explaining the verdict and
+> `unsupportedProposalsSummary` heading the collapsed one. IntelliJ picks the warning colour
+> from the tooltip's own background (New UI tooltips are dark in the light theme); VS Code
+> renders a hover popover like the size label's, because a `title` cannot be coloured.
 
 Warns when a Wasm module uses a spec proposal that a runtime the project targets cannot run,
 and shows the full matrix with documentation links. Data comes from

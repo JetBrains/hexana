@@ -2,6 +2,7 @@ package org.jetbrains.hexana.shared.features
 
 import org.jetbrains.hexana.shared.ColumnDescriptor
 import org.jetbrains.hexana.shared.RowActionKind
+import org.jetbrains.hexana.shared.RowTint
 import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.shared.compatibilityTabDescriptorForTest
 import org.jetbrains.hexana.wasm.analysis.WasmProposal
@@ -82,6 +83,16 @@ class CompatibilityTabTest {
         // Rows follow WasmProposal declaration order: TailCall precedes GarbageCollection.
         assertEquals("No (since 112)", tab.cellText(0, runtimeColumn))
         assertEquals("No (since 119)", tab.cellText(1, runtimeColumn))
+    }
+
+    @Test
+    fun `only the cell of the runtime that cannot run the proposal is tinted`() {
+        val tab = assertNotNull(tab(listOf(RuntimeTarget("Chrome", "115"), RuntimeTarget("Wasmtime"))))
+        // Rows: TailCall (Chrome 115 supports it), then GarbageCollection (Chrome needs 119).
+        assertNull(tab.columns[runtimeColumn].cellProvider(0).tint)
+        assertEquals(RowTint.Warning, tab.columns[runtimeColumn].cellProvider(1).tint)
+        assertNull(tab.columns[runtimeColumn + 1].cellProvider(1).tint, "Wasmtime runs it")
+        assertNull(tab.columns[0].cellProvider(1).tint, "the proposal name carries ⚠ instead")
     }
 
     /**

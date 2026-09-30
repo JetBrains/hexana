@@ -33,7 +33,8 @@ internal fun ideInspectionContext(project: Project, filePath: String?): Inspecti
 
 /**
  * How a Problems row navigates in IntelliJ. A problem inside a Wasm function opens it in
- * the virtualized WAT view; anything else with a position scrolls the hex view to it.
+ * the virtualized WAT view; anything else with a position scrolls the hex view to it. A
+ * runtime-compatibility problem selects the Compatibility tab instead.
  * Wasm modules additionally get the two WAT context-menu entries.
  */
 internal fun BinaryProvider.problemNavigator(state: HexViewStateHolder): ProblemNavigator {
@@ -79,5 +80,6 @@ internal fun BinaryProvider.problemNavigator(state: HexViewStateHolder): Problem
                 action = ::showInPlainWat,
             ),
         ),
+        selectTab = state::requestSelectTabByDescription,
     )
 }

@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.onClick
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -25,6 +27,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import org.jetbrains.jewel.ui.theme.tooltipStyle
 import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.text.TextStyle
@@ -69,6 +73,7 @@ import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.jetbrains.hexana.features.RuntimeTargetsService
 import org.jetbrains.hexana.features.WasmFeatureCatalogService
 import org.jetbrains.hexana.shared.COMPATIBILITY_TAB_NAME
+import org.jetbrains.hexana.shared.features.unsupportedProposalsSummary
 import org.jetbrains.hexana.shared.PROBLEMS_TAB_NAME
 import org.jetbrains.hexana.shared.inspections.BinaryProblem
 import org.jetbrains.hexana.shared.inspections.ProblemSeverity
@@ -571,11 +576,11 @@ private fun ProblemsBadge(problems: List<BinaryProblem>, onOpenProblems: () -> U
     val isError = severity == ProblemSeverity.Error
     val background = when {
         isError -> if (JewelTheme.isDark) Color(0xFF5C3232) else Color(0xFFF8D7DA)
-        else -> if (JewelTheme.isDark) Color(0xFF5A4A2A) else Color(0xFFFFF3CD)
+        else -> warningBadgeBackground()
     }
     val foreground = when {
         isError -> if (JewelTheme.isDark) Color(0xFFF0A0A0) else Color(0xFF842029)
-        else -> if (JewelTheme.isDark) Color(0xFFE0C070) else Color(0xFF7A5C00)
+        else -> warningBadgeForeground()
     }
 
     Tooltip(tooltip = { ProblemsTooltip(problems) }) {
@@ -773,12 +778,13 @@ private fun NativeImageBadges(
 private const val MAX_INDIVIDUAL_PROPOSAL_BADGES = 3
 
 /**
- * The proposals a module uses, as informational badges. Deliberately carries no warning
- * state: a proposal a configured runtime cannot run is a runtime-compatibility problem,
- * counted by the problems badge next to it ([ProblemsBadge]) and listed in the Problems tab.
+ * The proposals a module uses, as badges. A proposal a configured runtime cannot run turns
+ * its badge (or the collapsed badge) warning-coloured, without an icon: the problems badge
+ * next to it ([ProblemsBadge]) already carries the marker and the count, so this only says
+ * *which* proposal the problem is about. The tooltip marks the offending proposal with ⚠.
  *
- * @param compatibility per-proposal verdicts against `.hexana/runtimes.json`, shown in the
- *   tooltip; empty when the project declares no runtimes
+ * @param compatibility per-proposal verdicts against `.hexana/runtimes.json`; empty when the
+ *   project declares no runtimes, and the badges then render as plain informational chips
  * @param onOpenCompatibility selects the Compatibility tab, where the full matrix and the
  *   documentation links live. Clicking the badge is the only route to it that does not
  *   require knowing the tab exists.
@@ -794,39 +800,55 @@ private fun ProposalBadges(
     val proposalForeground = if (JewelTheme.isDark) Color(0xFFA8D8B0) else Color(0xFF2D6A3F)
 
     val byProposal = remember(compatibility) { compatibility.associateBy { it.proposal } }
-    val badgeModifier = Modifier
-        .background(proposalBackground, RoundedCornerShape(4.dp))
-        .then(
-            if (onOpenCompatibility != null) {
-                Modifier
-                    .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
-                    .clickable { onOpenCompatibility() }
-            } else {
-                Modifier
-            },
+
+    @Composable
+    fun Badge(text: String, hasWarning: Boolean) {
+        Text(
+            text = text,
+            modifier = Modifier
+                .background(if (hasWarning) warningBadgeBackground() else proposalBackground, RoundedCornerShape(4.dp))
+                .then(
+                    if (onOpenCompatibility != null) {
+                        Modifier
+                            .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
+                            .clickable { onOpenCompatibility() }
+                    } else {
+                        Modifier
+                    },
+                )
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+            style = TextStyle(fontSize = 11.sp, color = if (hasWarning) warningBadgeForeground() else proposalForeground),
         )
-        .padding(horizontal = 8.dp, vertical = 2.dp)
-    val labelStyle = TextStyle(fontSize = 11.sp, color = proposalForeground)
+    }
 
     if (proposals.size <= MAX_INDIVIDUAL_PROPOSAL_BADGES) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             for (proposal in proposals) {
                 val entry = byProposal[proposal]
                 Tooltip(tooltip = { ProposalTooltip(listOfNotNull(entry), proposal, onOpenCompatibility != null) }) {
-                    Text(text = proposal.displayName, modifier = badgeModifier, style = labelStyle)
+                    Badge(proposal.displayName, hasWarning = entry?.hasWarning == true)
                 }
             }
         }
     } else {
-        // Collapsed form: one badge for the count.
-        Tooltip(tooltip = { CollapsedProposalTooltip(proposals, onOpenCompatibility != null) }) {
-            Text(text = "${proposals.size} proposals", modifier = badgeModifier, style = labelStyle)
+        // Collapsed form: one badge for the count, coloured when any proposal has a problem.
+        Tooltip(tooltip = { CollapsedProposalTooltip(proposals, byProposal, onOpenCompatibility != null) }) {
+            Badge("${proposals.size} proposals", hasWarning = proposals.any { byProposal[it]?.hasWarning == true })
         }
     }
 }
 
+/** Warning badge colours, shared by the problems badge and a proposal badge with a problem. */
+@Composable
+private fun warningBadgeBackground(): Color = if (JewelTheme.isDark) Color(0xFF5A4A2A) else Color(0xFFFFF3CD)
+
+@Composable
+private fun warningBadgeForeground(): Color = if (JewelTheme.isDark) Color(0xFFE0C070) else Color(0xFF7A5C00)
+
 /**
- * Tooltip for one badge: the proposal, then one line per configured runtime.
+ * Tooltip for one badge: the proposal, then one line per configured runtime. A proposal with
+ * a problem is ⚠-marked and warning-coloured, its failing runtimes are listed first and
+ * coloured the same, and a remark says what that means for the project.
  *
  * Multi-row rather than a single string, following [SizeLabel]. Deliberately has no
  * clickable links: a Jewel tooltip dismisses on pointer exit, so the documentation link
@@ -838,15 +860,28 @@ private fun ProposalTooltip(
     proposal: WasmProposal,
     canOpenCompatibility: Boolean,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text("Uses ${proposal.displayName} proposal", style = TextStyle(fontSize = 12.sp))
-        val entry = entries.firstOrNull()
+    val entry = entries.firstOrNull()
+    val warningColor = tooltipWarningColor()
+    val hasWarning = entry?.hasWarning == true
+    Column(modifier = Modifier.widthIn(max = PROPOSAL_TOOLTIP_MAX_WIDTH), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = warningMarked("Uses ${proposal.displayName} proposal", hasWarning),
+            style = TextStyle(fontSize = 12.sp, color = if (hasWarning) warningColor else Color.Unspecified),
+        )
         if (entry != null && entry.statuses.isNotEmpty()) {
             Column(modifier = Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                for (status in entry.statuses) {
-                    Text(text = status.describe, style = TextStyle(fontSize = 11.sp))
+                // Stable sort: the failing runtimes first, each group in declaration order.
+                for (status in entry.statuses.sortedByDescending { it.support.isWarning }) {
+                    val isWarning = status.support.isWarning
+                    Text(
+                        text = warningMarked(status.describe, isWarning),
+                        style = TextStyle(fontSize = 11.sp, color = if (isWarning) warningColor else Color.Unspecified),
+                    )
                 }
             }
+        }
+        entry?.warningRemark?.let { remark ->
+            Text(text = remark, modifier = Modifier.padding(top = 4.dp), style = TextStyle(fontSize = 11.sp))
         }
         if (canOpenCompatibility) {
             Text(
@@ -858,14 +893,38 @@ private fun ProposalTooltip(
     }
 }
 
-/** Tooltip for the collapsed badge: every proposal the module uses. */
+/**
+ * Tooltip for the collapsed badge: every proposal the module uses. The ones with a problem
+ * come first under a one-line summary, ⚠-marked and warning-coloured, each followed by its
+ * remark — with more than three proposals the list is long enough to bury them otherwise.
+ */
 @Composable
 private fun CollapsedProposalTooltip(
     proposals: List<WasmProposal>,
+    byProposal: Map<WasmProposal, ProposalCompatibility>,
     canOpenCompatibility: Boolean,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-        for (proposal in proposals) {
+    val warningColor = tooltipWarningColor()
+    val (warned, fine) = proposals.partition { byProposal[it]?.hasWarning == true }
+    Column(modifier = Modifier.widthIn(max = PROPOSAL_TOOLTIP_MAX_WIDTH), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        if (warned.isNotEmpty()) {
+            Text(
+                text = unsupportedProposalsSummary(warned.size, proposals.size),
+                modifier = Modifier.padding(bottom = 4.dp),
+                style = TextStyle(fontSize = 11.sp),
+            )
+            for (proposal in warned) {
+                Text(
+                    text = warningMarked(proposal.displayName, hasWarning = true),
+                    style = TextStyle(fontSize = 11.sp, color = warningColor),
+                )
+                byProposal[proposal]?.warningRemark?.let { remark ->
+                    Text(text = remark, modifier = Modifier.padding(start = 16.dp, bottom = 2.dp), style = TextStyle(fontSize = 11.sp))
+                }
+            }
+            if (fine.isNotEmpty()) Spacer(Modifier.height(4.dp))
+        }
+        for (proposal in fine) {
             Text(text = proposal.displayName, style = TextStyle(fontSize = 11.sp))
         }
         if (canOpenCompatibility) {
@@ -877,6 +936,17 @@ private fun CollapsedProposalTooltip(
         }
     }
 }
+
+/** Keeps the remarks wrapping instead of stretching the tooltip across the editor. */
+private val PROPOSAL_TOOLTIP_MAX_WIDTH = 360.dp
+
+/**
+ * Warning text colour for a tooltip. Picked against the tooltip's own background rather than
+ * the IDE theme: New UI tooltips are dark in the light theme too.
+ */
+@Composable
+private fun tooltipWarningColor(): Color =
+    if (JewelTheme.tooltipStyle.colors.background.luminance() < 0.5f) Color(0xFFE0C070) else Color(0xFF7A5C00)
 
 private fun buildSizeTooltip(binaryProvider: BinaryProvider): List<Pair<String, String>>? {
     val sizeAnalysis = binaryProvider.sizeAnalysis ?: return null
@@ -1247,3 +1317,6 @@ private fun showPrivateKeyHintDialog(project: com.intellij.openapi.project.Proje
         "Private Key Not Supported",
     )
 }
+
+/** [text] prefixed with ⚠ when [hasWarning]; the proposal tooltips' one warning marker. */
+private fun warningMarked(text: String, hasWarning: Boolean): String = if (hasWarning) "\u26A0 $text" else text
