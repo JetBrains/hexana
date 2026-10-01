@@ -1,0 +1,123 @@
+{
+  "clusters": [
+    {
+      "asset": "screenshots/hex-diff-021.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**Hex diff in the IDE's own diff window.** Comparing two binaries with the platform **Compare Files** (or viewing a binary's VCS change) now shows a side-by-side hex view with changed bytes highlighted and long unchanged stretches collapsed into expandable \"N unchanged rows\" folds, plus previous / next difference navigation. Sections are tinted in colors that never clash with the diff's own, and one section bar for both sides pairs sections by name and marks which changed and by how much, and which exist on one side only \u2014 click one to jump to its first change; collapsed folds name the sections they hide. Below the hex rows, the file's table tabs (Headers, Sections, Symbols, Imports, \u2026) are shown once for both sides as diffs: rows tinted added / removed / modified, changed cells as `old \u2192 new`, a \"Changed rows\" filter on by default, and tabs with changes marked with their count. Tree tabs are not diffed yet. The diff window's viewer switcher also offers the **Size and functions diff viewer** (size impact, entities, functions) for WASM and native pairs; the platform's plain binary viewer, which only showed two editors side by side, is no longer offered for these files."
+        },
+        {
+          "section": "Changed",
+          "text": "One diff editor for every format: WASM module, Component Model and native comparisons share the same tab strip, tables (now searchable and sortable) and side-by-side detail pane."
+        },
+        {
+          "section": "Changed",
+          "text": "**Compare WASM With\u2026** and **Compare Binary With\u2026** are merged into one **Compare Binaries With\u2026** action (Hexana context menu, Find Action) that picks the comparison from the files' contents. It is offered for any WASM or native binary Hexana recognizes by content, including extensionless executables and modules, rather than for a fixed list of extensions. It opens the same diff window as the IDE's own Compare Files, starting on the size and functions diff as before (the hex diff is one click away in the viewer switcher, and is what a pair of different kinds gets); the IDE's Compare Files starts on the hex diff. Each remembers the viewer last picked. Shortcuts bound to the old actions keep working."
+        }
+      ],
+      "eyebrow": "Binary diff",
+      "id": "hex-diff-021",
+      "recipe": "ide-hex-diff",
+      "summary": "Compare binaries in the IDE diff window with highlighted bytes, expandable unchanged regions, paired sections, and table-level changes.",
+      "title": "See binary changes byte by byte"
+    },
+    {
+      "asset": "screenshots/native-functions-021.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**Per-function native binary diff.** Comparing two ELF, Mach-O or COFF files adds a **Functions** tab next to Size Impact: functions are paired by name, renames are recognized by identical code, and a function that only moved because the code before it grew is reported as moved rather than modified. Selecting a function shows its disassembly side by side, with shifted addresses ignored when lining up instructions. PE images (`.exe`, `.dll`) and archives keep the section size comparison only."
+        }
+      ],
+      "eyebrow": "Native binaries",
+      "id": "native-functions-021",
+      "recipe": "native-functions-diff",
+      "summary": "See which functions changed between ELF, Mach-O, or COFF builds, then compare their disassembly side by side. PE images and archives keep section-size comparison.",
+      "title": "Compare native functions"
+    },
+    {
+      "asset": "screenshots/wasmgc-graph-021.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**WasmGC type graph** in the **WAT (virtualized)** tab. For WasmGC modules every type in the type section gets inline annotations showing its kind and fields, and an **Alt+click** popup with full structural detail (field names, types, supertypes, subtypes, byte offset). **Show Type Graph** (in a type row's context menu, or from the popup) opens an interactive canvas centered on that type: nodes are types, edges are subtype and field-reference relationships, and the initial view shows 1 subtype level and 1 field hop (configurable up to 5 via header dropdowns). `FUNC`-typed field targets fold into a \"+N funcs\" badge on the parent; expanding materializes them. Expanding or collapsing a node keeps all other nodes in place; only newly revealed nodes are added below the expanded parent without relaying out the graph. Rec-group frames draw only when their bounding box contains no non-member nodes; scattered groups get a left-edge accent bar per member instead of an engulfing slab. Clicking a node expands its neighbors; double-clicking jumps back to the type's row in the WAT panel. Mouse wheel pans the canvas on both axes; Shift+wheel pans horizontally; Cmd/Ctrl+wheel (or Cmd/Ctrl +/-/0) zooms and resets. Overlay scrollbars track the pan offset; pan and zoom are clamped to content bounds so large graphs stay reachable. Node text is measured once per layout and cached, removing per-frame layout work (tested at 294 nodes on `kotlin/hello.wasm`)."
+        }
+      ],
+      "eyebrow": "WebAssembly",
+      "id": "wasmgc-graph-021",
+      "recipe": "wasmgc-type-graph",
+      "summary": "Explore subtype and field-reference relationships in an interactive type graph, and jump back to the corresponding WAT type.",
+      "title": "Explore WasmGC type relationships"
+    },
+    {
+      "asset": null,
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**Scripting v2: checks, suites, and an IDE runner.** Script tabs and the `run-script` CLI/MCP tool gain `hexana.defineCheck(id, fn)` to declare named checks whose findings land in the **Problems** tab and in SARIF 2.1.0 output, `hexana.defineFlags(schema)` for typed per-run parameters, and `hexana.defineSlice(name, fn)` for the existing table output. `binary.functions()`, `.imports()`, and `.exports()` are curated facade members (typed arrays, zero-arg call). A new `run_script_suite` CLI command and MCP tool run `*.test.js` suite files: each file declares artifact roles via `hexana.artifact(role, {formats})`, then uses `describe`/`test`/`beforeEach`/`afterEach` with async support, seeded deterministic crypto (SHA-256 counter DRBG, seed from script and artifact content), and an ESM loader that resolves bare specifiers from a `node_modules` directory rooted at the suite. Results output as a human test report or a JUnit XML file; exit 1 on any failure. The **Hexana Suite** run configuration brings suites into the IDE: the artifact-role table is filled from the suite's declarations, test results stream into the SM test console as a tree, failures carry source locations for navigation, and **Rerun Failed** and **Copy CLI Command** work. Gutter run icons appear on `test()` and `describe()` calls in `*.test.js` files; the binary editor context menu adds **Run Suites for This Binary** for suites whose required artifact role matches the open file. Check findings from any run are stored per binary and merged into the **Problems** tab rows next to parse problems; clicking a row navigates to the finding's function."
+        }
+      ],
+      "eyebrow": "Scripting",
+      "id": "script-suites-021",
+      "recipe": "scripting-v2",
+      "summary": "Define named checks and typed flags, run script suites in the IDE test console, and navigate findings in the Problems tab.",
+      "title": "Run checks and script suites"
+    },
+    {
+      "asset": null,
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Arrow IPC **streams** open as streams. Previously every `.arrow` file was read as an IPC *file*, so a stream (conventionally `.arrows`) showed no Schema or Messages tabs; both extensions are now accepted and the format is resolved from the content."
+        },
+        {
+          "section": "Added",
+          "text": "Binaries whose name says nothing about their format open by content: a WebAssembly module written without a `.wasm` extension gets the full Wasm editor instead of a raw hex view, and so does a Parquet or Arrow export a tool dumped extensionless."
+        },
+        {
+          "section": "Changed",
+          "text": "Provider selection moved to one shared factory (`createBinaryProvider` in `binaryProvider`) that the IDE, the VS Code extension and the browser app all call. The two copies had drifted: Parquet, Arrow and `.pb` Protobuf-message files resolved only in the IDE, and tar archives only in the IDE once gzipped. Every host now supports every format the provider layer does."
+        }
+      ],
+      "eyebrow": "Formats",
+      "id": "format-opening-021",
+      "recipe": "content-based-opening",
+      "summary": "Open Arrow IPC streams and recognized extensionless binaries directly in their format-specific views.",
+      "title": "Open binaries by content"
+    },
+    {
+      "asset": null,
+      "entries": [
+        {
+          "section": "Changed",
+          "text": "The \"Send anonymous usage analytics\" setting takes effect immediately instead of at the next IDE restart. Turning it off flushes whatever was already captured under consent and then tears the client down; turning it on starts reporting straight away."
+        },
+        {
+          "section": "Fixed",
+          "text": "Opening a native binary with tens of thousands of symbols (e.g. an LLVM tool) no longer spends seconds inferring function sizes: the Mach-O and COFF \"size = gap to the next symbol\" rule was quadratic. Affects the Disassembly tabs and the diff."
+        },
+        {
+          "section": "Security",
+          "text": "Opening a gzipped file no longer inflates it without a bound: a payload over 128 MiB inflated is refused and the file is shown as the compressed bytes it is, instead of a small archive being able to exhaust the IDE's heap."
+        }
+      ],
+      "eyebrow": "Improvements",
+      "id": "polish-021",
+      "recipe": "inspection-polish",
+      "summary": "Apply analytics consent changes immediately, process large native symbol tables faster, and refuse gzip payloads over 128 MiB inflated.",
+      "title": "More responsive, bounded inspection"
+    }
+  ],
+  "date": "2026-10-01",
+  "schema": 1,
+  "sources": {
+    "assets": "docs/whatsnew/assets.yml",
+    "assets_sha256": "63c64c6863b68215916cb66ccedf940945b77253b80c5037213eacf9a92acc5d",
+    "changelog": "idea-plugin/CHANGELOG.md",
+    "changelog_sha256": "b7ce9b35b44563283a597b6062046f1ee3148d4d2b032b8bdc4ab7a76648df1f",
+    "design": "docs/whatsnew/DESIGN.md",
+    "design_sha256": "46a170a15744493a36718e673ca921b17c716cb241cea22a9b7e2896f327e05d"
+  },
+  "version": "0.21"
+}

@@ -176,6 +176,10 @@ internal class HexanaIde internal constructor(
         return HexanaEditor(driver, fileName, fileName)
     }
 
+    fun openPlatformHexDiff(leftPath: Path, rightPath: Path) {
+        probe.openPlatformHexDiff(leftPath.toAbsolutePath().toString(), rightPath.toAbsolutePath().toString())
+    }
+
     fun openNativeDiff(leftPath: Path, rightPath: Path): HexanaEditor {
         val payload = probe.openNativeDiff(leftPath.toAbsolutePath().normalize().toString(), rightPath.toAbsolutePath().normalize().toString())
         val fileName = payload.firstOrNull { it.startsWith("fileName=") }
@@ -591,6 +595,7 @@ internal interface HexanaEditorUiTestProbeRef {
     fun activateEditor(fileName: String): List<String>
     fun activateStructureToolWindow(fileName: String): List<String>
     fun openComponentDiff(leftPath: String, rightPath: String): List<String>
+    fun openPlatformHexDiff(leftPath: String, rightPath: String): List<String>
     fun openNativeDiff(leftPath: String, rightPath: String): List<String>
     fun openNestedComponent(fileName: String, componentIndex: Int): List<String>
     fun selectTab(fileName: String, tabName: String): List<String>

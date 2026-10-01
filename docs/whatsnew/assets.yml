@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "default_release": "0.17",
+  "default_release": "0.21",
   "asset_root": ".",
   "capture_policy": {
     "preferred_source": "ui-driver",
@@ -764,6 +764,93 @@
       "image_candidates": [
         "docs/whatsnew/captures/0.20/structural-regions-zip.png"
       ]
+    },
+    "hex-diff-021": {
+      "release": "0.21",
+      "eyebrow": "Binary diff",
+      "title": "See binary changes byte by byte",
+      "summary": "Compare binaries in the IDE diff window with highlighted bytes, expandable unchanged regions, paired sections, and table-level changes.",
+      "recipe": "ide-hex-diff",
+      "keywords": [
+        "Hex diff in the IDE",
+        "One diff editor for every format",
+        "Compare WASM With"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.21/hex-diff.png"
+      ]
+    },
+    "native-functions-021": {
+      "release": "0.21",
+      "eyebrow": "Native binaries",
+      "title": "Compare native functions",
+      "summary": "See which functions changed between ELF, Mach-O, or COFF builds, then compare their disassembly side by side. PE images and archives keep section-size comparison.",
+      "recipe": "native-functions-diff",
+      "keywords": [
+        "Per-function native binary diff"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.21/native-function-diff.png"
+      ]
+    },
+    "wasmgc-graph-021": {
+      "release": "0.21",
+      "eyebrow": "WebAssembly",
+      "title": "Explore WasmGC type relationships",
+      "summary": "Explore subtype and field-reference relationships in an interactive type graph, and jump back to the corresponding WAT type.",
+      "recipe": "wasmgc-type-graph",
+      "keywords": [
+        "WasmGC type graph"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.21/wasmgc-type-graph.png"
+      ]
+    },
+    "script-suites-021": {
+      "release": "0.21",
+      "eyebrow": "Scripting",
+      "title": "Run checks and script suites",
+      "summary": "Define named checks and typed flags, run script suites in the IDE test console, and navigate findings in the Problems tab.",
+      "recipe": "scripting-v2",
+      "keywords": [
+        "Scripting v2"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [],
+      "presentation": "text"
+    },
+    "format-opening-021": {
+      "release": "0.21",
+      "eyebrow": "Formats",
+      "title": "Open binaries by content",
+      "summary": "Open Arrow IPC streams and recognized extensionless binaries directly in their format-specific views.",
+      "recipe": "content-based-opening",
+      "keywords": [
+        "Arrow IPC streams",
+        "Binaries whose name",
+        "Provider selection"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [],
+      "presentation": "text"
+    },
+    "polish-021": {
+      "release": "0.21",
+      "eyebrow": "Improvements",
+      "title": "More responsive, bounded inspection",
+      "summary": "Apply analytics consent changes immediately, process large native symbol tables faster, and refuse gzip payloads over 128 MiB inflated.",
+      "recipe": "inspection-polish",
+      "keywords": [
+        "Send anonymous usage analytics",
+        "tens of thousands of symbols",
+        "gzipped file"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [],
+      "presentation": "text"
     }
   }
 }

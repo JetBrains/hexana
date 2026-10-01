@@ -200,6 +200,21 @@ object HexanaEditorUiTestProbe {
     }
 
     @JvmStatic
+    fun openPlatformHexDiff(leftPath: String, rightPath: String): List<String> {
+        val left = resolveAbsoluteFile(leftPath)
+        val right = resolveAbsoluteFile(rightPath)
+        return runOnEdt {
+            val factory = com.intellij.diff.DiffContentFactory.getInstance()
+            val project = singleOpenProject()
+            val request = com.intellij.diff.requests.SimpleDiffRequest(
+                "Hexana byte comparison", factory.create(project, left), factory.create(project, right), left.name, right.name,
+            )
+            com.intellij.diff.DiffManager.getInstance().showDiff(project, request)
+            payload("hexana-platform-hex-diff", listOf("leftName=${left.name}", "rightName=${right.name}"))
+        }
+    }
+
+    @JvmStatic
     fun openNativeDiff(leftPath: String, rightPath: String): List<String> {
         val left = resolveAbsoluteFile(leftPath)
         val right = resolveAbsoluteFile(rightPath)
