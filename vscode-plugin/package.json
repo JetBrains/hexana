@@ -363,7 +363,7 @@
     "obfuscate": "javascript-obfuscator out/ --output out/ --compact true --string-array true --string-array-encoding rc4 --self-defending false --source-map false && javascript-obfuscator extension-lib/build/kotlin-webpack/js/productionExecutable/extension-lib.js --output extension-lib/build/kotlin-webpack/js/productionExecutable/extension-lib.js --compact true --string-array true --string-array-encoding rc4 --self-defending false --source-map false && javascript-obfuscator webview/build/kotlin-webpack/js/productionExecutable/webview.js --output webview/build/kotlin-webpack/js/productionExecutable/webview.js --compact true --string-array true --string-array-encoding rc4 --self-defending false --source-map false"
   },
   "dependencies": {
-    "adm-zip": "^0.6.0",
+    "adm-zip": "^0.6.1",
     "semver": "^7.8.5"
   },
   "devDependencies": {
@@ -377,7 +377,7 @@
   },
   "overrides": {
     "form-data": "4.0.6",
-    "js-yaml": "5.2.3",
-    "markdown-it": "14.2.0"
+    "js-yaml": "5.4.1",
+    "markdown-it": "14.3.1"
   }
 }
