@@ -1,4 +1,4 @@
-# Unreleased
+# 0.13.0 - 01.10.2026
 - **hex diff**: comparisons get a second view next to the size and functions diff (renamed from "Hexana diff" — both views are Hexana's), switchable at the top of the diff — the two binaries side by side in hex, changed bytes highlighted (amber modified, red removed, green added), long unchanged stretches collapsed into expandable "N unchanged rows" lines, previous / next difference buttons, sections tinted in colors that never clash with the diff's own, one section bar for both sides marking which sections changed (click to jump), and the files' table tabs (Headers, Sections, Symbols, Imports, …) diffed row by row below. Works for any pair; a pair of different kinds gets the byte comparison alone
 - VS Code's own "Compare Selected" on two binaries Hexana opens now shows Hexana's diff, opened on the hex diff; "Hexana: Compare Files" opens it on the size and functions diff, as before
 - "Compare WASM" and "Compare Binary" are merged into one "Hexana: Compare Files" command that picks the comparison from the files' contents; keybindings bound to the old commands keep working
