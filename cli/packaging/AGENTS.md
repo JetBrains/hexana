@@ -7,6 +7,13 @@ CLI release index. The generated descriptor is
 `cli/metadata/src/main/gen/cli-release-artifacts.json`; see `README.md` for its
 contract and verification commands.
 
+The current descriptor requires exactly six native ZIPs: all three CLI products
+(`hexana-cli`, `hexana-cli-script`, `hexana-wasm-tools`) on macOS arm64 and Linux
+x64, plus one identity per target. Keep fake-storage fixtures on that real
+descriptor; the old four-archive input must fail. Native assembly and compatibility
+verification are owned by `:mcp:verifyNativeCliReleaseDescriptor` and
+`:mcp:verifyNativeCliReleaseArchives`, with GraalVM 25+ required for execution.
+
 Run the automated packaging gate after validator or publication changes:
 
 ```bash

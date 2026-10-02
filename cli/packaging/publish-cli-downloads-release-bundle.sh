@@ -508,6 +508,50 @@ fixture_identity() {
     }' > "$input_dir/$platform-identity.json"
 }
 
+fixture_release_input() {
+  local input_dir="$1"
+  local row platform product executable archive
+  mkdir -p "$input_dir"
+  while IFS= read -r row; do
+    product="$(jq -r .product <<< "$row")"
+    executable="$(jq -r .executable <<< "$row")"
+    archive="$(jq -r --arg version "$CLI_VERSION" '.archiveNameTemplate | gsub("\\{version\\}"; $version)' <<< "$row")"
+    fixture_zip "$input_dir/$archive" "$executable" "$product"
+  done < <(jq -c '.artifacts[] as $artifact | .products[] | select(.id == $artifact.product) |
+    $artifact + {executable}' "$CLI_RELEASE_DESCRIPTOR")
+  while IFS= read -r platform; do
+    fixture_identity "$input_dir" "$platform"
+  done < <(jq -r '.targets[].id' "$CLI_RELEASE_DESCRIPTOR")
+}
+
+assert_six_archive_bundle() {
+  local bundle_dir="$1" manifest ledger name
+  manifest="$bundle_dir/hexana-cli-release-$CLI_VERSION.json"
+  ledger="$bundle_dir/hexana-cli-release-$CLI_VERSION.ledger.json"
+  jq -e --arg version "$CLI_VERSION" '
+    (.artifacts | length == 6) and
+    ([.artifacts[] | [.platform, .product]] | sort ==
+      (["macos-arm64", "linux-x64"] | [.[] as $target |
+        ["hexana-cli", "hexana-cli-script", "hexana-wasm-tools"][] | [$target, .]] | sort)) and
+    ([.artifacts[].kind] | unique == ["hexana-wasm-tools-native", "script-cli-native", "standard-cli-native"]) and
+    all(.artifacts[];
+      .name == (.product + "-native-" + .platform + "-" + $version + ".zip") and
+      .launcher == .product and .runtimeKind == "native" and .minimumJava == null and
+      (.licenseFileSha256 | test("^[0-9a-f]{64}$")) and (.thirdPartyNoticesSha256 | test("^[0-9a-f]{64}$")))
+  ' "$manifest" >/dev/null || die 'Self-test manifest is not the exact six-archive CLI release'
+  jq -e --slurpfile manifest "$manifest" '
+    ([.artifacts[] | [.product, .platform, .archive.name, .archive.sha256, .executable.path]] | sort) ==
+    ([$manifest[0].artifacts[] | [.product, .platform, .name, .sha256, ("bin/" + .launcher)]] | sort) and
+    all(.artifacts[]; (.executable.sha256 | test("^[0-9a-f]{64}$")))
+  ' "$ledger" >/dev/null || die 'Self-test ledger differs from the six-archive manifest'
+  [ "$(find "$bundle_dir" -maxdepth 1 -name '*.zip' -type f | wc -l | tr -d ' ')" = 6 ] || die 'Self-test bundle ZIP count differs'
+  [ "$(find "$bundle_dir" -maxdepth 1 -name '*.zip.sha256' -type f | wc -l | tr -d ' ')" = 6 ] || die 'Self-test checksum count differs'
+  while IFS= read -r name; do
+    [ "$(cat "$bundle_dir/$name.sha256")" = "$(sha256_file "$bundle_dir/$name")  $name" ] || die "Self-test wrong checksum for $name"
+    grep -F -q "$name" "$bundle_dir/README.md" || die "Self-test README omitted $name"
+  done < <(jq -r '.artifacts[].name' "$manifest")
+}
+
 create_fake_aws() {
   local fake_dir="$1"
   mkdir -p "$fake_dir"
@@ -546,7 +590,7 @@ EOF
 self_test() {
   local temp input bundle index storage fake calls old_index status remote_ledger remote_manifest
   local original_archive changed_bundle regenerated_bundle prerelease_input prerelease_bundle prerelease_index
-  local metadata_input metadata_bundle metadata_index third_input third_bundle third_descriptor original_descriptor
+  local metadata_input metadata_bundle metadata_index wasm_input wasm_bundle
   local calls_before cleanup_done resolved_version malformed_bundle malformed_index malformed_version valid_version
   resolved_version="$(CLI_VERSION='' PLUGIN_VERSION='999.999.999' resolve_cli_version)"
   [ "$resolved_version" = "$(read_cli_version)" ] || die 'Self-test accepted PLUGIN_VERSION as the CLI release authority'
@@ -579,12 +623,7 @@ self_test() {
   PUBLISH_DOWNLOADS=false
   CLI_EXISTING_RELEASES_INDEX_FILE=''
 
-  local platform
-  for platform in macos-arm64 linux-x64; do
-    fixture_zip "$input/$(archive_name "$platform" hexana-cli)" hexana-cli standard
-    fixture_zip "$input/$(archive_name "$platform" hexana-cli-script)" hexana-cli-script script
-    fixture_identity "$input" "$platform"
-  done
+  fixture_release_input "$input"
 
   for valid_version in '1.2.3-alpha.1' '1.2.3+build-1' '1.2.3-alpha.1+build-1'; do
     validate_semver CLI_VERSION "$valid_version"
@@ -637,10 +676,15 @@ self_test() {
     }]}' > "$old_index"
   CLI_EXISTING_RELEASES_INDEX_FILE="$old_index"
   make_bundle "$bundle"
+  assert_six_archive_bundle "$bundle"
   make_bundle "$temp/trailing-bundle/"
   cmp -s "$bundle/hexana-cli-release-$CLI_VERSION.json" "$temp/trailing-bundle/hexana-cli-release-$CLI_VERSION.json" || die 'Self-test trailing-slash bundle differs'
   make_index "$bundle" "$index"
   jq -e '.stable.version == "0.2.0" and (.releases | length == 2)' "$index/releases.json" >/dev/null
+  jq -e '.releases[] | select(.version == "0.2.0") |
+    .platforms == ["linux-x64", "macos-arm64"] and
+    .artifactKinds == ["hexana-wasm-tools-native", "script-cli-native", "standard-cli-native"]' \
+    "$index/releases.json" >/dev/null || die 'Self-test index omitted the Wasm product or changed the target matrix'
   jq -e 'all(.artifacts[]; .githubReleaseAssetUrl == null)' "$bundle/hexana-cli-release-$CLI_VERSION.json" >/dev/null || die 'Self-test did not accept an empty GitHub base URL'
   original_archive="$temp/original-linux-standard.zip"
   cp "$input/$(archive_name linux-x64 hexana-cli)" "$original_archive"
@@ -663,7 +707,7 @@ self_test() {
   CLI_PUBLIC_PREFIX="$saved_public_prefix"
   validate_destinations
 
-  SELF_FAIL_UPLOAD="$(archive_name linux-x64 hexana-cli)"
+  SELF_FAIL_UPLOAD="$(archive_name linux-x64 hexana-wasm-tools)"
   export SELF_FAIL_UPLOAD
   set +e
   (upload_prefix "$bundle" "$CLI_S3_PREFIX" "$temp/incomplete-cache") > "$temp/incomplete.out" 2>&1
@@ -674,6 +718,7 @@ self_test() {
   unset SELF_FAIL_UPLOAD
 
   upload_prefix "$bundle" "$CLI_S3_PREFIX" "$temp/retry-cache"
+  [ "$(remote_names "$CLI_S3_PREFIX")" = "$(bundle_names "$bundle")" ] || die 'Self-test incomplete-upload retry lost a CLI artifact'
   remote_ledger="$(sha256_file "$storage/resources/hexana/cli/$CLI_VERSION/hexana-cli-release-$CLI_VERSION.ledger.json")"
   remote_manifest="$(sha256_file "$storage/resources/hexana/cli/$CLI_VERSION/hexana-cli-release-$CLI_VERSION.json")"
   make_index "$bundle" "$index"
@@ -715,12 +760,7 @@ self_test() {
   CLI_PUBLIC_PREFIX="$CLI_ROOT_PUBLIC_PREFIX/$CLI_VERSION"
   CLI_S3_PREFIX="$CLI_ROOT_S3_PREFIX$CLI_VERSION/"
   prerelease_input="$temp/prerelease-input"
-  mkdir -p "$prerelease_input"
-  for platform in macos-arm64 linux-x64; do
-    fixture_zip "$prerelease_input/$(archive_name "$platform" hexana-cli)" hexana-cli standard
-    fixture_zip "$prerelease_input/$(archive_name "$platform" hexana-cli-script)" hexana-cli-script script
-    fixture_identity "$prerelease_input" "$platform"
-  done
+  fixture_release_input "$prerelease_input"
   CLI_RELEASE_ARTIFACT_DIR="$prerelease_input"
   CLI_EXISTING_RELEASES_INDEX_FILE="$index/releases.json"
   PUBLISH_DOWNLOADS=false
@@ -734,12 +774,7 @@ self_test() {
   CLI_PUBLIC_PREFIX="$CLI_ROOT_PUBLIC_PREFIX/$CLI_VERSION"
   CLI_S3_PREFIX="$CLI_ROOT_S3_PREFIX$CLI_VERSION/"
   metadata_input="$temp/metadata-input"
-  mkdir -p "$metadata_input"
-  for platform in macos-arm64 linux-x64; do
-    fixture_zip "$metadata_input/$(archive_name "$platform" hexana-cli)" hexana-cli standard
-    fixture_zip "$metadata_input/$(archive_name "$platform" hexana-cli-script)" hexana-cli-script script
-    fixture_identity "$metadata_input" "$platform"
-  done
+  fixture_release_input "$metadata_input"
   CLI_RELEASE_ARTIFACT_DIR="$metadata_input"
   CLI_EXISTING_RELEASES_INDEX_FILE="$index/releases.json"
   metadata_bundle="$temp/metadata-bundle"
@@ -751,70 +786,63 @@ self_test() {
   CLI_VERSION='0.4.0'
   CLI_PUBLIC_PREFIX="$CLI_ROOT_PUBLIC_PREFIX/$CLI_VERSION"
   CLI_S3_PREFIX="$CLI_ROOT_S3_PREFIX$CLI_VERSION/"
-  original_descriptor="$CLI_RELEASE_DESCRIPTOR"
-  third_descriptor="$temp/third-product-descriptor.json"
-  jq '
-    .products += [{id: "fixture-cli", executable: "fixture-cli", artifactKind: "fixture-cli-native", launcher: "bin/fixture-cli"}] |
-    .artifacts += [.targets[] | {target: .id, product: "fixture-cli", archiveNameTemplate: ("fixture-cli-native-" + .id + "-{version}.zip")}]
-  ' "$original_descriptor" > "$third_descriptor"
-  CLI_RELEASE_DESCRIPTOR="$third_descriptor"
-  third_input="$temp/third-input"
-  third_bundle="$temp/third-bundle"
-  mkdir -p "$third_input"
-  for platform in macos-arm64 linux-x64; do
-    fixture_zip "$third_input/$(archive_name "$platform" hexana-cli)" hexana-cli standard
-    fixture_zip "$third_input/$(archive_name "$platform" hexana-cli-script)" hexana-cli-script script
-    fixture_zip "$third_input/$(archive_name "$platform" fixture-cli)" fixture-cli fixture
-    fixture_identity "$third_input" "$platform"
-  done
-  CLI_RELEASE_ARTIFACT_DIR="$third_input"
-  make_bundle "$third_bundle"
-  jq -e '(.artifacts | length == 6) and ([.artifacts[].kind] | unique | length == 3)' \
-    "$third_bundle/hexana-cli-release-$CLI_VERSION.json" >/dev/null || die 'Self-test lost the third product'
-  grep -F -q 'fixture-cli-native-linux-x64-0.4.0.zip' "$third_bundle/README.md" || die 'Self-test README omitted the third product'
+  wasm_input="$temp/wasm-input"
+  wasm_bundle="$temp/wasm-bundle"
+  fixture_release_input "$wasm_input"
+  CLI_RELEASE_ARTIFACT_DIR="$wasm_input"
+  make_bundle "$wasm_bundle"
+  assert_six_archive_bundle "$wasm_bundle"
 
-  rm "$third_input/$(archive_name linux-x64 fixture-cli)"
+  rm "$wasm_input/$(archive_name linux-x64 hexana-wasm-tools)" "$wasm_input/$(archive_name macos-arm64 hexana-wasm-tools)"
+  set +e
+  (make_bundle "$temp/old-four-bundle") > "$temp/old-four.out" 2>&1
+  status=$?
+  set -e
+  [ "$status" -ne 0 ] && grep -F -q 'missing=' "$temp/old-four.out" && [ ! -e "$temp/old-four-bundle" ] || die 'Self-test accepted the old four-archive input'
+  fixture_release_input "$wasm_input"
+
+  rm "$wasm_input/$(archive_name linux-x64 hexana-wasm-tools)"
   set +e
   (make_bundle "$temp/missing-third-bundle") > "$temp/missing-third.out" 2>&1
   status=$?
   set -e
   [ "$status" -ne 0 ] && grep -F -q 'missing=' "$temp/missing-third.out" || die 'Self-test accepted a missing descriptor-required archive'
-  fixture_zip "$third_input/$(archive_name linux-x64 fixture-cli)" fixture-cli fixture
-  fixture_identity "$third_input" linux-x64
+  fixture_release_input "$wasm_input"
 
-  printf 'extra\n' > "$third_input/extra-product.zip"
+  printf 'extra\n' > "$wasm_input/extra-product.zip"
   set +e
   (make_bundle "$temp/extra-third-bundle") > "$temp/extra-third.out" 2>&1
   status=$?
   set -e
   [ "$status" -ne 0 ] && grep -F -q 'extra=' "$temp/extra-third.out" || die 'Self-test accepted an extra product archive'
-  rm "$third_input/extra-product.zip"
+  rm "$wasm_input/extra-product.zip"
 
-  jq '(.artifacts[] | select(.name | startswith("fixture-cli-")) | .name) = "wrong-product.zip"' \
-    "$third_input/linux-x64-identity.json" > "$temp/wrong-product-identity.json"
-  mv "$temp/wrong-product-identity.json" "$third_input/linux-x64-identity.json"
+  jq '(.artifacts[] | select(.name | startswith("hexana-wasm-tools-")) | .name) = "wrong-product.zip"' \
+    "$wasm_input/linux-x64-identity.json" > "$temp/wrong-product-identity.json"
+  mv "$temp/wrong-product-identity.json" "$wasm_input/linux-x64-identity.json"
   set +e
   (make_bundle "$temp/wrong-third-bundle") > "$temp/wrong-third.out" 2>&1
   status=$?
   set -e
   [ "$status" -ne 0 ] && grep -F -q 'Unknown archive in linux-x64-identity.json' "$temp/wrong-third.out" || die 'Self-test accepted a wrong product identity'
-  fixture_identity "$third_input" linux-x64
+  fixture_identity "$wasm_input" linux-x64
 
-  fixture_zip "$third_input/$(archive_name linux-x64 fixture-cli)" wrong-launcher fixture
-  fixture_identity "$third_input" linux-x64
+  fixture_zip "$wasm_input/$(archive_name linux-x64 hexana-wasm-tools)" hexana-cli fixture
+  fixture_identity "$wasm_input" linux-x64
   set +e
   (make_bundle "$temp/wrong-launcher-bundle") > "$temp/wrong-launcher.out" 2>&1
   status=$?
   set -e
   [ "$status" -ne 0 ] && grep -F -q 'wrong layout' "$temp/wrong-launcher.out" || die 'Self-test accepted a wrong archive launcher'
-  fixture_zip "$third_input/$(archive_name linux-x64 fixture-cli)" fixture-cli fixture
-  fixture_identity "$third_input" linux-x64
+  fixture_release_input "$wasm_input"
+  make_bundle "$temp/restored-wasm-bundle"
+  assert_six_archive_bundle "$temp/restored-wasm-bundle"
+  log 'Breaking proofs passed: old four/missing Wasm archive, wrong identity and wrong launcher rejected; exact six restored'
 
   PUBLISH_DOWNLOADS=true
-  upload_prefix "$third_bundle" "$CLI_S3_PREFIX" "$temp/third-cache"
-  upload_prefix "$third_bundle" "$CLI_S3_PREFIX" "$temp/third-retry-cache"
-  [ "$(remote_names "$CLI_S3_PREFIX")" = "$(bundle_names "$third_bundle")" ] || die 'Self-test third-product retry changed the release inventory'
-  CLI_RELEASE_DESCRIPTOR="$original_descriptor"
+  upload_prefix "$wasm_bundle" "$CLI_S3_PREFIX" "$temp/wasm-cache"
+  upload_prefix "$wasm_bundle" "$CLI_S3_PREFIX" "$temp/wasm-retry-cache"
+  [ "$(remote_names "$CLI_S3_PREFIX")" = "$(bundle_names "$wasm_bundle")" ] || die 'Self-test six-archive retry changed the release inventory'
 
   trap - RETURN
   cleanup

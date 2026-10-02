@@ -15,8 +15,8 @@ generators resolve contracts through the authority for their consumer and emit c
   selected executable tools, output policy, and default output metadata.
 - `cli/metadata/src/main/gen/cli-release-artifacts.json` — versioned native release product, target, archive, and
   launcher expectations consumed by CLI downloads packaging. It includes only CLI products with
-  `nativeReleaseEnabled`; `hexana-wasm-tools` has generated CLI identity and membership, while its native release
-  stays deferred until the installed application and packaging slices are ready.
+  `nativeReleaseEnabled`; the current three products include `hexana-wasm-tools`, yielding exactly six archives
+  across macOS arm64 and Linux x64. Keep producer archive tasks aligned with this generated descriptor.
 - `HexanaCliToolset.kt` also emits source-slot and per-option metadata for executable CLI bindings. Bindings with
   `generatedInputRequest` emit a typed neutral request decoder and converter in that file; `summarize-module` is the
   current production consumer. The decoder keeps source bytes in `ToolInputSources`, while semantic parameter types,

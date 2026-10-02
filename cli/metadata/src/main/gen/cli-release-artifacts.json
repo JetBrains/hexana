@@ -29,6 +29,12 @@
             "executable": "hexana-cli-script",
             "artifactKind": "script-cli-native",
             "launcher": "bin/hexana-cli-script"
+        },
+        {
+            "id": "hexana-wasm-tools",
+            "executable": "hexana-wasm-tools",
+            "artifactKind": "hexana-wasm-tools-native",
+            "launcher": "bin/hexana-wasm-tools"
         }
     ],
     "artifacts": [
@@ -43,6 +49,11 @@
             "archiveNameTemplate": "hexana-cli-script-native-macos-arm64-{version}.zip"
         },
         {
+            "target": "macos-arm64",
+            "product": "hexana-wasm-tools",
+            "archiveNameTemplate": "hexana-wasm-tools-native-macos-arm64-{version}.zip"
+        },
+        {
             "target": "linux-x64",
             "product": "hexana-cli",
             "archiveNameTemplate": "hexana-cli-native-linux-x64-{version}.zip"
@@ -51,6 +62,11 @@
             "target": "linux-x64",
             "product": "hexana-cli-script",
             "archiveNameTemplate": "hexana-cli-script-native-linux-x64-{version}.zip"
+        },
+        {
+            "target": "linux-x64",
+            "product": "hexana-wasm-tools",
+            "archiveNameTemplate": "hexana-wasm-tools-native-linux-x64-{version}.zip"
         }
     ]
 }

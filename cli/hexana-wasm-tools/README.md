@@ -5,6 +5,11 @@
 the shared product frontend, and the existing workflow composers in `cli:wasm-tools-core`. It does not expose an MCP
 transport or reconstruct WIT source.
 
+Native release ZIPs are named `hexana-wasm-tools-native-macos-arm64-0.4.0.zip` and
+`hexana-wasm-tools-native-linux-x64-0.4.0.zip`. Each contains `bin/hexana-wasm-tools`, `LICENSE.txt`, this README,
+and `THIRD-PARTY-NOTICES.md`. Extract the archive for your platform and run `./bin/hexana-wasm-tools version`;
+the native executable does not require a JDK.
+
 Build and run the JVM layout with JDK 21:
 
 ```sh

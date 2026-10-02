@@ -416,7 +416,7 @@ val HexanaWasmToolsProductSpec = CliProductSpec(
     id = ProductId("hexana-wasm-tools"),
     executableName = "hexana-wasm-tools",
     description = "Focused WebAssembly structural and metadata reports.",
-    nativeReleaseEnabled = false,
+    nativeArtifactKind = "hexana-wasm-tools-native",
 )
 
 val HexanaCliProductRegistry = CliProductRegistry(
