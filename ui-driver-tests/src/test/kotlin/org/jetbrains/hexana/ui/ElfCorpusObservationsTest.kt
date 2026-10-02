@@ -6,6 +6,7 @@ import com.intellij.driver.sdk.ui.ui
 import com.intellij.tools.ide.util.common.logOutput
 import org.jetbrains.hexana.ui.framework.HexanaEditor
 import org.jetbrains.hexana.ui.framework.hexanaIde
+import org.jetbrains.hexana.ui.framework.menuShortcutModifier
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Path
@@ -431,7 +432,7 @@ class ElfCorpusObservationsTest {
                         driver.withContext {
                             val field = ui.x { byText(SEARCH_PLACEHOLDER) }.waitFound(90.seconds)
                             field.click()
-                            ui.keyboard { hotKey(java.awt.event.KeyEvent.VK_META, java.awt.event.KeyEvent.VK_V) }
+                            ui.keyboard { hotKey(menuShortcutModifier, java.awt.event.KeyEvent.VK_V) }
                             Thread.sleep(1_500)
                             ui.keyboard { repeat(resultIndex) { down() } }
                             ui.keyboard { enter() }

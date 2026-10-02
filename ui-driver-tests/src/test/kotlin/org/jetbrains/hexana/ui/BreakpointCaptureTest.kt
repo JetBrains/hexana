@@ -9,6 +9,7 @@ import com.intellij.tools.ide.util.common.logOutput
 import org.jetbrains.hexana.ui.framework.HexanaEditor
 import org.jetbrains.hexana.ui.framework.HexanaEditorSnapshot
 import org.jetbrains.hexana.ui.framework.hexanaIde
+import org.jetbrains.hexana.ui.framework.menuShortcutModifier
 import org.junit.jupiter.api.Tag
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
@@ -127,7 +128,7 @@ class BreakpointCaptureTest {
                             val field = ui.x { byText(SEARCH_PLACEHOLDER) }.waitFound(30.seconds)
                             field.click()
                             ui.keyboard {
-                                hotKey(java.awt.event.KeyEvent.VK_META, java.awt.event.KeyEvent.VK_V)
+                                hotKey(menuShortcutModifier, java.awt.event.KeyEvent.VK_V)
                             }
                             Thread.sleep(1_500)
                             ui.keyboard {

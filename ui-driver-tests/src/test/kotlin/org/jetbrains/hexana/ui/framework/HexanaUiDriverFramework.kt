@@ -23,6 +23,18 @@ private const val HEXANA_PLUGIN_ID = "org.jetbrains.hexana"
 private val defaultRunTimeout = 15.minutes
 private val defaultIndicatorTimeout = 5.minutes
 
+/**
+ * Platform-aware menu-shortcut modifier for remote-driver hotkeys: Cmd on macOS, Ctrl elsewhere.
+ * The driver Robot throws InvocationTargetException for VK_META on Windows agents, so never
+ * press VK_META unconditionally (TC InnoHub_HexFlow_UiTestsWindows, first seen build 1069251397).
+ */
+val menuShortcutModifier: Int =
+    if (System.getProperty("os.name").contains("mac", ignoreCase = true)) {
+        java.awt.event.KeyEvent.VK_META
+    } else {
+        java.awt.event.KeyEvent.VK_CONTROL
+    }
+
 internal fun hexanaIde(
     testName: String,
     projectDir: Path? = null,
