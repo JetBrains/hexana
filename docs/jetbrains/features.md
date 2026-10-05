@@ -1,12 +1,12 @@
 ---
 title: Hexana Feature Reference
 description: Complete capability reference for the Hexana IntelliJ plugin, grouped by surface.
-version: "0.15"
+version: "0.21"
 ---
 
 # Hexana Feature Reference
 
-This page enumerates every user-visible capability Hexana ships. Capabilities are grouped by *surface* (file type or interaction point), not by chronological release. For per-release changes, see [`changelog-0.15.md`](changelog-0.15.md), [`changelog-0.14.md`](changelog-0.14.md), [`changelog-0.13.md`](changelog-0.13.md), [`changelog-0.12.md`](changelog-0.12.md), [`changelog-0.11.md`](changelog-0.11.md), [`changelog-0.10.md`](changelog-0.10.md), and the prior [`changelog-0.9.md`](changelog-0.9.md).
+This page enumerates every user-visible capability Hexana ships. Capabilities are grouped by *surface* (file type or interaction point), not by chronological release. For per-release changes, see [`changelog-0.21.md`](changelog-0.21.md), [`changelog-0.20.md`](changelog-0.20.md), [`changelog-0.19.md`](changelog-0.19.md), [`changelog-0.18.md`](changelog-0.18.md), [`changelog-0.17.md`](changelog-0.17.md), [`changelog-0.16.md`](changelog-0.16.md), [`changelog-0.15.md`](changelog-0.15.md), [`changelog-0.14.md`](changelog-0.14.md), [`changelog-0.13.md`](changelog-0.13.md), [`changelog-0.12.md`](changelog-0.12.md), [`changelog-0.11.md`](changelog-0.11.md), [`changelog-0.10.md`](changelog-0.10.md), and the prior [`changelog-0.9.md`](changelog-0.9.md).
 
 ![Hexana opens a `.wasm` file with the structure tabs visible](../images/idea/01-wasm-overview.png)
 
@@ -79,6 +79,8 @@ When Hexana opens a `.wasm` file, it presents a structured editor with the follo
 - Legacy Exception Handling (`try`, `catch`, `throw`, `rethrow`, `delegate`, `catch_all`) supported alongside the finalised `try_table` proposal.
 - **(0.12)** Component Model binaries: the WAT tab discovers every embedded core module recursively through nested sub-components and renders the selected one with the same three-column offset / bytes / mnemonic layout. A selector switches between modules when a component contains more than one. In-memory component views (such as a submodule opened from a diff) also gain a WAT tab this way.
 - **(0.15)** Every `call_indirect` and `return_call_indirect` row shows its statically known dispatch candidates — see [call_indirect candidates](#call_indirect-dispatch-candidates-015). Right-clicking a WAT instruction row offers **Go to Source** when debug information is present — see [Go to Source](#go-to-source-015). Exception-handling instructions (`throw`, `try_table`, `throw_ref`) render with decoded index comments; clicking a `throw` row resolves where it is caught — see [Exception-handling visibility](#exception-handling-visibility-015).
+- **(0.16)** Glue-only Component Model binaries (those with no embedded core modules) now render in the WAT (virtualized) view. Component-level constructs (types, imports, exports, instances, aliases) appear with foldable per-section headers, search by name or offset, and a clickable offset gutter. Sections that cannot be decoded per record (e.g. `canon`) show an explicit "not decoded" row instead of failing the view. Rendering works from the in-memory buffer, so nested components opened from the **Components** tab are also covered.
+- **(0.21)** For WasmGC modules, every type entry in the type section gains inline annotations showing its kind and field count. **Alt+click** opens a popup with full structural detail (field names, types, supertypes, subtypes, byte offset). **Show Type Graph** in the context menu or popup opens an interactive canvas. See [WasmGC type graph (0.21)](#wasmgc-type-graph-021).
 
 #### Inline row editing
 
@@ -98,6 +100,16 @@ When Hexana opens a `.wasm` file, it presents a structured editor with the follo
 - Switch between `u8`, `u16`, `u32`, `u64`, `ascii`, and `utf8` renderings per data chunk.
 - Expand and collapse data bodies independently of their containing section.
 - Per-chunk view-mode choice persists across recompositions within a session.
+
+### Components tab (0.16)
+
+![Components tab of composed.wasm listing one embedded component as a navigable row, with the hex view and Data Inspector open alongside](../images/idea/40-components-tab-wat-virtualized.jpg)
+
+Component Model binaries that contain nested components gain a **Components** tab alongside the existing **Modules** tab. Clicking a row opens the nested component in its own editor view.
+
+- Opening is recursive: modules and components inside an already-opened nested view open the same way.
+- Byte offsets accumulate across levels, so every nested view is labelled with its absolute offset in the root file.
+- Nested in-memory views do not offer Run actions and gain the full tab set of a disk-opened file (including the plain Wat tab and, for core modules, DWARF panels).
 
 ### Information bar
 
@@ -153,11 +165,37 @@ The WASM diff gains a **Dispatch** tab alongside Size Impact and Entities. It sh
 - Each row distinguishes a brand-new or removed function from an existing function that merely entered or left the table.
 - Clicking a row opens the side-by-side WAT comparison for that candidate.
 
-## Native binary diff (0.14)
+## Binary diff
+
+### Section-level diff (0.14)
 
 ![Native binary diff comparing two versions of libjitview.so, with per-section size changes — .text grew by +1.2 KB, .eh_frame by −52 B, .symtab and .strtab by −48 B each](../images/idea/21-native-binary-diff.png)
 
-Select two native binary files (ELF, Mach-O, PE) in the project view and invoke **Compare With…** from the context menu. The diff lists every section found in either build with its Name, Change classification (Modified, Added, Removed), Base size, Head size, and byte delta Δ. Sections that are bit-for-bit identical collapse behind a "N identical sections hidden" line.
+Select two native binary files (ELF, Mach-O, PE) in the project view and invoke **Compare Binaries With…** from the context menu (the action accepts any binary Hexana recognises by content, including extensionless files). The diff lists every section in either build with its Name, Change classification (Modified, Added, Removed), Base size, Head size, and byte delta. Sections that are bit-for-bit identical collapse behind a "N identical sections hidden" line.
+
+### Per-function native diff (0.21)
+
+![Native binary diff for before.o vs after.o, Functions tab selected, showing hexana_add as Modified with sizes 18 B and 19 B, and side-by-side x86-64 disassembly below with the changed instruction highlighted](../images/idea/63-native-function-diff-light.png)
+
+ELF, Mach-O, and COFF comparisons gain a **Functions** tab alongside Size Impact:
+
+- Functions are paired by name; renames are recognised by identical code.
+- A function that only moved because earlier code grew is reported as *moved*, not *modified*.
+- Selecting a function shows its disassembly side by side, with shifted addresses ignored when lining up instructions.
+- PE images (`.exe`, `.dll`) and archives keep the section size comparison only.
+
+### Hex diff in the IDE diff window (0.21)
+
+![IDE hex diff window comparing two small binaries side by side, with changed bytes highlighted and an "N unchanged rows" collapsed fold, plus a Headers table below showing both files' metadata as a diff](../images/idea/62-hex-diff-light.png)
+
+Using the platform **Compare Files** action on two binaries (or viewing a binary's VCS change) opens a side-by-side hex view:
+
+- Changed bytes are highlighted; long unchanged stretches collapse into expandable "N unchanged rows" folds with previous / next difference navigation.
+- Sections are tinted in colours that do not clash with the diff highlights. A section bar for both sides pairs sections by name, marks which changed and by how much, and marks sections present on one side only. Clicking a section bar entry jumps to its first change.
+- Below the hex rows, the file's table tabs (Headers, Sections, Symbols, Imports, etc.) are shown once for both sides as diffs: rows tinted added / removed / modified, changed cells as `old → new`, and a "Changed rows" filter on by default. Tabs with changes are marked with their count. Tree tabs are not diffed yet.
+- The diff window's viewer switcher also offers the **Size and functions diff viewer** (size impact, entities, functions) for WASM and native pairs.
+
+The **Compare Binaries With…** action and the IDE's own Compare Files both open this diff window. **Compare Binaries With…** starts on the size and functions diff; the platform's Compare Files starts on the hex diff. Each viewer remembers the last tab picked.
 
 ## Component Model dependency diagram (0.14)
 
@@ -207,6 +245,19 @@ Exception-handling proposal instructions render with full decoded annotations, a
 
 ![Exceptions tab showing one exported entry point (func 2) with tag 0 in the Escapes uncaught column](../images/idea/30-exception-tab.jpg)
 
+## Problems tab (0.17)
+
+![Problems tab of a WASM binary listing "Unknown opcode" rows with byte offset, size, and message for each parse failure](../images/idea/46-wasm-problems-tab.jpg)
+
+When the parser encounters bytes it cannot decode (for example instructions from an unsupported proposal, or type-section encodings from the custom-descriptors proposal), it records the failure as an unparsed region rather than discarding the whole function body. Every such region becomes a row in the **Problems** tab.
+
+- Each row shows the kind, location, byte offset, size, and message.
+- Clicking a row tied to a function jumps to that function in the **WAT (virtualized)** tab (the context menu also offers the plain **Wat** tab, which scrolls to the nearest annotated line).
+- Rows not tied to a function select the failed byte range in the hex view.
+- The tab appears only when the module has parse problems.
+- **(0.17)** Covers core WASM modules. Also covers Component Model binaries from the same release: an unknown instance-encoding tag or a decode failure mid-entry records a problem row rather than crashing the dependency graph or the component WAT view.
+- **(0.21)** Check findings from scripting runs are stored per binary and merged into the Problems tab alongside parse problems. See [Scripting: checks and suites (0.21)](#scripting-checks-and-suites-021).
+
 ## Save As for nested content (0.15)
 
 **Save As** is available from the editor context menu for nested WASM modules (opened from a Component Model component or a diff submodule view) and for entries inside JAR and ZIP archives. The action writes the content to a file of your choice on disk.
@@ -245,6 +296,13 @@ Hexana registers a full `wit` Language with the IntelliJ Platform. The complete 
 - Hexana registers a generic binary file type covering `.bin` and similar generic-extension files. These open in the hex view directly.
 - File-type overrider claims `.wasm`, `.wat`, `.wit` for Hexana.
 - A separate magic-byte detector claims ELF, Mach-O, PE, and other native-binary formats — see [Native binaries](#native-binaries-experimental).
+- **(0.21)** Binaries whose name says nothing about their format open by content: a WebAssembly module written without a `.wasm` extension gets the full Wasm editor, and so does a Parquet or Arrow export dumped extensionless. Arrow IPC streams (conventionally `.arrows`) are now also accepted alongside `.arrow`; the format is resolved from the content.
+
+### Structural regions in the hex view (0.20)
+
+![ZIP file open in Hexana showing structural region tinting in the hex view with colored bands marking individual archive entries](../images/idea/57-structural-regions-zip.png)
+
+Structural region tinting, labels, prev/next navigation, and the **Structure** tool window now cover every format Hexana parses, not just WebAssembly and ELF. Added in 0.20: ZIP/JAR and TAR entries, `ar` members, COFF sections, DEX id tables, PCAP/PCAP-NG packets, Parquet row groups, Arrow batches, `resources.arsc` packages, class files, and protobuf descriptors. Where a region matches a tab the editor renders, its label switches to that tab.
 
 ## Native binaries (experimental)
 
@@ -277,6 +335,19 @@ The SBOM tab can match components against the **OSV** database and overlay known
 - With `--enable-sbom=class-level`, Hexana uses the compiled-in class/method tree to refine the verdict to **"vulnerable class retained"** vs **"eliminated by DCE"**.
 - Matching is **offline by default** (the OSV database is downloaded once; the component list never leaves your machine), with an opt-in online `api.osv.dev` query. Both toggles are off until enabled in **Settings → Tools → Hexana** — see [`settings.md`](settings.md#sbom-vulnerability-matching).
 
+### Memory tab for ELF binaries (0.19)
+
+![Memory tab for zephyr.elf showing Flash 29.6 KB of 1.0 MB and RAM 4.6 KB of 256.0 KB, with section rows and fill bars, sourced from zephyr.map](../images/idea/52-memory-tab.jpg)
+
+ELF binaries that are executable or shared objects gain a **Memory** tab: a section-level Flash/RAM budget view answering "how full is my device".
+
+- One block per memory region with used/capacity in human units (exact bytes on hover) and a fill bar that turns yellow at 80% and red at 95%; ROM regions listed before RAM.
+- Initialized data is annotated in both places it lives ("load image" in flash, "runtime copy" in RAM). `.bss` counts only toward RAM; `noinit` sections are marked.
+- Region capacities come from a linker map (`<name>.map`, `zephyr.map`, or any other `*.map` sibling), or from a `zephyr.dts` found next to the ELF. A stale map (section addresses do not match the ELF) is detected and ignored with a warning, and a footer names the active source.
+- Without any capacity source the tab still shows the full ROM/RAM breakdown from the ELF's load segments, capacity-free, and a **Link capacity source…** strip lets you point to a `.map`, a `.dts`, or enter manual flash/RAM sizes; the choice is remembered per file.
+- The budget measures address-space bytes, complementing the **Top** tab's file-byte profile: debug info that never reaches the device is excluded, and a zero-file-byte `.bss` heap arena shows up as the RAM consumer it is.
+- No symbols or DWARF required; fully stripped ELFs work.
+
 ## JVM artifacts
 
 Hexana opens Java archives, class files, and Hotspot JIT dumps as structured documents.
@@ -308,6 +379,12 @@ Archives are detected by `!<arch>\n` content magic, not extension. Plain MSVC im
 ### Android DEX — `.dex` (0.12)
 
 `.dex` files open with a basic classes-and-members view.
+
+#### Smali tab (0.20)
+
+![Android DEX file open with the Smali tab selected, showing baksmali-style Dalvik bytecode with resolved operands](../images/idea/56-dex-smali.png)
+
+A **Smali** tab renders baksmali-style Dalvik bytecode with resolved operands and decoded switch/fill-array payloads. Clicking an instruction row moves the hex view to that code unit.
 
 ### JIT dumps
 
@@ -362,6 +439,58 @@ The IDE's **Structure** tool window populates for WASM modules, WASM components,
 
 Any open binary can gain user-written JavaScript analysis tabs. Click **+** in the tab bar to add a script tab — a dialog with instructions and an API reference is shown. Use `print` to show information and `binary` to access the binary data; CSV and TSV output is shown as a table.
 
+- **(0.20)** The `binary` API is format-agnostic: `format`, `size`, `path`, `dir`, `structure`, `strings`, `sizeAnalysis`, `binary.tabs`/`binary.tab(name)`. `table(...)`/`row(...)` output is available; `open(path)` parses another file and returns the same members as `binary`.
+- **(0.20)** Script tabs are sandboxed. No host classes, processes, threads, or native access; a timeout and bounded output are enforced. The one way a script reaches the file system is `open(path)`, which parses into the same read-only API.
+- **(0.21)** The `run-script` CLI and MCP tool gain `hexana.defineCheck`, `hexana.defineFlags`, `hexana.defineSlice`, and suite support. See [Scripting: checks and suites (0.21)](#scripting-checks-and-suites-021).
+
+## WasmGC type graph (0.21)
+
+![WAT (virtualized) tab of kotlin-hello.wasm open on the Type Graph tab, showing nodes for struct types connected by subtype and field-reference edges, with depth and hops controls in the header](../images/idea/61-wasmgc-type-graph.png)
+
+For WasmGC modules, the **WAT (virtualized)** tab adds an interactive type graph alongside the inline type annotations and the Alt+click popup described in [WAT tab](#wat-tab--virtualised-editable).
+
+**Show Type Graph** (in a type row's context menu or the Alt+click popup) opens a canvas centered on the selected type:
+
+- Nodes are types; edges are subtype and field-reference relationships.
+- The initial view shows 1 subtype level and 1 field hop, configurable up to 5 via header dropdowns.
+- `FUNC`-typed field targets fold into a "+N funcs" badge on the parent; expanding materializes them.
+- Expanding or collapsing a node keeps all other nodes in place; newly revealed nodes appear below the expanded parent without relaying out the graph.
+- Rec-group frames draw only when their bounding box contains no non-member nodes; scattered groups get a left-edge accent bar per member instead of a frame.
+- Double-clicking a node jumps back to that type's row in the WAT panel.
+- Mouse wheel pans on both axes; Shift+wheel pans horizontally; Cmd/Ctrl+wheel (or Cmd/Ctrl+/-/0) zooms and resets. Overlay scrollbars track the pan offset; pan and zoom are clamped to content bounds.
+
+## Scripting: checks and suites (0.21)
+
+![IDE showing a .test.js suite file on the left and the SM test console on the right with a test result tree, passing tests checked, and one failure with a source location link](../images/idea/64-script-suite-run-light.png)
+
+The scripting API and the `run-script` CLI/MCP tool gain structured output APIs and a suite runner. This extends the existing custom scriptable JS tabs added in 0.13.
+
+### Check API
+
+`hexana.defineCheck(id, fn)` declares a named check whose findings land in the **Problems** tab and in SARIF 2.1.0 output. `hexana.defineFlags(schema)` accepts typed per-run parameters. `hexana.defineSlice(name, fn)` covers the existing table output. `binary.functions()`, `.imports()`, and `.exports()` are curated facade members (typed arrays, zero-arg call).
+
+### Suite runner
+
+A new `run_script_suite` CLI command and MCP tool run `*.test.js` suite files:
+
+- Each file declares artifact roles via `hexana.artifact(role, {formats})`.
+- Test structure: `describe` / `test` / `beforeEach` / `afterEach` with async support.
+- Seeded deterministic crypto (SHA-256 counter DRBG, seed from script and artifact content).
+- An ESM loader resolves bare specifiers from a `node_modules` directory rooted at the suite.
+- Results output as a human test report or a JUnit XML file; exit 1 on any failure.
+
+### Hexana Suite run configuration
+
+The **Hexana Suite** run configuration brings suites into the IDE:
+
+- The artifact-role table is filled from the suite's declarations.
+- Test results stream into the SM test console as a tree; failures carry source locations for navigation.
+- **Rerun Failed** and **Copy CLI Command** work.
+- Gutter run icons appear on `test()` and `describe()` calls in `*.test.js` files.
+- The binary editor context menu adds **Run Suites for This Binary** for suites whose required artifact role matches the open file.
+
+Check findings from any run are stored per binary and merged into the **Problems** tab rows next to parse problems; clicking a row navigates to the finding's function.
+
 ## Run configurations and debugging
 
 ![WASM run configuration dialog](../images/idea/11-wasm-run-config.png)
@@ -380,6 +509,78 @@ The runtime is selected per-project in **Settings → Build, Execution, Deployme
 Hexana detects which WASM proposals a module uses (Threads, SIMD, GC, EH, etc.) and propagates the correct `--wasm-features` (or runtime-equivalent) flags automatically. Debugging via DWARF works against breakpoints set in the source files the binary was compiled from, including when debug information is encoded in `.debug_loc` sections.
 
 The debugger is registered via `WasmDebugRunner` and `WasmLineBreakpointType`; breakpoints are placed on WAT lines and back-mapped through DWARF when available.
+
+### Wasm debugger tab (0.17)
+
+![Node.js debug session, Wasm tab selected, showing WAT disassembly of the paused function with the current instruction highlighted, and the operand stack on the right listing stack slot index, type, and value](../images/idea/42-debugger-nodejs-wasm-instructions-stack.jpg)
+
+A **Wasm** tab appears in the debugger tool window when debugging a wasm module. The left pane disassembles the paused function to WAT (same mnemonics and symbolic `call $name` operands as the WAT view) with the current instruction selected and following every step; the right pane shows the operand stack with typed entries.
+
+- **Stepping granularity**: while the Wasm tab is selected, one Step Over or Step Into advances exactly one wasm instruction (including `local.get`, `i32.const` and similar instructions that emit no machine code). Selecting another tab reverts to source-line granularity.
+- **Node.js and browser**: V8 natively steps one wasm instruction at a time; a single source line previously took several clicks to cross.
+- **wasmtime (0.17)**: the current-instruction highlight and symbolic operand stack work via the native-address-to-wasm-offset table serialized into every compiled module. Cranelift compiles the wasm stack machine away, so the 0.17 release shows static origins (local name, constant value, or producing instruction) per slot rather than live values.
+- **wasmtime with gdbstub (0.18)**: wasmtime debugging switched to wasmtime's built-in gdbstub guest debugger (`wasmtime run -g <port>`). Requires wasmtime 44 or newer. Live operand-stack values are now served by the gdbstub and shown next to their static origin (e.g. `7 (i32.add @0x7c)`). Arguments and locals show concrete values (previously hidden behind Cranelift's compilation). Requires an LLDB with the wasm process plugin; the managed wasi-sdk download provides one.
+- **WAMR (0.18)**: the Wasm tab also appears for WAMR sessions. WAMR reports wasm byte offsets directly, so per-instruction highlight and stepping work the same way as under wasmtime's gdbstub. Live values are shown for slots that mirror a local or global; computed intermediates keep their statically reconstructed origin. Requires `iwasm` built with `WAMR_BUILD_DEBUG_INTERP=1`.
+
+#### Linear-memory variables (0.17)
+
+![Node.js debug session paused in dwarf-memvars.rs, Variables pane showing v and p decoded from the module's linear memory via DWARF type information](../images/idea/41-debugger-nodejs-dwarf-support.jpg)
+
+Variables stored in linear memory now appear in the Variables view under Node.js. V8 only surfaces wasm locals and globals natively; anything on the shadow stack or at a fixed address (structs, arrays, enums) is now located via DWARF, read from the module's memory over the debugger protocol, and decoded per its DWARF type. Structs expand to members at their recorded offsets; enums render by enumerator name; arrays are bounded. Reads are capped per variable.
+
+#### Inlined frames (0.17)
+
+![Node.js debug session with inlined frames in the stack: two synthetic frames suffixed "(inlined)" shown as separate stack entries](../images/idea/45-debugger-nodejs-inline.jpg)
+
+When a pause lands inside inlined code, the stack shows synthetic frames suffixed `(inlined)`, reconstructed from DWARF: the innermost inlined function at the pause location and each caller at its recorded call site. Variables and evaluation stay attached to the physical frame; stepping remains physical.
+
+#### Conditional breakpoints (0.17)
+
+Conditional breakpoints work in wasm debug sessions. Condition expressions are translated from DWARF source variable names to V8's internal wasm-local names before registration, so conditions use the same names the Variables view shows.
+
+### Managed wasi-sdk installation (0.18)
+
+![Hexana WebAssembly settings page showing the wasi-sdk selector with wasi-sdk 33.0 chosen and a "Download wasi-sdk..." action](../images/idea/48-wasm-wasi-sdk.jpg)
+
+The WebAssembly settings page has a JDK-style selector that lists installed wasi-sdk versions and ends with a **Download wasi-sdk…** action opening a version chooser fed from the GitHub releases (download sizes shown, sha256 verified against the release digest, cancellable, versions installed side by side). The SDK lands under the IDE's common data directory, so one download serves every project and every JetBrains IDE on the machine.
+
+The LLDB selection is unchanged: the managed SDK takes effect only through an explicit **Use as LLDB path** action (in the settings row and in the install notification). When a debug session cannot find LLDB, a notification offers the download.
+
+### Breakpoints in binary views (0.20)
+
+![WAT (virtualized) tab of a WASM file showing a breakpoint set in the gutter; the Compatibility tab is visible in the tab bar](../images/idea/53-binary-view-breakpoints.png)
+
+![Disassembly tab of zephyr.elf showing a breakpoint set in the gutter during a firmware debug session](../images/idea/54-binary-view-breakpoints-elf.png)
+
+Click the gutter in the **WAT (virtualized)** or native **Disassembly** view to set a breakpoint without a running debug session. The breakpoint is anchored to the binary's content hash (not its path) and survives IDE restarts. The gutter icon reports what the runtime did with it: registered, instruction-precise, degraded, or stale after a rebuild.
+
+Supported for GraalWasm, Node.js, browser, wasmtime, WAMR, and firmware ELF (QEMU/Renode) sessions. Listed under **Hexana Binary Breakpoints** in the Breakpoints dialog. Conditions and hit counts are not supported yet.
+
+### Debugger Console tab (0.20)
+
+![Animated: the Debugger Console tab open inside the Debug tool window during a wasmtime debug session, exposing an interactive command line for LLDB commands](../images/idea/55-debugger-console.gif)
+
+A **Debugger Console** tab appears in the Debug tool window for sessions that have an underlying command-line debugger: LLDB commands for wasmtime and WAMR sessions, GDB commands for firmware QEMU/Renode sessions. Execution-control commands are routed through the IDE's own actions so the console cannot desync it. Not available for GraalWasm or CDP (Node.js/browser) sessions.
+
+### Firmware ELF Run and Debug (0.19)
+
+![Hexana Firmware run configuration dialog for an nRF52840dk target showing ELF file path, discovered DTS and config, Emulator set to Recommended, and tooling status in the Run tool window](../images/idea/50-zephyr-cortex-m-firmware.jpg)
+
+Opening a Zephyr-class ELF offers **Run** and **Debug** buttons in the editor header when a target profile resolves from the ELF header plus the `zephyr.dts` and `.config` found next to it.
+
+- **QEMU boards** (`qemu_cortex_m3`, `mps2/an521`, `qemu_riscv32`, `qemu_cortex_a53`, and others) launch with the exact machine flags from a curated table.
+- **MCU-class boards** run under Renode, on a built-in platform where Renode ships one (nRF52840 DK, STM32F4 Discovery) or on a platform generated from the devicetree by dts2repl.
+- Console output streams to the Run tool window; a startup watchdog reports "did not reach console output" naming the first unimplemented-peripheral access.
+- **Debug** attaches GDB in DAP mode (preferring the Zephyr SDK's `arm-zephyr-eabi-gdb-py`; minimum GDB 14 with Python) to the emulator's frozen gdb stub. An LLDB fallback covers machines without a suitable GDB.
+- Emulator tooling (Renode 1.16.1 portable build, per-architecture Zephyr SDK GDB toolchain, standalone CPython for dts2repl) is acquired on demand from the run configuration's Tools section with consent-gated, checksum-verified, cancellable downloads; each tool is also overridable by path in **Settings | Build | Firmware Emulator**. QEMU comes from the system package manager.
+- The configuration persists as a **Hexana Firmware** run configuration. A combination the target cannot support fails at validation time with a named reason and the alternative, never as a hung emulator.
+- Stop kills the whole emulator process tree; nothing is left behind on IDE exit.
+
+### Runtime compatibility tab (0.20)
+
+![Compatibility tab of a WASM file showing a table of WebAssembly proposals and runtime support across Chrome, Firefox, Safari, Node.js, Deno, and others; the proposals badge in the toolbar shows a warning](../images/idea/58-wasm-runtime-compatibility.png)
+
+Declare target runtimes under **Settings | Build, Execution, Deployment | WebAssembly | Runtime Compatibility** and every `.wasm` file is checked against them. The proposals badge turns into a warning for unsupported proposals and opens a **Compatibility** tab. With nothing declared, the tab lists which runtimes support each proposal. Verdicts come from WebAssembly's `features.json`; the declaration lives in `.hexana/runtimes.json`, shared with the VS Code extension.
 
 ## MCP server
 
@@ -465,6 +666,9 @@ Two registered `applicationConfigurable` entries (see [`settings.md`](settings.m
 
 - **Tools → Hexana** — general Hexana settings.
 - **Build, Execution, Deployment → WASM Runtime** — runtime selection (Wasmtime, WAMR, GraalVM), runtime paths, default-runtime configuration.
+- **(0.18)** The WebAssembly settings page gains a wasi-sdk selector with a **Download wasi-sdk…** action. See [Managed wasi-sdk installation (0.18)](#managed-wasi-sdk-installation-018).
+- **(0.19)** **Settings | Build | Firmware Emulator** overrides the per-tool paths for Renode, Zephyr SDK GDB, and CPython used by the firmware Run/Debug configuration.
+- **(0.20)** **Settings | Build, Execution, Deployment | WebAssembly | Runtime Compatibility** declares target runtimes for the compatibility check. See [Runtime compatibility tab (0.20)](#runtime-compatibility-tab-020).
 
 ## Usage statistics
 

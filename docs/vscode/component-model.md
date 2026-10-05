@@ -1,7 +1,7 @@
 ---
 title: Component Model Support in Hexana for VS Code
 description: How Hexana detects Component Model binaries, resolves their dependencies, composes them for execution, and navigates nested modules.
-version: "0.8.0"
+version: "0.13.0"
 ---
 
 # Component Model Support
@@ -15,6 +15,7 @@ A `.wasm` file is identified as a component when its header carries the Componen
 Tab availability adapts:
 
 - **Modules** tab appears (component-only).
+- **Components** tab appears (component-only, since 0.9.0): lists nested components that can be opened recursively.
 - **Dependencies** tab appears (component-only, since 0.8.0).
 - **Functions**, **Data**, **Custom**, **Monos**, **Garbage** tabs are hidden — these are core-Wasm-only.
 - **Exports**, **Imports**, **Top**, **WAT**, and **Summary** continue to apply, surfacing component-level entities (interface exports, resources, etc.) rather than core-Wasm function indices.
@@ -61,9 +62,17 @@ Any nested module visible in the Modules tab can be saved to a standalone file o
 
 Component Model binaries gain a **Dependencies** tab — a node graph showing the internal structure of the component: its core modules, nested components, the core and component instances created from them, and the interface imports and exports (such as `docs:adder/add@0.1.0`) that connect them to the outside.
 
+Since **0.11.0** the graph is navigable: double-click a module or nested component to open it in its own editor tab, or double-click an import/export to select its bytes in the hex view.
+
+![Navigable component dependency graph with nested component selected](../images/vscode/13-component-dependencies.jpg)
+
 The layout is computed from the component's binary structure; no external tool or network access is required. A **Legend** identifies node kinds by colour.
 
 This tab is available for Component Model binaries only.
+
+## Nested components (0.9.0+)
+
+Nested components of a WASM Component open in their own view from the **Components** tab, just like embedded core modules. Opening works recursively: a nested component that itself contains further nested components can be drilled into without limit. Each level of nesting shows the same analysis panel as a top-level component.
 
 ## Dependency resolution
 

@@ -1,12 +1,94 @@
 ---
 title: Hexana for VS Code — Release Notes
 description: Release notes for the Hexana VS Code extension.
-version: "0.8.0"
+version: "0.13.0"
 ---
 
 # Release Notes — Hexana for VS Code
 
 This page tracks releases of the VS Code extension.
+
+## 0.13.0
+
+Released **2026-10-01**.
+
+### Added
+
+- **Hex diff.** The diff view gains a second panel next to the size and functions comparison. Both panels are switchable at the top of the diff view. The hex diff shows the two binaries side by side with changed bytes highlighted (amber modified, red removed, green added), long unchanged stretches collapsed into expandable "N unchanged rows" lines, previous / next difference buttons, and section bars tinted in colors that do not clash with the diff highlighting. One section bar covers both sides and marks which sections changed; clicking jumps to that section. The table tabs (Headers, Sections, Symbols, Imports, and others) are diffed row by row below the hex panels. Works for any pair of supported binaries; a pair of different kinds gets the byte comparison alone.
+- **VS Code "Compare Selected" integration.** Right-clicking two binaries Hexana opens and choosing "Compare Selected" now opens Hexana's diff, starting on the hex diff panel. The "Hexana: Compare Files" command opens the diff starting on the size and functions panel, as before.
+- **Unified "Hexana: Compare Files" command.** "Compare WASM" and "Compare Binary" are merged into one command that selects the comparison mode from the files' contents. Existing keybindings to the old command names keep working.
+- **Functions diff for ELF, Mach-O, and COFF.** Comparing two ELF, Mach-O, or COFF files adds a "Functions" tab: functions are paired by name (renames are recognized by identical code), and selecting one shows the two versions' bytes side by side. PE images and archives keep the section size comparison only.
+- **Component Model diff.** "Compare WASM" gains a "Dispatch" tab (per-signature `call_indirect` candidates that entered or left the table) and Component Model comparison: submodules are paired, and clicking one opens its own comparison with a "Back" link.
+- **Searchable and sortable comparison tables.** All comparison tables support search and sort, and every tab loads in the background so a large binary does not freeze the view during comparison.
+
+## 0.12.0
+
+Released **2026-09-23**.
+
+### Added
+
+- **"Reopen Editor With" for any file.** "Hexana Binary Editor" is now offered for any file under "Reopen Editor With", so a binary with an extension Hexana does not claim (an Arrow stream saved as `.stream`, a firmware image as `.dat`) can be opened in it on request. Files Hexana claims keep opening automatically.
+- **Apache Parquet and Apache Arrow IPC support.** Schema, Row Groups / Record Batches, Metadata, and Data tabs, matching the IntelliJ plugin.
+- **Tar archive support.** `.tar` archives and gzipped archives (`.tar.gz`, `.tgz`) list entries, which can be opened in their own tab, including entries that are themselves gzipped.
+- **Protobuf wire message support.** Opaque Protobuf wire messages (`.pb`) are decoded without a schema.
+- **Arrow IPC streams (`.arrows`).** Arrow IPC streams open as streams; previously every `.arrow` file was read as an IPC file, so a stream showed no tabs.
+- **Content-based opening.** Binaries whose name says nothing about their format open by content: an extensionless WebAssembly module, Parquet, or Arrow export gets its full editor instead of a hex dump.
+
+## 0.11.0
+
+Released **2026-09-16**.
+
+### Added
+
+- **DWARF tab group.** `.debug_abbrev`, `.debug_info`, and `.debug_line` are grouped under a single "DWARF" tab with search; clicking a row selects its bytes.
+- **Navigable component dependency graph.** The Dependencies graph for WASM components is now navigable: double-click a module or nested component to open it, or an import/export to select its bytes.
+- **Script tabs (revised API).** Format-agnostic `binary` API: `format`, `size`, `path`, `dir`, `structure`, `strings`, `sizeAnalysis`, `binary.tabs` / `binary.tab(name)`, plus `table(...)` / `row(...)` output. `open(path)` parses another file into the same members as `binary` so a script can compare two files; call `open` at the top level of the script rather than inside a function.
+- **PCAP TLS decryption.** Support for decrypting TLS traffic in PCAP files based on a user-provided SSL key log file.
+- **Smali tab.** A "Smali" tab for Android `.dex` files shows baksmali-style Dalvik bytecode with resolved operands; clicking a row selects the code unit in the hex view.
+- **Android resource tables.** Basic support for viewing Android binary resource tables (`resources.arsc`).
+- **Runtime compatibility check.** Declare target runtimes via "Hexana: Configure Target Runtimes" and see unsupported proposals in the editor header and a new "Compatibility" tab. Configuration is shared with the IntelliJ plugin via `.hexana/runtimes.json`.
+
+## 0.10.0
+
+Released **2026-08-26**.
+
+### Added
+
+- **Wasmtime gdbstub debugging (wasmtime 44+).** The module runs under `wasmtime run -g` and LLDB attaches through the wasm process plugin. DWARF is read directly from the wasm binary, removing the JIT-loader and trap-advance workarounds of the native path. When the resolved wasmtime is older than 44, the extension also checks wasmtime's own installer location (`~/.wasmtime/bin`), and only then falls back to native debugging with a visible warning.
+- **Source-level stepping in wasm debug sessions (nodejs and browser runtimes).** A step now repeats V8's per-instruction step until the DWARF source line or stack depth changes, instead of pausing on every instruction of the same line. Frames without DWARF info keep single-instruction steps.
+- **Disassembly View integration.** "Open Disassembly View" while paused in a nodejs or browser wasm debug session shows one WAT-style instruction per row with module-absolute byte offsets as addresses and interleaved DWARF source locations. While the view is focused, stepping switches to per-instruction granularity.
+- **"Wasm" debugger view.** "Hexana: Open Wasm View" in the bottom panel (next to the Debug Console) mirrors the IntelliJ Wasm tab: WAT-style disassembly of the paused function with the current instruction highlighted on the left, and V8's operand stack (slot, type, value) on the right. While the view is visible each step moves one wasm instruction; otherwise stepping stays source-line based. nodejs and browser wasm sessions only. The view also works for wasmtime and WAMR debug sessions ("Hexana: Open WebAssembly Disassembly"): under the gdbstub (wasmtime 44+, WAMR) the paused instruction is highlighted exactly from the frame's program counter.
+- **Operand stack for wasmtime and WAMR.** Slot types and origins come from static reconstruction of the paused function; concrete values are read from the debug stub via the wasmtime 44+ gdbstub stack accessor, or for WAMR via its locals/globals packets for slots that provably mirror a local or global.
+- **Component Model wasm view.** The "Wasm" debugger view resolves disassembly, current-instruction highlight, and operand stack against the embedded core module the debug stub reports, instead of assuming a single core module.
+- **Managed wasi-sdk downloads.** "Hexana: Download wasi-sdk..." lists releases from GitHub (sizes shown, sha256-verified, cancellable) and installs versions side by side into the extension's global storage. "Hexana: wasi-sdk Status" shows the active version with update and version-switch actions. The SDK takes effect only via an explicit "Use as LLDB path" button that writes `hexana.lldbPath`.
+- **Problems tab for WASM binaries.** Lists regions the parser could not decode (unknown opcodes, unsupported proposal constructs) with location, offset, and message; clicking a row jumps to the function in the WAT tab.
+- **Problems tab for WASM Component binaries.** Core-instance entries the parser cannot decode are listed with offset and message instead of breaking the component dependency graph.
+- **Conditional breakpoints (nodejs runtime).** Conditions are evaluated by V8; expressions referencing wasm-level names work directly.
+- **Inlined call frames.** Inlined frames in the debug stack trace, reconstructed from DWARF and marked "(inlined)"; variables and evaluation stay on the physical frame.
+- **Linear-memory variable decoding.** Variables stored in linear memory (structs, arrays, enums; typical for unoptimized builds) are located via DWARF, read from the module's memory, and decoded per type in the Variables view when debugging with nodejs.
+- **Basic PCAP / PCAPng support.** View packets and open HTTP response bodies in a new tab.
+- **Basic tar archive support.** View tar entries directly in Hexana.
+- **Gzip support.** Compressed files of supported kinds (such as `.wasm.gz`) can be opened directly.
+
+### Fixed
+
+- **GCC-built ELF DWARF line resolution.** The "Debug Info" tab now resolves source line rows for GCC-built ELF binaries (Zephyr and similar firmware, DWARF4 and DWARF5 alike). GCC emits DWARF v2/v3 line-program headers even in `-gdwarf-4/5` builds; the line parser previously rejected them. Address-to-line resolution now matches `addr2line`.
+- **Custom-descriptors proposal parsing.** Parsing support for the custom-descriptors proposal type encodings (exact reference types, descriptor/describes clauses). WasmGC modules using them previously failed to parse.
+- **Partial decode retained on undecodable instruction.** Function bodies with a single undecodable instruction now keep everything decoded up to that point instead of turning into one unparsed blob.
+- **Wrong file on pause fixed for shared source names.** Fixed the wrong file opening on pause or breakpoints when several crates share a source file name; DWARF paths now match by longest path suffix instead of base name.
+
+## 0.9.0
+
+Released **2026-08-05**.
+
+### Added
+
+- **Size diagram ("Top" tab) for wasm and native binaries.** Shows the largest-by-size entities.
+- **Nested component support.** Nested components of a WASM Component open in their own view from the "Components" tab, like embedded core modules. Opening works recursively for components inside components.
+
+### Changed
+
+- **Improved large-table performance.** Optimized rendering of large table views.
 
 ## 0.8.0
 

@@ -1,7 +1,7 @@
 ---
 title: Hexana for VS Code — Feature Reference
 description: Complete capability reference for the Hexana VS Code extension.
-version: "0.8.0"
+version: "0.13.0"
 ---
 
 # Hexana for VS Code — Feature Reference
@@ -16,7 +16,7 @@ Since **0.4.0** the hex viewer supports **in-place byte editing**: select a byte
 
 ### Automatic binary kind detection
 
-Five kinds are detected and badged in the editor toolbar:
+Seven kinds are detected and badged in the editor toolbar:
 
 | Badge | Detection |
 |---|---|
@@ -25,8 +25,14 @@ Five kinds are detected and badged in the editor toolbar:
 | `wasm` | Falls back to generic when neither kind matches but the file is otherwise WebAssembly. |
 | `native` | ELF, Mach-O, or PE binary detected from magic bytes. |
 | `class` / `dex` | Java `.class` file or Android DEX file, opened directly in the hex viewer (0.5.0). |
+| `parquet` / `arrow` | Apache Parquet and Apache Arrow IPC files, opened with Schema, Row Groups / Record Batches, Metadata, and Data tabs (0.12.0). |
+| `pcap` / `pcapng` | Network capture files, opened with Header and Packets tabs (0.10.0). |
 
 Tab availability adapts per kind — Component Model files surface a **Modules** tab; core modules surface **Functions**, **Data**, **Custom**, **Monos**, **Garbage**; native binaries surface a structure tab covering sections, segments, and symbols.
+
+### Content-based opening (0.12.0+)
+
+Binaries whose filename gives no format hint open by content. An extensionless WebAssembly module, Parquet file, or Arrow export gets its full editor instead of a hex dump. Files that Hexana claims by extension continue to open automatically; files with unknown extensions can also be opened via **Reopen Editor With** (see below).
 
 ## Hex viewer
 
@@ -70,7 +76,13 @@ The decoded three-tab `.class` view (header / methods / constant pool) remains J
 
 Java `.class` files and Android DEX (`.dex`) files open directly in the Hexana custom editor by file-type detection, without needing to be inside a JAR or ZIP archive. Both formats open in the hex viewer. The full decoded class view (header / methods / constant pool) — available in the JetBrains plugin — is not present in the VS Code extension. See [What this version does not do](#what-this-version-does-not-do-yet).
 
-## Protocol Buffers descriptor sets (0.6.0+)
+Since **0.11.0**, `.dex` files have a **Smali** tab showing baksmali-style Dalvik bytecode with resolved operands. Clicking a row selects the corresponding code unit in the hex view.
+
+Since **0.11.0**, Android binary resource tables (`resources.arsc`) have basic viewing support.
+
+![Android DEX file with the Smali tab showing Dalvik bytecode](../images/vscode/23-dex-smali.png)
+
+## Protocol Buffers files (0.6.0+, 0.12.0+)
 
 Compiled Protocol Buffers descriptor sets — `.desc` and `.protoset` files, as produced by `protoc --descriptor_set_out` — open in the Hexana custom editor with five dedicated tabs:
 
@@ -82,16 +94,55 @@ Compiled Protocol Buffers descriptor sets — `.desc` and `.protoset` files, as 
 | **Enums** | Enum values with their names and numbers, grouped by qualified enum name. |
 | **Services** | Each RPC method with its input and output types and client / server streaming flags. |
 
-This is useful for inspecting what a compiled API surface actually contains — particularly when the source `.proto` files are not available. Schema-less wire messages (bare `.pb` files) are not auto-detected; that decoder currently ships in the JetBrains plugin only.
+This is useful for inspecting what a compiled API surface actually contains, particularly when the source `.proto` files are not available.
+
+Since **0.12.0**, opaque Protobuf wire messages (`.pb` files) are also decoded without a schema. The decoded view shows each field's path, type, and value.
+
+![Protobuf wire message open in Hexana with field decoding](../images/vscode/27-protobuf-pb.png)
+
+## Apache Parquet and Apache Arrow (0.12.0+)
+
+![Parquet file with Row Groups and Data tabs](../images/vscode/25-parquet-tabs.png)
+
+Apache Parquet (`.parquet`) and Apache Arrow IPC (`.arrow`, `.arrows`) files open with four dedicated tabs: **Schema**, **Row Groups** (Parquet) or **Record Batches** (Arrow), **Metadata**, and **Data**.
+
+Arrow IPC streams open as streams (conventionally `.arrows`). Previously every `.arrow` file was read as an IPC file, so a stream showed no tabs.
+
+![Arrow stream file open with Record Batches and Data tabs](../images/vscode/28-arrow-stream.png)
+
+## Tar archives (0.12.0+)
+
+![Tar archive entries listed in Hexana](../images/vscode/26-tar-gz-entries.png)
+
+`.tar` archives and gzipped archives (`.tar.gz`, `.tgz`) list their entries, which can be opened in their own tab. Entries that are themselves gzipped are supported.
+
+## Reopen Editor With (0.12.0+)
+
+![Reopen Editor With picker showing Hexana Binary Editor as an option](../images/vscode/29-reopen-editor-with.png)
+
+"Hexana Binary Editor" is offered for **any** file under **Reopen Editor With**, so a binary with an extension Hexana does not claim (an Arrow stream saved as `.stream`, a firmware image as `.dat`) can be opened in it on request. Files Hexana claims by extension continue to open automatically.
+
+## PCAP and PCAPng (0.10.0+)
+
+![PCAP file open in Hexana with Header and Packets tabs](../images/vscode/16-wasm-pcap.jpg)
+
+Network capture files open with a **Header** tab and a **Packets** tab listing packets with their timestamps, source, destination, protocol, and length. HTTP response bodies can be opened in a new tab.
+
+Since **0.11.0**, PCAP TLS traffic can be decrypted using a user-provided SSL key log file.
+
+![PCAP file with TLS decryption, showing decrypted sessions](../images/vscode/22-pcap-tls.png)
 
 ## Binary diff (0.7.0+)
 
 ![WASM diff — Size Impact tab](../images/vscode/10-wasm-diff.png)
 
-Hexana can compare two binary files of the same kind:
+Hexana can compare two binary files. A unified "Hexana: Compare Files" command (0.13.0) selects the comparison mode from the files' contents, replacing the separate "Compare WASM" and "Compare Binary" commands. Existing keybindings keep working.
 
-- **WASM diff** — compares two `.wasm` files. The **Size Impact** view shows the overall size delta and a per-entity breakdown (functions, data segments, imports, exports, tables, globals, memories) with columns for the base size, head size, and the delta. Select any function row to see a WAT body diff for that pair of functions in the lower pane.
-- **Native binary diff** — compares two ELF, Mach-O, or PE binaries, reporting size changes per section.
+- **WASM diff**: compares two `.wasm` files. The **Size Impact** view shows the overall size delta and a per-entity breakdown (functions, data segments, imports, exports, tables, globals, memories) with columns for the base size, head size, and the delta. Select any function row to see a WAT body diff for that pair of functions in the lower pane. Since 0.13.0, a "Dispatch" tab shows per-signature `call_indirect` candidates that entered or left the table, and Component Model comparison pairs submodules with a "Back" link.
+- **Native binary diff**: compares two ELF, Mach-O, or PE binaries, reporting size changes per section. Since 0.13.0, comparing two ELF, Mach-O, or COFF files also adds a **Functions** tab: functions are paired by name (renames recognized by identical code), and selecting one shows the two versions' bytes side by side.
+- **Hex diff (0.13.0)**: a second panel in the diff view shows both binaries side by side in hex. Changed bytes are highlighted (amber modified, red removed, green added); long unchanged stretches collapse into expandable "N unchanged rows" lines. Previous / next difference buttons and section bars mark which sections changed. The hex diff works for any pair of supported binaries.
+
+VS Code's built-in "Compare Selected" on two binaries Hexana opens now shows Hexana's diff, opening on the hex diff panel (0.13.0). All comparison tables are searchable and sortable, and every tab loads in the background.
 
 ## Data inspector (0.7.0+)
 
@@ -107,7 +158,7 @@ Nested WASM modules (embedded inside Component Model binaries) and individual en
 
 ## Analysis tabs
 
-Up to 12 built-in tabs inside the same editor, surfaced by binary kind, plus any number of **scriptable tabs** you add yourself (see below). All tables are **sortable** and **searchable** through the same built-in table control (unified in 0.6.0, with faster rendering). See [`analysis-tabs.md`](analysis-tabs.md) for the per-tab reference.
+Up to 14 built-in tabs inside the same editor, surfaced by binary kind, plus any number of **scriptable tabs** you add yourself (see below). All tables are **sortable** and **searchable** through the same built-in table control (unified in 0.6.0, with faster rendering). See [`analysis-tabs.md`](analysis-tabs.md) for the per-tab reference.
 
 | Tab | Core Wasm | Component | Generic |
 |---|---|---|---|
@@ -117,23 +168,36 @@ Up to 12 built-in tabs inside the same editor, surfaced by binary kind, plus any
 | Functions | ✓ | — | — |
 | Data | ✓ | — | — |
 | Custom | ✓ | — | — |
-| Top | ✓ | ✓ | — |
+| Top | ✓ | ✓ | ✓ (0.9.0) |
 | Monos | ✓ | — | — |
 | Garbage | ✓ | — | — |
 | Modules | — | ✓ | — |
 | WAT | ✓ | ✓ | — |
 | Dependencies | — | ✓ | — |
+| DWARF | ✓ | n/a | n/a |
+| Compatibility | ✓ | n/a | n/a |
+| Problems | ✓ | ✓ | n/a |
 
 The WAT tab uses **virtual scrolling** since 0.5.0 — only the visible portion of the text is rendered, which keeps navigation fast in large modules. For Component Model binaries, the WAT panel shows the embedded core modules with a selector when there are multiple (0.6.1). See [`analysis-tabs.md#wat`](analysis-tabs.md#wat) for details.
+
+The **DWARF** tab (0.11.0) groups `.debug_abbrev`, `.debug_info`, and `.debug_line` under a single searchable tab; clicking a row selects the corresponding bytes in the hex viewer.
+
+The **Compatibility** tab (0.11.0) lists proposals the module uses that are not supported by any configured target runtime. Declare runtimes via "Hexana: Configure Target Runtimes" and unsupported proposals appear both here and in the editor header.
+
+The **Problems** tab (0.10.0) lists regions the parser could not decode with location, offset, and message.
 
 ## Scriptable info tabs (0.6.0+)
 
 Click **"+"** in the analysis tab bar to add a custom script tab. A dialog opens with usage instructions and an API reference. Write a JavaScript script using:
 
 - **`print(text)`** — append a line to the tab's output. Output formatted as CSV or TSV is rendered as a table.
-- **`binary`** — the current file's parsed binary provider: raw bytes, decoded strings, size analysis, and format-specific data (for example, the decoded table of an Arrow file).
+- **`table(...)`** / **`row(...)`**: structured table output.
+- **`binary`**: the current file's parsed binary provider: `format`, `size`, `path`, `dir`, `structure`, `strings`, `sizeAnalysis`, `binary.tabs` / `binary.tab(name)`.
+- **`open(path)`**: parse another file into the same members as `binary`, so a script can compare two files. Call `open` at the top level of the script rather than inside a function.
 
-It is a lightweight way to add your own analysis layer — ad hoc queries, custom field decoders, whatever the built-in tabs don't cover.
+It is a lightweight way to add your own analysis layer: ad hoc queries, custom field decoders, cross-file comparisons.
+
+![Script tab open with format-agnostic binary API](../images/vscode/21-script-tab-open.png)
 
 ## Feedback button (0.6.0+)
 
@@ -153,15 +217,22 @@ See [`run-support.md`](run-support.md) for the full reference.
 
 A **Debug** button alongside Run launches the module under a debugger. Two backends, by runtime (GraalVM is run-only):
 
-- **`lldb`-backed — Wasmtime and WAMR.** Requires LLVM 22.1 or newer; breakpoints map to source via DWARF.
+- **gdbstub-backed (Wasmtime 44+, 0.10.0).** The module runs under `wasmtime run -g` and LLDB attaches through the wasm process plugin. DWARF is read directly from the binary. Older wasmtime falls back to the native `lldb` path with a visible warning.
+- **`lldb`-backed (Wasmtime older, WAMR).** Requires LLVM 22.1 or newer; breakpoints map to source via DWARF.
 - **CDP-backed — Node.js and Chrome (0.4.0).** Hexana launches Node.js with `--inspect-brk` or Chrome with `--remote-debugging-port`, connects over the Chrome DevTools Protocol, and translates DAP ↔ CDP.
 
-Across both backends:
+Across backends:
 
-- Set breakpoints in source files associated with the module (PC ↔ source mapping via DWARF on the `lldb` path).
+- Set breakpoints in source files associated with the module (PC ↔ source mapping via DWARF).
 - Step over, into, out; continue past hit breakpoints.
+- **Source-level stepping (0.10.0, nodejs/browser)**: a step repeats per-instruction wasm steps until the DWARF source line or stack depth changes.
 - Inspect local variables for compilers that emit DWARF with usable location expressions (Rust, C/C++, Emscripten with `-g`).
+- **Linear-memory variable decoding (0.10.0, nodejs)**: structs, arrays, and enums stored in linear memory are located via DWARF and decoded per type in the Variables view.
+- **Inlined call frames (0.10.0)**: inlined frames in the stack trace are marked "(inlined)".
+- **Conditional breakpoints (0.10.0, nodejs)**: conditions evaluated by V8; wasm-level names work directly.
 - Component Model nested-module breakpoints are supported on Wasmtime.
+- **"Wasm" debugger view (0.10.0)**: "Hexana: Open Wasm View" in the bottom panel shows WAT-style disassembly of the paused function with the current instruction highlighted, plus the operand stack (slot, type, value). Works for nodejs, browser, wasmtime gdbstub, and WAMR sessions.
+- **Disassembly View integration (0.10.0, nodejs/browser)**: "Open Disassembly View" while paused shows one WAT-style instruction per row with module-absolute byte offsets and interleaved DWARF source locations.
 
 See [`run-support.md`](run-support.md) for the full reference and known limitations.
 
@@ -228,9 +299,9 @@ Compared to the JetBrains IntelliJ plugin, the VS Code extension does **not** sh
 - Editable WAT view.
 - Java-side completion / inspections for GraalWasm or Chicory.
 - JS / TS-side type inference for `WebAssembly.instantiate`.
-- GraalVM debug (GraalVM is run-only). Node.js and browser debug landed in 0.4.0 over CDP; Wasmtime / WAMR debug over `lldb`.
+- GraalVM debug (GraalVM is run-only). Node.js and browser debug are available since 0.4.0 over CDP; Wasmtime debug uses the gdbstub path since 0.10.0 (wasmtime 44+) or `lldb` on older wasmtime; WAMR uses `lldb`.
 - Goto Symbol contribution scoped to `.wit` declarations and `.wasm` exports.
-- Decoded JVM artifact views — the three-tab `.class` view and the `.jit` viewer — and the switchable AOT / Cranelift disassembler backend. (Archives `.jar` / `.zip` / `.war` / `.apk` *do* open with a hex + entry list since 0.3.0; nested `.class` entries open in the hex viewer, not the decoded class view.)
+- Decoded JVM artifact views (the three-tab `.class` view and the `.jit` viewer) and the switchable AOT / Cranelift disassembler backend. (Archives `.jar` / `.zip` / `.war` / `.apk` open with a hex + entry list since 0.3.0; nested `.class` entries open in the hex viewer, not the decoded class view.)
 
 These are tracked for future versions; some are JetBrains-only by design (where they depend on IntelliJ Platform APIs without a VS Code equivalent).
 

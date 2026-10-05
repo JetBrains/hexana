@@ -1,12 +1,12 @@
 ---
 title: Running and Debugging WebAssembly from Hexana for VS Code
 description: How to run and debug .wasm modules through Wasmtime, WAMR, GraalVM, wazero, Node.js, or the browser — core modules with auto-generated import stubs and Component Model binaries with dependency composition.
-version: "0.8.0"
+version: "0.13.0"
 ---
 
 # Running and Debugging WebAssembly from Hexana for VS Code
 
-Hexana ships **Run** and **Debug** buttons in the editor toolbar. You can invoke a module through one of six runtimes — **Wasmtime**, **WAMR**, **GraalVM**, **wazero**, **Node.js**, or the **browser** — and (experimental) attach a debugger to all of them except GraalVM and wazero: an `lldb`-backed debugger on Wasmtime and WAMR, and (since **0.4.0**) a Chrome DevTools Protocol debugger on Node.js and Chrome. Node.js and the browser were added as run targets in 0.3.0; wazero was added in 0.6.0. Both core WebAssembly modules and Component Model binaries are supported, with different orchestration for each.
+Hexana ships **Run** and **Debug** buttons in the editor toolbar. You can invoke a module through one of six runtimes (**Wasmtime**, **WAMR**, **GraalVM**, **wazero**, **Node.js**, or the **browser**) and (experimental) attach a debugger to all of them except GraalVM and wazero. Wasmtime 44+ uses the built-in gdbstub (since **0.10.0**); older wasmtime and WAMR use an `lldb`-backed debugger (LLVM 22.1+ required); Node.js and Chrome use the Chrome DevTools Protocol (since **0.4.0**). Node.js and the browser were added as run targets in 0.3.0; wazero was added in 0.6.0. Both core WebAssembly modules and Component Model binaries are supported, with different orchestration for each.
 
 ## Requirements
 
@@ -18,7 +18,8 @@ Hexana ships **Run** and **Debug** buttons in the editor toolbar. You can invoke
 | **[wazero](https://wazero.io/)** | wazero runtime (0.6.0+) | Install the `wazero` CLI and make sure it is on `PATH`. |
 | **[wasm-tools](https://github.com/bytecodealliance/wasm-tools)** | Component Model composition (preferred) | `cargo install wasm-tools`. |
 | **[wac](https://github.com/bytecodealliance/wac)** | Component Model composition (alternative) | `cargo install wac-cli`. |
-| **LLVM 22.1+** (for debug only) | Wasmtime or WAMR debugging | Required because Hexana uses `lldb` 22.1+ wire-protocol features. |
+| **LLVM 22.1+** (for debug only) | WAMR debugging and Wasmtime older than 44 | Required because Hexana uses `lldb` 22.1+ wire-protocol features. |
+| **wasmtime 44+** | Wasmtime gdbstub debug path (0.10.0) | The gdbstub path is preferred; older wasmtime falls back to `lldb` with a visible warning. |
 
 At least one runtime must be on `PATH` (or pointed at via the corresponding setting, e.g. `hexana.wasmtimePath`). `wasm-tools` / `wac` must be on `PATH` only when running component-model binaries with unresolved imports.
 
@@ -78,9 +79,18 @@ Click **Run** (or **Debug** to launch under the debugger — see below) to start
 
 ## Debugging (experimental)
 
-Click **Debug** instead of **Run** to launch the module under a debugger. Hexana has two debug backends, selected by the runtime you pick; **GraalVM is run-only**.
+Click **Debug** instead of **Run** to launch the module under a debugger. Hexana has three debug backends, selected by the runtime and its version; **GraalVM is run-only**.
 
-### `lldb`-backed — Wasmtime and WAMR
+### gdbstub-backed: Wasmtime 44+ (0.10.0)
+
+The preferred Wasmtime debug path since 0.10.0:
+
+- The module runs under `wasmtime run -g`. LLDB attaches through the wasm process plugin.
+- DWARF is read directly from the wasm binary, removing the JIT-loader and trap-advance workarounds of the native path.
+- When the resolved wasmtime is older than 44, the extension checks wasmtime's own installer location (`~/.wasmtime/bin`), and only then falls back to native debugging with a visible warning in the Output channel.
+- The operand stack (slot, type, value) is available via the "Wasm" debugger view using the gdbstub stack accessor.
+
+### `lldb`-backed: Wasmtime (older than 44) and WAMR
 
 ![Breakpoint hit in Rust source with local variables and the call stack](../images/vscode/04-debug-breakpoint-variables.png)
 
@@ -96,12 +106,47 @@ Choosing **Debug** with the Node.js or browser runtime drives the runtime over t
 - Node.js is launched with `--inspect-brk`; Chrome with `--remote-debugging-port`. Hexana connects over a CDP WebSocket and translates DAP ↔ CDP so VS Code's standard debugger UI (breakpoints, stepping, call stack, variables) works against the WASM running in the JS host.
 - Chrome/Chromium is located from common install locations for your platform; install Google Chrome (or a Chromium build) to use the browser path.
 - No LLVM is required for this backend.
+- **Source-level stepping (0.10.0)**: a step repeats V8's per-instruction wasm step until the DWARF source line or stack depth changes. Frames without DWARF info keep single-instruction steps.
+- **Inlined call frames (0.10.0)**: inlined frames are marked "(inlined)" in the call stack; variables and evaluation stay on the physical frame.
+- **Conditional breakpoints (0.10.0)**: conditions are evaluated by V8; expressions referencing wasm-level names work directly.
+- **Linear-memory variables (0.10.0)**: structs, arrays, and enums stored in linear memory are located via DWARF, read from the module's memory, and decoded per type in the Variables view.
+
+### "Wasm" debugger view (0.10.0)
+
+![Wasm debugger view with WAT disassembly and operand stack](../images/vscode/17-wasm-debugger-view.jpg)
+
+"Hexana: Open Wasm View" opens a panel in the bottom area (next to the Debug Console) showing:
+
+- WAT-style disassembly of the paused function, with the current instruction highlighted.
+- The operand stack on the right: slot index, type, and value.
+
+While the view is visible, each step moves one wasm instruction. When the view is hidden, stepping returns to source-line granularity. Available for nodejs, browser, wasmtime gdbstub, and WAMR sessions. For Component Model binaries, disassembly and the operand stack resolve against the embedded core module the debug stub reports.
+
+### Disassembly View integration (0.10.0)
+
+![VS Code Disassembly View with WAT-style instructions and DWARF source locations](../images/vscode/18-wasm-disassembly-view.jpg)
+
+"Open Disassembly View" while paused in a nodejs or browser wasm debug session opens VS Code's built-in Disassembly View with:
+
+- One WAT-style instruction per row.
+- Module-absolute byte offsets as addresses.
+- Interleaved DWARF source location annotations.
+
+While the view is focused, stepping switches to per-instruction granularity, matching the Wasm view behavior.
+
+### Managed wasi-sdk (0.10.0)
+
+![wasi-sdk download command in VS Code with "Use as LLDB path" notification](../images/vscode/14-wasm-debug-wasi-sdk.jpg)
+
+- **"Hexana: Download wasi-sdk..."** lists GitHub releases with sizes shown, sha256-verified, and cancellable. Versions install side by side into the extension's global storage; one download serves all workspaces.
+- **"Hexana: wasi-sdk Status"** shows the active version with update and version-switch actions.
+- The SDK takes effect only via an explicit "Use as LLDB path" button, which writes the `hexana.lldbPath` setting. The lldb resolution order is otherwise unchanged.
 
 Known limitations:
 
 - GraalVM debug is not wired (run-only).
 - wazero debug is not wired (run-only).
-- Some compilers' DWARF (especially aggressive-CGU Rust builds) produces source paths that need fuzzy matching; if a breakpoint does not bind on the `lldb` path, check the **Debug Console** for the path Hexana tried to resolve and file a tracker issue.
+- Some compilers' DWARF (especially aggressive-CGU Rust builds) produces source paths that need fuzzy matching; if a breakpoint does not bind, check the **Debug Console** for the path Hexana tried to resolve and file a tracker issue.
 
 ## Terminal output
 
@@ -120,7 +165,7 @@ There is no setting to override `wasm-tools`, `wac`, WAMR, or GraalVM paths — 
 
 ## What this version does not do
 
-- **GraalVM debug is not wired.** GraalVM is run-only. (Wasmtime / WAMR debug over `lldb`; Node.js / Chrome debug over CDP since 0.4.0.)
+- **GraalVM debug is not wired.** GraalVM is run-only. (Wasmtime uses the gdbstub path since 0.10.0 or `lldb` on older wasmtime; WAMR uses `lldb`; Node.js / Chrome use CDP since 0.4.0.)
 - **wazero is run-only, modules only.** Debugging under wazero is not wired, and individual exported-function invocation is not supported on the wazero path.
 - **No proposal-flag selection UI.** Hexana detects which proposals the binary uses and passes the appropriate `--wasm-features` flags automatically, but there is no UI to override.
 - **No run-configuration persistence.** Each Run is ad-hoc; arguments are not saved between runs. The dialog remembers the last set within the editor session but discards them on close.

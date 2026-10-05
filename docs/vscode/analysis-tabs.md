@@ -1,12 +1,12 @@
 ---
 title: Hexana for VS Code — Analysis Tab Reference
 description: Per-tab reference for all 12 analysis panels inside the Hexana VS Code editor.
-version: "0.8.0"
+version: "0.13.0"
 ---
 
 # Analysis Tab Reference
 
-The Hexana custom editor shows up to **12 built-in tabs** in its analysis panel, surfaced based on the loaded binary's kind (core Wasm, Component Model, or generic), plus any number of scriptable tabs you add with **"+"** (see [`features.md`](features.md#scriptable-info-tabs-060)). All tables on every tab are **sortable** (click a header) and **searchable** (type in the built-in search field — unified across all tabs since 0.6.0). Protocol Buffers descriptor sets open with their own five-tab set, documented at the end of this page.
+The Hexana custom editor shows up to **15 built-in tabs** in its analysis panel, surfaced based on the loaded binary's kind (core Wasm, Component Model, or generic), plus any number of scriptable tabs you add with **"+"** (see [`features.md`](features.md#scriptable-info-tabs-060)). All tables on every tab are **sortable** (click a header) and **searchable** (type in the built-in search field, unified across all tabs since 0.6.0). Protocol Buffers descriptor sets open with their own five-tab set, documented at the end of this page.
 
 This page documents each tab in the order Hexana renders them.
 
@@ -181,7 +181,58 @@ The WAT view is read-only and is regenerated on each open. Inline WAT editing �
 
 A graph view of the internal dependency structure of the open component. Each node represents an entity in the component — a core module, a nested component, a core or component instance, or an interface import / export such as `docs:adder/add@0.1.0` — and edges show how they are wired together.
 
+Since **0.11.0** the graph is navigable: double-click a module or nested component to open it in its own editor tab, or double-click an import/export to select its bytes in the hex view.
+
 The diagram is generated from the component's binary structure and requires no external tool. A **Legend** identifies node kinds by colour.
+
+![Navigable component dependency graph with a nested component selected](../images/vscode/20-component-dependencies-nav.png)
+
+## DWARF (0.11.0+)
+
+**Available for**: core Wasm only.
+
+![DWARF tab grouping debug_abbrev, debug_info, and debug_line](../images/vscode/19-dwarf-tab.png)
+
+Groups the three DWARF debug sections under a single searchable tab:
+
+| Sub-tab | Contents |
+|---|---|
+| `.debug_abbrev` | Abbreviation table entries: code, tag, has-children flag, and attribute/form pairs. |
+| `.debug_info` | Compilation units and their DIE trees (DW_TAG, attributes, values). |
+| `.debug_line` | Line number programs: file tables and address-to-source-line mappings. |
+
+Clicking any row selects the corresponding bytes in the hex viewer.
+
+## Compatibility (0.11.0+)
+
+**Available for**: core Wasm only.
+
+![Compatibility tab showing an unsupported proposal for a configured runtime](../images/vscode/24-wasm-compatibility.png)
+
+Lists WebAssembly proposals the module uses that are not supported by any configured target runtime. Rows include the proposal name, its standardization phase, and which configured runtimes do not support it.
+
+Declare target runtimes via **"Hexana: Configure Target Runtimes"** (Command Palette). Configuration is stored in `.hexana/runtimes.json` in the workspace and is shared with the IntelliJ plugin. Unsupported proposals also appear in the editor header.
+
+## Problems (0.10.0+)
+
+**Available for**: core Wasm and Component Model.
+
+![Problems tab listing an undecodable import entry with offset and message](../images/vscode/15-wasm-problem-tab.jpg)
+
+Lists regions the parser could not decode:
+
+| Column | Description |
+|---|---|
+| ID | Row index. |
+| Kind | Category of the problem (e.g. Import entry, function body). |
+| Location | Section or function the problem is in. |
+| Offset | Byte offset in the file. |
+| Size | Byte span of the undecodable region. |
+| Message | Human-readable description of the failure. |
+
+Clicking a row that belongs to a function jumps to that function in the WAT tab. Rows without a function location select the bytes in the hex view.
+
+For Component Model binaries, core-instance entries the parser cannot decode are listed here instead of breaking the component dependency graph.
 
 ## Protocol Buffers descriptor set tabs (0.6.0+)
 

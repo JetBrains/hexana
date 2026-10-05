@@ -15,16 +15,16 @@ hide:
 
     Full IntelliJ Platform plugin — multi-tab `.wasm` editor with an editable virtualised WAT view, WAT and WIT language support, MCP server with Hexana tools, Java-side completion for GraalWasm and Chicory, JavaScript / TypeScript type inference for `WebAssembly.instantiate`, run and debug on Wasmtime / WAMR / GraalVM / wazero. WASM and native binary diffs with per-section size changes and a per-signature Dispatch tab, `call_indirect` dispatch candidates in the WAT view, Go to Source from DWARF or source maps, exception-handling visibility (Tags and Exceptions tabs), a Top size treemap, a Component Model dependency diagram, and a data inspector for the selected byte. Parquet and Arrow IPC inspection with a decoded Data tab, Protocol Buffers descriptor sets and schema-less wire decoding, a Structure tool window for WASM and ELF, scriptable JS analysis tabs. Experimental ELF / Mach-O / PE binary support, JVM artifact viewers (`.class`, `.jar`, `.war`, `.apk`, `.jit`), and a switchable disassembler backend (bytecode AOT or Cranelift native).
 
-    **Current release**: 0.15
+    **Current release**: 0.21
     Supported IDEs: IntelliJ IDEA 2025.2+, RustRover, WebStorm, CLion, PyCharm, Rider, PhpStorm.
 
     [Read the docs →](jetbrains/index.md)
 
 -   ### For Visual Studio Code
 
-    VS Code extension with a Compose-for-Web custom editor, virtual-scrolling hex viewer, 12 structural-analysis tabs, WASM and native binary diff actions, a data inspector, semantic section highlighting and navigation, a Component Model dependency diagram, a Protocol Buffers descriptor set viewer, scriptable custom tabs, Component Model dependency resolution, experimental debugging, an on-demand MCP server, and Run on Wasmtime / WAMR / GraalVM / wazero / Node.js / browser. ELF / Mach-O / PE binaries open with the same hex + structure layout.
+    VS Code extension with a Compose-for-Web custom editor, virtual-scrolling hex viewer, 15 structural-analysis tabs, WASM and native binary diff actions, a data inspector, semantic section highlighting and navigation, a Component Model dependency diagram, a Protocol Buffers descriptor set viewer, scriptable custom tabs, Component Model dependency resolution, experimental debugging, an on-demand MCP server, and Run on Wasmtime / WAMR / GraalVM / wazero / Node.js / browser. ELF / Mach-O / PE binaries open with the same hex + structure layout.
 
-    **Current release**: 0.8.0
+    **Current release**: 0.13.0
     Supports: VS Code 1.102+, Cursor, VSCodium, Code OSS, and other VS Code-based editors via Open VSX.
 
     [Read the docs →](vscode/index.md)
