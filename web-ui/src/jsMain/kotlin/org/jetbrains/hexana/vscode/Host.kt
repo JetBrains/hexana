@@ -159,7 +159,9 @@ class HttpReplayResponse(
     val status: Int,
     val statusText: String,
     val headers: List<HttpHeader>,
-    /** Content coding already undone by the host's client. */
+    /** Content coding already undone by the host's client; only the start when [bodyTruncated]. */
     val body: ByteArray,
     val elapsedMillis: Long,
+    /** `true` when the server sent more than [body] holds; the rest was not read. */
+    val bodyTruncated: Boolean = false,
 )

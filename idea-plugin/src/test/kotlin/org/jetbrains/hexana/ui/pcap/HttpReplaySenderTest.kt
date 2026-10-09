@@ -4,6 +4,7 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.hexana.pcap.HttpHeader
+import org.jetbrains.hexana.ui.decompressHttpBody
 import java.net.InetAddress
 import java.net.InetSocketAddress
 
@@ -31,6 +32,13 @@ class HttpReplaySenderTest : BasePlatformTestCase() {
             exchange.responseHeaders.add("X-Answer", "1")
             exchange.sendResponseHeaders(201, answer.size.toLong())
             exchange.responseBody.use { it.write(answer) }
+        }
+        server.createContext("/big") { exchange ->
+            exchange.sendResponseHeaders(200, 0)
+            exchange.responseBody.use { out ->
+                val chunk = ByteArray(1024 * 1024) { 'a'.code.toByte() }
+                repeat(HttpReplaySender.MAX_RESPONSE_BYTES / chunk.size + 1) { out.write(chunk) }
+            }
         }
         server.createContext("/moved") { exchange ->
             exchange.responseHeaders.add("Location", "/echo")
@@ -80,6 +88,28 @@ class HttpReplaySenderTest : BasePlatformTestCase() {
         val response = runBlocking { HttpReplaySender.send("GET", "$base/moved", emptyList(), ByteArray(0)) }
         assertEquals(302, response.statusCode)
         assertNull(received["method"])
+    }
+
+    fun testKeepsOnlyTheStartOfAHugeResponse() {
+        val response = runBlocking { HttpReplaySender.send("GET", "$base/big", emptyList(), ByteArray(0)) }
+        assertEquals(HttpReplaySender.MAX_RESPONSE_BYTES, response.body.size)
+        assertTrue(response.bodyTruncated)
+
+        val small = runBlocking { HttpReplaySender.send("GET", "$base/echo", emptyList(), ByteArray(0)) }
+        assertFalse(small.bodyTruncated)
+    }
+
+    fun testDecompressionStopsAtTheLimit() {
+        val zeros = ByteArray(1024 * 1024)
+        val gzip = java.io.ByteArrayOutputStream().also { out ->
+            java.util.zip.GZIPOutputStream(out).use { it.write(zeros) }
+        }.toByteArray()
+        val deflate = java.io.ByteArrayOutputStream().also { out ->
+            java.util.zip.DeflaterOutputStream(out).use { it.write(zeros) }
+        }.toByteArray()
+        assertEquals(1000, decompressHttpBody(gzip, "gzip", maxBytes = 1000).size)
+        assertEquals(1000, decompressHttpBody(deflate, "deflate", maxBytes = 1000).size)
+        assertEquals(zeros.size, decompressHttpBody(gzip, "gzip").size)
     }
 
     fun testRejectsNonHttpUrls() {

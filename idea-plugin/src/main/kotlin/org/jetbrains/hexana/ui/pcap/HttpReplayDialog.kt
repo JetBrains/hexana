@@ -52,12 +52,12 @@ internal class HttpReplayDialog(
     private val urlField = JBTextField(captured.url)
     private val headersArea = monospacedArea(HttpReplay.formatHeaders(HttpReplay.replayHeaders(captured)), rows = 8)
 
-    /** `null` when the captured body is binary; it is then sent as captured and cannot be edited. */
-    private val capturedBodyText: String? = HttpReplay.bodyAsText(captured.body)
+    /** `null` when the captured body is binary or too large; it is then sent as captured and cannot be edited. */
+    private val capturedBodyText: String? = HttpReplay.editableBodyText(captured.body)
     private val bodyArea = monospacedArea(capturedBodyText.orEmpty(), rows = 8).apply {
         if (capturedBodyText == null) {
             isEditable = false
-            text = "Binary body (${captured.body.size} bytes) is sent as captured."
+            text = HttpReplay.uneditableBodySummary(captured.body)
         }
     }
     private val responseArea = monospacedArea("", rows = 14).apply { isEditable = false }
@@ -119,7 +119,7 @@ internal class HttpReplayDialog(
             val shown = try {
                 val response = HttpReplaySender.send(request.method, request.url, request.headers, request.body)
                 "${response.version} ${response.statusCode}  ·  ${response.elapsedMillis} ms  ·  " +
-                    "${response.body.size} bytes" to formatResponse(response)
+                    "${response.body.size}${if (response.bodyTruncated) "+" else ""} bytes" to formatResponse(response)
             } catch (c: CancellationException) {
                 throw c
             } catch (t: Throwable) {
@@ -143,7 +143,7 @@ internal class HttpReplayDialog(
     private fun editedRequest(): HttpReplayRequest? {
         setErrorText(null)
         val method = (methodField.editor.item as? String ?: methodField.selectedItem as? String).orEmpty().trim()
-        if (method.isEmpty() || method.any { !it.isLetter() && it != '-' }) {
+        if (!HttpReplay.isValidMethod(method)) {
             setErrorText("Enter an HTTP method", methodField)
             return null
         }
@@ -173,8 +173,11 @@ internal class HttpReplayDialog(
         for (header in response.headers) append(header.name).append(": ").append(header.value).append('\n')
         append('\n')
         val encoding = response.headers.firstOrNull { it.name.equals("content-encoding", true) }?.value
-        val body = decompressHttpBody(response.body, encoding)
+        val body = decompressHttpBody(response.body, encoding, maxBytes = HttpReplaySender.MAX_RESPONSE_BYTES)
         val text = HttpReplay.bodyAsText(body)
+        if (response.bodyTruncated) {
+            append("(only the first ${response.body.size} bytes of the body were read)\n")
+        }
         when {
             body.isEmpty() -> append("(empty body)")
             text == null -> append("(binary body, ${body.size} bytes)")

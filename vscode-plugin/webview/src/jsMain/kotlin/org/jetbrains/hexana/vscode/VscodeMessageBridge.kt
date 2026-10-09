@@ -579,6 +579,7 @@ private object HttpReplaySends {
                     statusText = (data.statusText as? String).orEmpty(),
                     headers = headers,
                     body = messageBytesOrNull(data.body) ?: ByteArray(0),
+                    bodyTruncated = data.bodyTruncated == true,
                     elapsedMillis = (data.elapsedMs as? Number)?.toLong() ?: 0L,
                 ),
             )

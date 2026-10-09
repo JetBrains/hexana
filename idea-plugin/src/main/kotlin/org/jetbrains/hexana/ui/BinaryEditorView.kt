@@ -1742,15 +1742,16 @@ private fun PcapBinaryProvider.enrichPcapPacketsTab(
  * Decompresses an HTTP body according to the Content-Encoding header.
  * Supports gzip, deflate (raw deflate and zlib-wrapped), and x-gzip.
  * Returns the original bytes unchanged when the encoding is `identity`,
- * absent, or unrecognised.
+ * absent, or unrecognised. At most [maxBytes] are produced, so a
+ * compression bomb cannot fill the heap.
  */
-internal fun decompressHttpBody(body: ByteArray, contentEncoding: String?): ByteArray {
+internal fun decompressHttpBody(body: ByteArray, contentEncoding: String?, maxBytes: Int = Int.MAX_VALUE): ByteArray {
     if (body.isEmpty()) return body
     val encoding = contentEncoding?.trim()?.lowercase() ?: return body
     return when (encoding) {
         "gzip", "x-gzip" -> {
             try {
-                java.util.zip.GZIPInputStream(body.inputStream()).use { it.readBytes() }
+                java.util.zip.GZIPInputStream(body.inputStream()).use { it.readNBytes(maxBytes) }
             } catch (_: Exception) {
                 body
             }
@@ -1762,12 +1763,12 @@ internal fun decompressHttpBody(body: ByteArray, contentEncoding: String?): Byte
                 val inflater = java.util.zip.Inflater(false)
                 try {
                     inflater.setInput(body)
-                    val out = java.io.ByteArrayOutputStream(body.size * 2)
+                    val out = java.io.ByteArrayOutputStream(minOf(body.size.toLong() * 2, maxBytes.toLong()).toInt())
                     val buf = ByteArray(8192)
-                    while (!inflater.finished()) {
+                    while (!inflater.finished() && out.size() < maxBytes) {
                         val n = inflater.inflate(buf)
                         if (n == 0 && inflater.needsInput()) break
-                        out.write(buf, 0, n)
+                        out.write(buf, 0, minOf(n, maxBytes - out.size()))
                     }
                     out.toByteArray()
                 } finally {
@@ -1779,12 +1780,12 @@ internal fun decompressHttpBody(body: ByteArray, contentEncoding: String?): Byte
                     val inflater = java.util.zip.Inflater(true)
                     try {
                         inflater.setInput(body)
-                        val out = java.io.ByteArrayOutputStream(body.size * 2)
+                        val out = java.io.ByteArrayOutputStream(minOf(body.size.toLong() * 2, maxBytes.toLong()).toInt())
                         val buf = ByteArray(8192)
-                        while (!inflater.finished()) {
+                        while (!inflater.finished() && out.size() < maxBytes) {
                             val n = inflater.inflate(buf)
                             if (n == 0 && inflater.needsInput()) break
-                            out.write(buf, 0, n)
+                            out.write(buf, 0, minOf(n, maxBytes - out.size()))
                         }
                         out.toByteArray()
                     } finally {

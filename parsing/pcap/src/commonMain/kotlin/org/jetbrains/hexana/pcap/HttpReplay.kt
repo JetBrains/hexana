@@ -63,18 +63,34 @@ object HttpReplay {
      * §7.6.1), plus the framing headers a client recomputes for whatever body
      * it ends up sending. Replaying any of them verbatim would be wrong as soon
      * as the body is edited.
+     *
+     * `Proxy-Authorization` is meant for the proxy the capture went through; a
+     * replay goes straight to the server, which must not see the proxy's
+     * credentials.
      */
     private val CONNECTION_SPECIFIC_HEADERS = setOf(
         "connection", "keep-alive", "proxy-connection", "transfer-encoding",
-        "te", "trailer", "upgrade", "content-length",
+        "te", "trailer", "upgrade", "content-length", "proxy-authorization",
     )
 
     /** `true` for a header a replay must not copy from the capture; see [CONNECTION_SPECIFIC_HEADERS]. */
     fun isConnectionSpecific(name: String): Boolean = name.lowercase() in CONNECTION_SPECIFIC_HEADERS
 
     /** The headers of [request] worth sending again. */
-    fun replayHeaders(request: HttpReplayRequest): List<HttpHeader> =
-        request.headers.filterNot { isConnectionSpecific(it.name) }
+    fun replayHeaders(request: HttpReplayRequest): List<HttpHeader> = withoutConnectionSpecific(request.headers)
+
+    /**
+     * [headers] without [CONNECTION_SPECIFIC_HEADERS] and without the ones a
+     * `Connection` header names as connection-local (RFC 9110 §7.6.1).
+     */
+    private fun withoutConnectionSpecific(headers: List<HttpHeader>): List<HttpHeader> {
+        val nominated = headers
+            .filter { it.name.equals("connection", ignoreCase = true) }
+            .flatMap { it.value.split(',') }
+            .map { it.trim().lowercase() }
+            .filterTo(mutableSetOf()) { it.isNotEmpty() }
+        return headers.filterNot { isConnectionSpecific(it.name) || it.name.lowercase() in nominated }
+    }
 
     /**
      * Headers a client library sets itself and refuses, or ignores, when a
@@ -88,7 +104,13 @@ object HttpReplay {
      * request that needs a different virtual host has to change the URL.
      */
     fun sendableHeaders(headers: List<HttpHeader>): List<HttpHeader> =
-        headers.filterNot { isConnectionSpecific(it.name) || it.name.lowercase() in CLIENT_OWNED_HEADERS }
+        withoutConnectionSpecific(headers).filterNot { it.name.lowercase() in CLIENT_OWNED_HEADERS }
+
+    /** `true` when [method] is an HTTP method token (RFC 9110 §9.1, §5.6.2). */
+    fun isValidMethod(method: String): Boolean =
+        method.isNotEmpty() && method.all { it in 'A'..'Z' || it in 'a'..'z' || it in '0'..'9' || it in TCHAR_SYMBOLS }
+
+    private const val TCHAR_SYMBOLS = "!#$%&'*+-.^_`|~"
 
     /**
      * Parses the raw bytes of a request - [PcapDissector.reassembleHttpRequest]
@@ -106,7 +128,7 @@ object HttpReplay {
         val requestLine = lines.firstOrNull()?.split(' ')?.filter { it.isNotEmpty() } ?: return null
         if (requestLine.size != 3 || !requestLine[2].startsWith("HTTP/1.")) return null
         val (method, target, version) = requestLine
-        if (method.isEmpty() || method.any { !it.isLetter() }) return null
+        if (!isValidMethod(method)) return null
 
         val headers = lines.drop(1)
             .takeWhile { it.isNotEmpty() }
@@ -239,13 +261,34 @@ object HttpReplay {
     }
 
     /**
+     * The body as text for a replay editor, or `null` when it has to be sent as
+     * captured: binary, or larger than [MAX_EDITABLE_BODY_BYTES], which would
+     * stall the UI that decodes and shows it.
+     */
+    fun editableBodyText(body: ByteArray): String? =
+        if (body.size > MAX_EDITABLE_BODY_BYTES) null else bodyAsText(body)
+
+    /** What a replay editor shows instead of a body [editableBodyText] refused. */
+    fun uneditableBodySummary(body: ByteArray): String =
+        if (body.size > MAX_EDITABLE_BODY_BYTES) {
+            "Body (${body.size} bytes) is too large to edit and is sent as captured."
+        } else {
+            "Binary body (${body.size} bytes) is sent as captured."
+        }
+
+    /** Largest body a replay editor shows as editable text. */
+    const val MAX_EDITABLE_BODY_BYTES = 1024 * 1024
+
+    /**
      * `true` when the body of [request] cannot be written inline in a `.http`
-     * file and has to be referenced from a file instead: it is binary, or a
-     * line of it would read as HTTP Client syntax - a request separator, a
-     * file include or a response handler.
+     * file and has to be referenced from a file instead: it is binary, larger
+     * than [MAX_EDITABLE_BODY_BYTES] - a huge `.http` document is slow to
+     * create and open - or a line of it would read as HTTP Client syntax: a
+     * request separator, a file include or a response handler.
      */
     fun needsBodyFile(request: HttpReplayRequest): Boolean {
         if (request.body.isEmpty()) return false
+        if (request.body.size > MAX_EDITABLE_BODY_BYTES) return true
         val text = bodyAsText(request.body) ?: return true
         return text.lines().any { line ->
             line.startsWith("###") || line.startsWith("< ") || line.startsWith("> ") || line.startsWith("<> ")

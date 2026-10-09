@@ -152,6 +152,80 @@ class HttpReplayTest {
     }
 
     @Test
+    fun reassemblesOutOfOrderAndOverlappingSegmentsByTcpSequence() {
+        val head = "POST /upload HTTP/1.1\r\nHost: h\r\nContent-Length: 12\r\n\r\n"
+        val bodyStart = 100L + head.length
+        val pcap = buildCapture(
+            Segment(client, server, 40000, 80, seq = 100, payload = head),
+            // Arrives ahead of the segment before it, and reads like a request line.
+            Segment(client, server, 40000, 80, seq = bodyStart + 4, payload = "GET xyz"),
+            Segment(client, server, 40000, 80, seq = bodyStart, payload = "abcd"),
+            // Overlaps what is already there by three bytes.
+            Segment(client, server, 40000, 80, seq = bodyStart + 8, payload = "xyz!"),
+        )
+        val buffer = pcap.toCommonByteBuffer()
+        val parsed = assertNotNull(PcapParser.parse(buffer))
+        val raw = assertNotNull(PcapDissector.reassembleHttpRequest(buffer, parsed.packets, 0, parsed.header.network))
+        val request = assertNotNull(HttpReplay.parseRequest(raw, "http", "10.0.0.2", 80))
+        assertEquals("abcdGET xyz!", request.body.decodeToString())
+        assertTrue(request.bodyComplete)
+    }
+
+    @Test
+    fun reassemblyStopsAtAGapTheCaptureNeverFilled() {
+        val head = "POST /upload HTTP/1.1\r\nHost: h\r\nContent-Length: 8\r\n\r\n"
+        val pcap = buildCapture(
+            Segment(client, server, 40000, 80, seq = 100, payload = head + "ab"),
+            Segment(client, server, 40000, 80, seq = 100L + head.length + 4, payload = "efgh"),
+        )
+        val buffer = pcap.toCommonByteBuffer()
+        val parsed = assertNotNull(PcapParser.parse(buffer))
+        val raw = assertNotNull(PcapDissector.reassembleHttpRequest(buffer, parsed.packets, 0, parsed.header.network))
+        val request = assertNotNull(HttpReplay.parseRequest(raw, "http", "10.0.0.2", 80))
+        assertEquals("ab", request.body.decodeToString())
+        assertFalse(request.bodyComplete)
+    }
+
+    @Test
+    fun proxyCredentialsAreNotReplayedToTheOrigin() {
+        val raw = ("GET http://origin.test/p HTTP/1.1\r\nHost: origin.test\r\n" +
+            "Proxy-Authorization: Basic c2VjcmV0\r\nAccept: */*\r\n\r\n").encodeToByteArray()
+        val request = assertNotNull(HttpReplay.parseRequest(raw, "http", "10.0.0.2", 3128))
+        assertEquals("http://origin.test/p", request.url)
+        assertEquals(listOf("Host", "Accept"), HttpReplay.replayHeaders(request).map { it.name })
+        assertEquals(listOf("Accept"), HttpReplay.sendableHeaders(request.headers).map { it.name })
+        assertFalse(HttpReplay.toHttpClientFile(request, "t").contains("Proxy-Authorization", ignoreCase = true))
+    }
+
+    @Test
+    fun headersNamedByConnectionAreNotReplayed() {
+        val headers = HttpReplay.parseHeaders(
+            "Connection: keep-alive, X-Hop\nconnection: x-other\nX-HOP: 1\nX-Other: 2\nX-Kept: 3",
+        )
+        assertEquals(listOf(HttpHeader("X-Kept", "3")), HttpReplay.sendableHeaders(headers))
+        val request = HttpReplayRequest("GET", "http://h/", "HTTP/1.1", headers, ByteArray(0), bodyComplete = true)
+        assertEquals(listOf("X-Kept"), HttpReplay.replayHeaders(request).map { it.name })
+    }
+
+    @Test
+    fun methodsFollowTheHttpTokenGrammar() {
+        for (method in listOf("GET", "M-SEARCH", "BIND2", "X_CUSTOM.v1")) assertTrue(HttpReplay.isValidMethod(method), method)
+        for (method in listOf("", "GE T", "GET/", "ПОСТ", "A:B")) assertFalse(HttpReplay.isValidMethod(method), method)
+        val raw = "M-SEARCH /x HTTP/1.1\r\nHost: h\r\n\r\n".encodeToByteArray()
+        assertEquals("M-SEARCH", HttpReplay.parseRequest(raw, "http", "h", 80)?.method)
+    }
+
+    @Test
+    fun largeTextBodiesAreNeitherEditedNorInlined() {
+        val body = ByteArray(HttpReplay.MAX_EDITABLE_BODY_BYTES + 1) { 'a'.code.toByte() }
+        val request = HttpReplayRequest("POST", "http://h/", "HTTP/1.1", emptyList(), body, bodyComplete = true)
+        assertNull(HttpReplay.editableBodyText(body))
+        assertTrue(HttpReplay.uneditableBodySummary(body).contains("too large"))
+        assertTrue(HttpReplay.needsBodyFile(request))
+        assertEquals("abc", HttpReplay.editableBodyText("abc".encodeToByteArray()))
+    }
+
+    @Test
     fun responsePacketIsNotAReplayableRequest() {
         val pcap = buildCapture(Segment(server, client, 80, 40000, seq = 1, payload = "HTTP/1.1 200 OK\r\n\r\n12345678"))
         val buffer = pcap.toCommonByteBuffer()

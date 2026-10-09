@@ -35,13 +35,19 @@ export interface HttpReplayResponseMessage {
     status: number;
     statusText: string;
     headers: [string, string][];
+    /** At most [HTTP_REPLAY_MAX_RESPONSE_BYTES]. */
     body: Uint8Array;
+    /** `true` when the server sent more than `body` holds; the rest was not read. */
+    bodyTruncated: boolean;
     elapsedMs: number;
     error: string;
 }
 
 /** How long one replay may take, connect and body included. */
 export const HTTP_REPLAY_TIMEOUT_MS = 60_000;
+
+/** How much of a response body is kept, so a huge answer cannot fill the extension host's heap. */
+export const HTTP_REPLAY_MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
 
 /**
  * Sends a replayed request and describes the answer. Never throws: a failure
@@ -63,6 +69,7 @@ export async function sendHttpReplay(
         statusText: "",
         headers: [],
         body: new Uint8Array(0),
+        bodyTruncated: false,
         elapsedMs: 0,
         error: "",
     };
@@ -87,12 +94,47 @@ export async function sendHttpReplay(
         reply.status = response.status;
         reply.statusText = response.statusText;
         response.headers.forEach((value, name) => reply.headers.push([name, value]));
-        reply.body = new Uint8Array(await response.arrayBuffer());
+        const read = await readCapped(response, HTTP_REPLAY_MAX_RESPONSE_BYTES);
+        reply.body = read.body;
+        reply.bodyTruncated = read.truncated;
     } catch (err) {
         reply.error = describeFailure(err);
     }
     reply.elapsedMs = Date.now() - started;
     return reply;
+}
+
+/** The first [limit] bytes of [response]'s body; the rest is cancelled unread. */
+async function readCapped(response: Response, limit: number): Promise<{body: Uint8Array; truncated: boolean}> {
+    if (!response.body) {
+        return {body: new Uint8Array(0), truncated: false};
+    }
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    let truncated = false;
+    for (;;) {
+        const {done, value} = await reader.read();
+        if (done) {
+            break;
+        }
+        if (size + value.length > limit) {
+            chunks.push(value.subarray(0, limit - size));
+            size = limit;
+            truncated = true;
+            await reader.cancel();
+            break;
+        }
+        chunks.push(value);
+        size += value.length;
+    }
+    const body = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+        body.set(chunk, offset);
+        offset += chunk.length;
+    }
+    return {body, truncated};
 }
 
 /**

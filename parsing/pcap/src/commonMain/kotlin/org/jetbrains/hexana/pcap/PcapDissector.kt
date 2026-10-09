@@ -570,12 +570,12 @@ object PcapDissector {
      * [packetIndex] - request line, headers and body - or `null` when that
      * packet does not start one.
      *
-     * Later segments of the same stream and direction are appended until the
-     * body announced by `Content-Length` or chunked framing is complete, the
-     * next request starts, or the stream closes. Segments whose sequence number
-     * and length were already taken are retransmissions and are skipped. What
-     * comes back can be short when the capture missed segments;
-     * [HttpReplay.parseRequest] reports that as an incomplete body.
+     * Later segments of the same stream and direction are placed by TCP
+     * sequence number until the body announced by `Content-Length` or chunked
+     * framing is complete or the stream closes: retransmitted bytes are
+     * dropped, overlaps trimmed, and segments that arrive ahead of a gap wait
+     * for it to fill. What comes back stops at the first gap the capture never
+     * filled; [HttpReplay.parseRequest] reports that as an incomplete body.
      */
     fun reassembleHttpRequest(
         buffer: CommonByteBuffer,
@@ -590,7 +590,23 @@ object PcapDissector {
 
         val assembly = HttpRequestAssembly()
         assembly.append(buffer.slice(first.payloadOffset, first.payloadLen).toByteArray())
-        val taken = mutableSetOf(first.seq to first.payloadLen)
+        var nextSeq = (first.seq + first.payloadLen) and SEQ_MASK
+        // Segments past a gap, by sequence number, until the gap is filled.
+        val ahead = mutableListOf<Pair<Long, ByteArray>>()
+        var aheadBytes = 0L
+
+        /** Appends what of [bytes], starting at [seq], lies at or past [nextSeq]; `false` when it starts past it. */
+        fun place(seq: Long, bytes: ByteArray): Boolean {
+            val offset = seqDelta(seq, nextSeq)
+            if (offset > 0) return false
+            val skip = -offset
+            if (skip < bytes.size) {
+                assembly.append(if (skip == 0L) bytes else bytes.copyOfRange(skip.toInt(), bytes.size))
+                nextSeq = (nextSeq + bytes.size - skip) and SEQ_MASK
+            }
+            return true
+        }
+
         var closed = first.fin || first.rst
         var i = packetIndex + 1
         while (!closed && i < packets.size && !assembly.isComplete && assembly.size <= MAX_REPLAY_REQUEST_BYTES) {
@@ -598,14 +614,27 @@ object PcapDissector {
             if (tcp.srcIp != first.srcIp || tcp.dstIp != first.dstIp ||
                 tcp.srcPort != first.srcPort || tcp.dstPort != first.dstPort) continue
             closed = tcp.fin || tcp.rst
-            if (tcp.payloadLen <= 0 || !taken.add(tcp.seq to tcp.payloadLen)) continue
-            // A new request on a kept-alive connection means this one is over.
-            val preview = readAscii(buffer, tcp.payloadOffset, minOf(tcp.payloadLen, 16))
-            if (HTTP_METHODS.any { preview.startsWith(it) }) break
-            assembly.append(buffer.slice(tcp.payloadOffset, tcp.payloadLen).toByteArray())
+            if (tcp.payloadLen <= 0) continue
+            val bytes = buffer.slice(tcp.payloadOffset, tcp.payloadLen).toByteArray()
+            if (!place(tcp.seq, bytes)) {
+                if (aheadBytes + bytes.size > MAX_REPLAY_REQUEST_BYTES) break
+                ahead += tcp.seq to bytes
+                aheadBytes += bytes.size
+                continue
+            }
+            // The segment may have filled a gap that waiting segments were behind.
+            do {
+                val placed = ahead.indexOfFirst { (seq, held) -> place(seq, held) }
+                if (placed >= 0) aheadBytes -= ahead.removeAt(placed).second.size
+            } while (placed >= 0)
         }
         return assembly.toByteArray()
     }
+
+    /** [seq] minus [base] in 32-bit sequence space, negative when [seq] comes first. */
+    private fun seqDelta(seq: Long, base: Long): Long = ((seq - base) and SEQ_MASK).toInt().toLong()
+
+    private const val SEQ_MASK = 0xFFFF_FFFFL
 
     /** Upper bound on a reassembled request, so a runaway upload cannot fill the heap. */
     private const val MAX_REPLAY_REQUEST_BYTES = 64 * 1024 * 1024

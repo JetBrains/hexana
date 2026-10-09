@@ -36,8 +36,8 @@ fun HttpReplayDialog(captured: CapturedHttpRequest, onClose: () -> Unit) {
     val host = LocalHost.current
     val scope = rememberCoroutineScope()
     val original = captured.request
-    // `null` when the captured body is binary; it is then sent as captured and cannot be edited.
-    val originalBodyText = remember(captured) { HttpReplay.bodyAsText(original.body) }
+    // `null` when the captured body is binary or too large; it is then sent as captured and cannot be edited.
+    val originalBodyText = remember(captured) { HttpReplay.editableBodyText(original.body) }
 
     var method by remember(captured) { mutableStateOf(original.method) }
     var url by remember(captured) { mutableStateOf(original.url) }
@@ -94,7 +94,7 @@ fun HttpReplayDialog(captured: CapturedHttpRequest, onClose: () -> Unit) {
                     Label { Text("Body") }
                     if (originalBodyText == null) {
                         P({ classes("hexana-dialog-hint") }) {
-                            Text("Binary body (${original.body.size} bytes) is sent as captured.")
+                            Text(HttpReplay.uneditableBodySummary(original.body))
                         }
                     } else {
                         TextArea(body) {
@@ -142,7 +142,7 @@ fun HttpReplayDialog(captured: CapturedHttpRequest, onClose: () -> Unit) {
                                     request.body,
                                 ).await()
                                 status = "${answer.status} ${answer.statusText}".trim() +
-                                    "  ·  ${answer.elapsedMillis} ms  ·  ${answer.body.size} bytes"
+                                    "  ·  ${answer.elapsedMillis} ms  ·  ${answer.body.size}${if (answer.bodyTruncated) "+" else ""} bytes"
                                 response = formatReplayResponse(answer)
                             } catch (c: CancellationException) {
                                 throw c
@@ -177,7 +177,7 @@ internal fun editedReplayRequest(
     body: String,
 ): HttpReplayRequest {
     val trimmedMethod = method.trim()
-    require(trimmedMethod.isNotEmpty() && trimmedMethod.all { it.isLetter() || it == '-' }) { "Enter an HTTP method" }
+    require(HttpReplay.isValidMethod(trimmedMethod)) { "Enter an HTTP method" }
     val trimmedUrl = url.trim()
     require(trimmedUrl.startsWith("http://", true) || trimmedUrl.startsWith("https://", true)) {
         "Only http and https URLs can be replayed"
@@ -212,6 +212,7 @@ private const val MAX_SHOWN_BODY_CHARS = 512 * 1024
 internal fun formatReplayResponse(response: HttpReplayResponse): String = buildString {
     for (header in response.headers) append(header.name).append(": ").append(header.value).append('\n')
     append('\n')
+    if (response.bodyTruncated) append("(only the first ${response.body.size} bytes of the body were read)\n")
     val text = HttpReplay.bodyAsText(response.body)
     when {
         response.body.isEmpty() -> append("(empty body)")

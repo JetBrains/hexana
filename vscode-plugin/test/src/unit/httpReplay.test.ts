@@ -4,7 +4,7 @@ import * as http from 'http';
 import {AddressInfo} from 'net';
 import * as os from 'os';
 import * as path from 'path';
-import {sendHttpReplay, writeHttpRequestFile} from '../../../src/httpReplay';
+import {HTTP_REPLAY_MAX_RESPONSE_BYTES, sendHttpReplay, writeHttpRequestFile} from '../../../src/httpReplay';
 
 /**
  * The extension-host half of replaying a request captured in a PCAP. The
@@ -23,6 +23,11 @@ describe('http replay', function () {
             req.on('data', (c: Buffer) => chunks.push(c));
             req.on('end', () => {
                 received = {method: req.method, url: req.url, headers: req.headers, body: Buffer.concat(chunks).toString()};
+                if (req.url === '/big') {
+                    res.writeHead(200, {'Content-Type': 'application/octet-stream'});
+                    res.end(Buffer.alloc(HTTP_REPLAY_MAX_RESPONSE_BYTES + 4096, 0x61));
+                    return;
+                }
                 if (req.url === '/moved') {
                     res.writeHead(302, {Location: '/echo'});
                     res.end();
@@ -58,6 +63,7 @@ describe('http replay', function () {
         expect(reply.error).to.equal('');
         expect(reply.status).to.equal(201);
         expect(Buffer.from(reply.body).toString()).to.equal('pong');
+        expect(reply.bodyTruncated).to.equal(false);
         expect(reply.headers).to.deep.include(['x-answer', '1']);
 
         expect(received.method).to.equal('PATCH');
@@ -72,6 +78,14 @@ describe('http replay', function () {
 
         expect(reply.status).to.equal(302);
         expect(received.url).to.equal('/moved');
+    });
+
+    it('keeps only the start of a huge response', async function () {
+        const reply = await sendHttpReplay({requestId: 'r5', method: 'GET', url: `${base}/big`, headers: [], body: []});
+
+        expect(reply.error).to.equal('');
+        expect(reply.body.length).to.equal(HTTP_REPLAY_MAX_RESPONSE_BYTES);
+        expect(reply.bodyTruncated).to.equal(true);
     });
 
     it('turns failures into an error reply', async function () {

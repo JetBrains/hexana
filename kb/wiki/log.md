@@ -126,3 +126,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-09-30 — `entities/binary-inspections` — Problems → Compatibility navigation moved to double click (`TableTabDescriptor.rowDoubleClickAction`).
 - 2026-10-09 — `entities/pcap-http-replay` — PCAP HTTP request replay: common reassembly/parse/`.http` rendering, IntelliJ replay dialog and HTTP Client scratch export.
 - 2026-10-09 — `entities/pcap-http-replay` — VS Code replay dialog + REST Client `.http` export; row→request logic moved to common `HttpReplay.capturedRequest`.
+- 2026-10-09 — `entities/pcap-http-replay` — Review fixes: sequence-based TCP reassembly, Connection-nominated + Proxy-Authorization header stripping, tchar methods, 1 MiB editable/inline body limit, 16 MiB response cap.
