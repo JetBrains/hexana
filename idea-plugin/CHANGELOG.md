@@ -4,6 +4,7 @@
 
 ### Added
 - **Replay HTTP requests from a PCAP.** Right-click an HTTP request row in a capture's **Packets** tab and choose **Replay HTTP Request…** to edit the method, URL, headers and body and send it again; the response (status, headers, decompressed body) shows in the same window, which stays open so the request can be tweaked and re-sent. Cleartext requests are reassembled across TCP segments, skipping retransmissions; HTTPS requests work once an SSL key log decrypts them (one TLS record's worth of body). Connection-level headers and `Content-Length` are recomputed rather than copied, redirects are reported rather than followed, and TLS trusts the certificates the IDE trusts. In IDEs with the bundled **HTTP Client**, **Open Request in HTTP Client** (also in the replay window) writes the request to a scratch `.http` file instead; a binary body goes into a file next to it, read with `<`.
+- **Run** button for on-disk `.apk` files when a local Android SDK already has the emulator package (as installed by Android Studio): reuses a running emulator or boots an existing AVD (prompting to create one in Device Manager if there is none), installs the APK with `adb`, and launches its launcher activity.
 
 ### Changed
 

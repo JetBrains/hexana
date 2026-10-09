@@ -41,6 +41,8 @@ data class VscodeMessage(
     val settingValue: Boolean = false,
     val parentFileName: String? = null,
     val decompressed: Boolean = false,
+    /** The host found an Android SDK with the emulator, and the file is an on-disk APK. */
+    val canRunApk: Boolean = false,
     val keyLogPath: String = "",
     val keyLogContent: String = "",
     /** Raw `features.json`: the host's ETag-validated cache, or the snapshot it ships. */
@@ -653,7 +655,7 @@ fun postScriptTabRemovedToHost(scriptPath: String) {
  * [Host] implementation that delegates all calls to the VS Code extension host
  * via [vscodeApi.postMessage].
  */
-class VscodeHost : Host {
+class VscodeHost(override val canRunApk: Boolean = false) : Host {
     override fun showWat(watText: String, warning: String?) = postShowWatToHost(watText, warning)
     override fun runExport(
         exportName: String, invokeArgs: String, programArgs: String,
@@ -679,6 +681,7 @@ class VscodeHost : Host {
     override fun pickScriptFile() = postPickScriptFileToHost()
     override val canPickSslKeyLog: Boolean get() = true
     override fun pickSslKeyLog() = postPickSslKeyLogToHost()
+    override fun runApk() = postMessageToHost("run-apk")
     override val canEditRuntimeTargets: Boolean get() = true
     override fun saveRuntimeTargets(json: String, schema: String) =
         postSaveRuntimeTargetsToHost(json, schema)
@@ -718,6 +721,7 @@ internal fun decodeVscodeMessage(type: String, data: dynamic): VscodeMessage =
                 showSemanticHighlighting = (data.showSemanticHighlighting as? Boolean),
                 parentFileName = (data.parentFileName as? String),
                 decompressed = (data.decompressed as? Boolean) ?: false,
+                canRunApk = (data.canRunApk as? Boolean) ?: false,
                 featureCatalogJson = (data.featureCatalogJson as? String) ?: "",
                 runtimeTargetsJson = (data.runtimeTargetsJson as? String) ?: "",
             )

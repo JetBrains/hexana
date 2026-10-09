@@ -62,6 +62,16 @@ interface Host {
     fun pickSslKeyLog() {}
 
     /**
+     * Whether the host can install and launch the open APK on an Android emulator. The VS Code
+     * extension sets it for on-disk APKs when an Android SDK with the emulator is installed;
+     * false everywhere else, where the Run button is not rendered.
+     */
+    val canRunApk: Boolean get() = false
+
+    /** Asks the host to install and launch the open APK on an emulator. */
+    fun runApk() {}
+
+    /**
      * Whether the host can persist target runtimes to `.hexana/runtimes.json`. False where
      * there is no project directory to hold it — the browser webapp — and the runtime
      * settings dialog is then not offered.

@@ -397,6 +397,15 @@ fun EditorToolbar(
                 NativeImageBadges(nativeImageBadge, onOpenSbomTab = onOpenSbomTab)
             }
 
+            // Install and launch on an Android emulator. The host decides availability
+            // (it alone can see the SDK); the toolbar only rules out archive entries.
+            if (host.canRunApk && !isSubmodule && fileName.endsWith(".apk", ignoreCase = true)) {
+                ToolbarRunButton(
+                    tooltip = "Install and launch on an Android emulator",
+                    onClick = { host.runApk() },
+                )
+            }
+
             // SSL key log import for pcap captures. Only offered by hosts that
             // can show a file picker; the browser webapp parses captures in a
             // worker and has no way to push a key log back into the provider.

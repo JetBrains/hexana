@@ -127,3 +127,5 @@ Append one line per write-back: date, page, what changed.
 - 2026-10-09 — `entities/pcap-http-replay` — PCAP HTTP request replay: common reassembly/parse/`.http` rendering, IntelliJ replay dialog and HTTP Client scratch export.
 - 2026-10-09 — `entities/pcap-http-replay` — VS Code replay dialog + REST Client `.http` export; row→request logic moved to common `HttpReplay.capturedRequest`.
 - 2026-10-09 — `entities/pcap-http-replay` — Review fixes: sequence-based TCP reassembly, Connection-nominated + Proxy-Authorization header stripping, tchar methods, 1 MiB editable/inline body limit, 16 MiB response cap.
+- 2026-10-09 — `entities/apk-emulator-run` — APK Run button: installs and launches on an existing Android emulator AVD; hidden unless SDK + emulator + AVD are present.
+- 2026-10-09 — `entities/apk-emulator-run` — Logic moved to `plugins-shared` `AndroidEmulatorRun`; VS Code gets the APK Run button (`extension-lib` exports + `src/apkRunner.ts`, `Host.canRunApk`).

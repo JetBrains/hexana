@@ -678,3 +678,44 @@ export function wasiSdkArchiveTopLevelDir(version: number, os: string, arch: str
  * @param os one of "macos", "linux", "windows"
  */
 export function wasiSdkLldbRelativePath(os: string): string;
+
+// ── Android emulator ────────────────────────────────────────────────
+//
+// Thin wrappers around the shared AndroidEmulatorRun Kotlin object: SDK layout,
+// adb/emulator/aapt arguments, output parsing and user-facing messages, shared
+// with the IntelliJ plugin's APK runner. Arguments exclude the executable.
+
+export const androidBootTimeoutMs: number;
+export const androidBootPollIntervalMs: number;
+export const androidInstallTimeoutMs: number;
+export const androidBootTimeoutMessage: string;
+
+/** SDK roots to probe, in order; `envKeys`/`envValues` are parallel arrays. */
+export function androidSdkRootCandidates(envKeys: string[], envValues: string[], userHome: string | null): string[];
+export function androidPlatformToolsDir(root: string): string;
+export function androidAdbPath(root: string, isWindows: boolean): string;
+export function androidEmulatorPath(root: string, isWindows: boolean): string;
+export function androidBuildToolsDir(root: string): string;
+/** `aapt2`/`aapt` candidates, newest build-tools version first. */
+export function androidAaptCandidates(root: string, buildToolsVersions: string[], isWindows: boolean): string[];
+
+export function androidListAvdsArgs(): string[];
+export function androidBootArgs(avd: string): string[];
+export function androidDevicesArgs(): string[];
+export function androidBootCompletedArgs(serial: string): string[];
+export function androidInstallArgs(serial: string, apkPath: string): string[];
+export function androidPackageNameArgs(aaptPath: string, apkPath: string): string[];
+export function androidLaunchArgs(serial: string, packageName: string): string[];
+
+export function androidParseAvdList(output: string): string[];
+export function androidParseOnlineEmulators(output: string): string[];
+export function androidIsBootCompleted(output: string): boolean;
+export function androidParsePackageName(output: string): string | null;
+export function androidIsInstallSuccess(output: string): boolean;
+export function androidHasLauncherActivity(output: string): boolean;
+
+export function androidNoAvdMessage(apkName: string): string;
+export function androidInstallFailedMessage(output: string | null): string;
+export function androidUnknownPackageMessage(apkName: string, serial: string): string;
+export function androidNoLauncherMessage(packageName: string, serial: string): string;
+export function androidLaunchedMessage(packageName: string, serial: string): string;

@@ -43,6 +43,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaBinaryVirtualFile
+import org.jetbrains.hexana.android.AndroidSdk
+import org.jetbrains.hexana.android.runApkOnEmulator
 import org.jetbrains.hexana.document.EditableBinaryDocument
 import org.jetbrains.hexana.firmware.FirmwareTarget
 import org.jetbrains.hexana.firmware.FirmwareTargetService
@@ -495,6 +497,26 @@ private fun NormalModeContent(
                 },
             )
         }
+    }
+
+    // APK Run button: only for on-disk .apk files when a local Android SDK already
+    // has the emulator and at least one AVD. Detection runs `emulator -list-avds`.
+    val apkFile = filePath
+        ?.takeIf { !isSubmodule && it.endsWith(".apk", ignoreCase = true) }
+        ?.let { java.io.File(it) }
+        ?.takeIf { it.isFile }
+    val androidSdk by produceState<AndroidSdk?>(initialValue = null, apkFile) {
+        value = if (apkFile == null) null else withContext(Dispatchers.IO) { AndroidSdk.detect() }
+    }
+    val sdk = androidSdk
+    if (apkFile != null && sdk != null) {
+        FirmwareActionButton(
+            icon = AllIconsKeys.Actions.Execute,
+            label = "Run",
+            tooltip = "Install and launch on an Android emulator",
+            buttonBackground = if (JewelTheme.isDark) Color(0xFF0E639C) else Color(0xFF007ACC),
+            onClick = { runApkOnEmulator(state.project, apkFile, sdk) },
+        )
     }
 
     val proposals = remember(binaryProvider) {

@@ -29,6 +29,7 @@ fun BinaryEditorApp() {
     var pickedKeyLogContent by remember { mutableStateOf("") }
     var showSemanticHighlighting by remember { mutableStateOf(true) }
     var isDecompressed by remember { mutableStateOf(false) }
+    var canRunApk by remember { mutableStateOf(false) }
     var featureCatalogJson by remember { mutableStateOf("") }
     var runtimeTargetsJson by remember { mutableStateOf("") }
     var openRuntimeTargetsRequest by remember { mutableStateOf(0) }
@@ -40,7 +41,8 @@ fun BinaryEditorApp() {
     // the active element is a panel-table row and performs navigation.
     PanelTableRowKeyboardHandler()
 
-    CompositionLocalProvider(LocalHost provides VscodeHost()) {
+    val vscodeHost = remember(canRunApk) { VscodeHost(canRunApk = canRunApk) }
+    CompositionLocalProvider(LocalHost provides vscodeHost) {
         val host = LocalHost.current
 
         VscodeMessageListener { message ->
@@ -52,6 +54,7 @@ fun BinaryEditorApp() {
                     parentFileName = message.parentFileName
                     configuredRuntimeId = message.wasmRuntime
                     isDecompressed = message.decompressed
+                    canRunApk = message.canRunApk
                     message.showSemanticHighlighting?.let { showSemanticHighlighting = it }
                     // Pushed with the payload so the badges have their verdicts on first paint.
                     if (message.featureCatalogJson.isNotBlank()) {

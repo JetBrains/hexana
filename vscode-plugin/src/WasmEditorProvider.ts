@@ -4,6 +4,7 @@ import * as vscode from "vscode";
 import { getWebviewContent } from "./webviewContent";
 import { extensionLib, getSelectedRuntime, runExport } from "./WasmRunConfigurations";
 import { isNativeBinary } from "./NativeBinaryFileTypeDetector";
+import { detectAndroidSdk, runApkOnEmulator } from "./apkRunner";
 import { DIFF_LABEL_SEPARATOR, pairSidesForLabel } from "./diffTabPairing";
 import { WasmFeatureCatalogProvider } from "./wasmFeatureCatalog";
 import {
@@ -882,6 +883,12 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 if (parentFileName) {
                     loadMsg.parentFileName = parentFileName;
                 }
+                // Run on an Android emulator: on-disk top-level APKs only, when the SDK
+                // already has adb and the emulator package (file checks, no processes).
+                if (!parentFileName && document.uri.scheme === "file" &&
+                    document.uri.fsPath.toLowerCase().endsWith(".apk") && detectAndroidSdk()) {
+                    loadMsg.canRunApk = true;
+                }
                 webviewPanel.webview.postMessage(loadMsg);
                 this.restoreScriptTabs(document, webviewPanel);
                 this.restoreSslKeyLog(document, webviewPanel);
@@ -891,6 +898,8 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 this.navigateToParent(document);
             } else if (message.type === "run-export") {
                 runExport(document, message);
+            } else if (message.type === "run-apk") {
+                runApkOnEmulator(document.uri.fsPath);
             } else if (message.type === "open-zip-entry") {
                 this.openZipEntry(document, message);
             } else if (message.type === "open-tar-entry") {

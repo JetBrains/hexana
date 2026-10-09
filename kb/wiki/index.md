@@ -23,6 +23,9 @@ consult-first / write-back rules.
 - [[entities/binary-diff-provider]] — the shared diff model (`BinaryDiffProvider`): tabs,
   detail pane, navigation requests, how IntelliJ and VS Code host it, and the hex viewer in the
   IntelliJ diff window (`diff.DiffTool`).
+- [[entities/apk-emulator-run]] — the trivial APK Run button: SDK/AVD detection gate, boot →
+  install → launch flow shared by IntelliJ and VS Code via `AndroidEmulatorRun`, and what it
+  deliberately does not do.
 
 ## Sources
 
