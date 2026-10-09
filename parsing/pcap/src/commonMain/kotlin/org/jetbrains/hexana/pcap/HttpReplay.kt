@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.pcap
 
+import org.jetbrains.hexana.io.CommonByteBuffer
+
 /** One HTTP header line, in the order and spelling the client sent it. */
 data class HttpHeader(val name: String, val value: String)
 
@@ -28,6 +30,27 @@ class HttpReplayRequest(
 )
 
 /**
+ * A replayable request found in one row of a capture, with what a replay UI
+ * shows about where it came from.
+ */
+class CapturedHttpRequest(
+    val request: HttpReplayRequest,
+    /** One-based, matching the Packets table's "No." column. */
+    val packetNumber: Int,
+    /** e.g. `Captured 10.0.0.1:5000 → 10.0.0.2:80, decrypted from TLS`. */
+    val origin: String,
+) {
+    /** Title of the request in a `.http` file and in a replay window. */
+    val title: String get() = "Replay of packet #$packetNumber"
+
+    /** Name for the `.http` file a host writes the request into. */
+    val httpFileName: String get() = "hexana-replay-packet-$packetNumber.http"
+
+    /** Name for the file holding a body that cannot be inlined; see [HttpReplay.needsBodyFile]. */
+    val bodyFileName: String get() = "hexana-replay-packet-$packetNumber-body.bin"
+}
+
+/**
  * Turns captured HTTP requests into something that can be sent again, either
  * by a host's own client or as an IntelliJ HTTP Client `.http` file.
  *
@@ -52,6 +75,20 @@ object HttpReplay {
     /** The headers of [request] worth sending again. */
     fun replayHeaders(request: HttpReplayRequest): List<HttpHeader> =
         request.headers.filterNot { isConnectionSpecific(it.name) }
+
+    /**
+     * Headers a client library sets itself and refuses, or ignores, when a
+     * caller passes them: the JDK client and Node's `fetch` both own `Host`
+     * (it follows the URL) and `Expect`.
+     */
+    private val CLIENT_OWNED_HEADERS = setOf("host", "expect")
+
+    /**
+     * The subset of [headers] a host's HTTP client can actually send. A
+     * request that needs a different virtual host has to change the URL.
+     */
+    fun sendableHeaders(headers: List<HttpHeader>): List<HttpHeader> =
+        headers.filterNot { isConnectionSpecific(it.name) || it.name.lowercase() in CLIENT_OWNED_HEADERS }
 
     /**
      * Parses the raw bytes of a request - [PcapDissector.reassembleHttpRequest]
@@ -100,6 +137,45 @@ object HttpReplay {
             else -> ByteArray(0) to true
         }
         return HttpReplayRequest(method, url, version, headers, body, complete)
+    }
+
+    /**
+     * The request that starts in packet [index], or `null` when that row holds
+     * none. Cleartext requests are reassembled across segments; otherwise
+     * [decryptedPlaintext] is asked for the row's decrypted TLS record, whose
+     * request is replayed over `https` and holds only what that one record
+     * carries.
+     */
+    fun capturedRequest(
+        buffer: CommonByteBuffer,
+        packets: List<PcapPacketRecord>,
+        index: Int,
+        linkType: Long,
+        decryptedPlaintext: () -> ByteArray?,
+    ): CapturedHttpRequest? {
+        val endpoints = PcapDissector.tcpEndpoints(buffer, packets[index], linkType) ?: return null
+        val cleartext = PcapDissector.reassembleHttpRequest(buffer, packets, index, linkType)
+        val raw = cleartext ?: decryptedPlaintext() ?: return null
+        val scheme = if (cleartext != null) "http" else "https"
+        val request = parseRequest(raw, scheme, endpoints.destinationAddress, endpoints.destinationPort)
+            ?: return null
+        val origin = buildString {
+            append("Captured ${endpoints.sourceAddress}:${endpoints.sourcePort} → ")
+            append("${endpoints.destinationAddress}:${endpoints.destinationPort}")
+            if (scheme == "https") append(", decrypted from TLS")
+        }
+        return CapturedHttpRequest(request, index + 1, origin)
+    }
+
+    /**
+     * A cheap answer to whether a row can hold a replayable request, for
+     * deciding whether to offer replay in a menu: a cleartext request line
+     * the dissector already saw, or decrypted [plaintext] that starts one.
+     */
+    fun mayHoldRequest(packet: PcapDissectedPacket, plaintext: () -> ByteArray?): Boolean {
+        if (packet.protocol == "HTTP" && !packet.info.startsWith("HTTP/") && packet.decryptedData == null) return true
+        val bytes = plaintext() ?: return false
+        return parseRequest(bytes, "https", "", 443) != null
     }
 
     /**

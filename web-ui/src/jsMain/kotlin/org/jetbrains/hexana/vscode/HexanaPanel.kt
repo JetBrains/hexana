@@ -6,6 +6,8 @@ import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
+import org.jetbrains.hexana.pcap.CapturedHttpRequest
+import org.jetbrains.hexana.pcap.HttpReplay
 import org.jetbrains.hexana.pcap.PcapDissectedPacket
 import org.jetbrains.hexana.pcap.PcapDissector
 import org.jetbrains.hexana.pcap.PlaintextHttpBody
@@ -88,6 +90,9 @@ fun HexanaPanel(
     val host = LocalHost.current
     val pendingRun = rememberPendingRunState()
 
+    // Set by the Packets tab's "Replay HTTP Request…" row action.
+    var pendingHttpReplay by remember(provider) { mutableStateOf<CapturedHttpRequest?>(null) }
+
     // "Scroll WAT to function" channel from the Problems tab into WatTabContent;
     // consumed (reset to null) by the WAT view once handled.
     val watNavFuncIdx = remember { mutableStateOf<Int?>(null) }
@@ -150,7 +155,7 @@ fun HexanaPanel(
                     } else if (d.name == "Members" && provider is ArchiveBinaryProvider) {
                         enrichArchiveMembersTab(d, provider, host)
                     } else if (d.name == "Packets" && provider is PcapBinaryProvider) {
-                        enrichPcapPacketsTab(d, provider, host)
+                        enrichPcapPacketsTab(d, provider, host) { pendingHttpReplay = it }
                     } else d
                     tabEntries += TabEntry(
                         PanelTab(desc.name) { sel -> TableTabContent(desc, sel) },
@@ -367,6 +372,10 @@ fun HexanaPanel(
                 pendingRun.clearComponent()
             },
         )
+    }
+
+    pendingHttpReplay?.let { captured ->
+        HttpReplayDialog(captured, onClose = { pendingHttpReplay = null })
     }
 
     // -----------------------------------------------------------------------
@@ -814,6 +823,7 @@ private fun enrichPcapPacketsTab(
     tab: TableTabDescriptor,
     provider: PcapBinaryProvider,
     host: Host,
+    onReplay: (CapturedHttpRequest) -> Unit,
 ): TableTabDescriptor {
     val pcap = provider.parsedPcapFile ?: return tab
     val packets = pcap.packets
@@ -873,6 +883,40 @@ private fun enrichPcapPacketsTab(
         },
     )
 
+    fun decryptedPlaintext(index: Int): ByteArray? = tab.rowDetailProvider?.invoke(index)?.bytes
+
+    // isVisible runs on every menu build; the request itself is rebuilt on demand.
+    val isReplayableCache = HashMap<Int, Boolean>()
+    fun isReplayable(index: Int): Boolean = isReplayableCache.getOrPut(index) {
+        try {
+            HttpReplay.mayHoldRequest(dissected(index)) { decryptedPlaintext(index) }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    fun replayItem(label: String, open: (CapturedHttpRequest) -> Unit) = RowContextMenuItemDescriptor(
+        labelProvider = { label },
+        action = { index ->
+            try {
+                HttpReplay.capturedRequest(provider.bytes, packets, index, linkType) { decryptedPlaintext(index) }
+                    ?.let(open)
+            } catch (_: Exception) {
+                // The row did not hold a request after all; the menu said it might.
+            }
+        },
+        isVisible = { index -> isReplayable(index) },
+    )
+
+    val replayItems = if (host.canReplayHttp) {
+        listOf(
+            replayItem("Replay HTTP Request…", onReplay),
+            replayItem("Open Request as .http File") { host.openCapturedRequestFile(it) },
+        )
+    } else {
+        emptyList()
+    }
+
     return TableTabDescriptor(
         name = tab.name,
         columns = tab.columns,
@@ -881,7 +925,7 @@ private fun enrichPcapPacketsTab(
         defaultSortAscending = tab.defaultSortAscending,
         rowSelectionProvider = tab.rowSelectionProvider,
         rowAction = tab.rowAction,
-        contextMenuItems = tab.contextMenuItems + openBodyItem,
+        contextMenuItems = tab.contextMenuItems + openBodyItem + replayItems,
         rowClickAction = tab.rowClickAction,
         rowDoubleClickAction = tab.rowDoubleClickAction,
         dynamicContextMenuProvider = tab.dynamicContextMenuProvider,

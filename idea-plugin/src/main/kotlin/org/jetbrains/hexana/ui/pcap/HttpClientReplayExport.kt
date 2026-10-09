@@ -9,6 +9,7 @@ import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.jetbrains.hexana.pcap.CapturedHttpRequest
 import org.jetbrains.hexana.pcap.HttpReplay
 import org.jetbrains.hexana.pcap.HttpReplayRequest
 import java.nio.file.Files
@@ -31,11 +32,13 @@ internal object HttpClientReplayExport {
         get() = PluginManagerCore.isLoaded(HTTP_CLIENT_PLUGIN_ID)
 
     /**
-     * Writes [request] as a new scratch file named after [packetNumber] and
-     * opens it. A body that cannot be inlined is written next to it and read
-     * with `<`, so the scratch keeps working after the capture is closed.
+     * Writes [request] - [captured] as captured, or as edited in the replay
+     * window - as a new scratch file and opens it. A body that cannot be
+     * inlined is written next to it and read with `<`, so the scratch keeps
+     * working after the capture is closed.
      */
-    suspend fun open(project: Project, request: HttpReplayRequest, packetNumber: Int, comments: List<String>) {
+    suspend fun open(project: Project, captured: CapturedHttpRequest, request: HttpReplayRequest) {
+        val packetNumber = captured.packetNumber
         val bodyFileName = if (HttpReplay.needsBodyFile(request)) {
             withContext(Dispatchers.IO) {
                 val root = Path.of(ScratchFileService.getInstance().getRootPath(ScratchRootType.getInstance()))
@@ -49,14 +52,14 @@ internal object HttpClientReplayExport {
         }
         val text = HttpReplay.toHttpClientFile(
             request,
-            title = "Replay of packet #$packetNumber",
-            comments = comments,
+            title = captured.title,
+            comments = listOf(captured.origin),
             bodyFilePath = bodyFileName?.let { "./$it" },
         )
         withContext(Dispatchers.EDT) {
             if (project.isDisposed) return@withContext
             val file = ScratchRootType.getInstance()
-                .createScratchFile(project, "hexana-replay-packet-$packetNumber.http", null, text)
+                .createScratchFile(project, captured.httpFileName, null, text)
                 ?: return@withContext
             FileEditorManager.getInstance(project).openFile(file, true)
         }

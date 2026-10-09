@@ -19,6 +19,7 @@
     "../src/webviewContent.ts",
     "../src/wasmFeatureCatalog.ts",
     "../src/scriptBinaryRead.ts",
+    "../src/httpReplay.ts",
     "../src/diffTabPairing.ts"
   ],
   "exclude": [

@@ -5,6 +5,7 @@ import androidx.compose.runtime.DisposableEffect
 import kotlinx.browser.window
 import org.jetbrains.compose.web.css.selectors.CSSSelector.PseudoClass.host
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.pcap.HttpHeader
 import org.jetbrains.hexana.shared.WasmImportStubGenerator
 import org.jetbrains.hexana.shared.componentImportNames
 import org.jetbrains.hexana.shared.isRuntimeImport
@@ -521,6 +522,95 @@ private object ScriptBinaryReads {
     }
 }
 
+/**
+ * Replayed HTTP requests waiting for the extension host's answer. The host
+ * owns the network - the webview's CSP and CORS would stop the request - and
+ * answers each `http-replay-send` with exactly one `http-replay-response`.
+ * The deadline outlasts the host's own timeout, so it only fires when the
+ * reply itself got lost.
+ */
+private object HttpReplaySends {
+    private var nextId = 0
+    private val pending = mutableMapOf<String, (Result<HttpReplayResponse>) -> Unit>()
+
+    fun request(method: String, url: String, headers: List<HttpHeader>, body: ByteArray): Promise<HttpReplayResponse> {
+        val requestId = "http-replay-${nextId++}"
+        return Promise { resolve, reject ->
+            var deadline = -1
+            pending[requestId] = { result ->
+                if (deadline >= 0) window.clearTimeout(deadline)
+                result.fold({ resolve(it) }, { reject(it) })
+            }
+            val msg = js("({})")
+            msg.type = "http-replay-send"
+            msg.requestId = requestId
+            msg.method = method
+            msg.url = url
+            val jsHeaders = js("[]").unsafeCast<dynamic>()
+            for (header in headers) jsHeaders.push(arrayOf(header.name, header.value))
+            msg.headers = jsHeaders
+            val jsBody = js("[]").unsafeCast<dynamic>()
+            for (b in body) jsBody.push(b.toInt() and 0xFF)
+            msg.body = jsBody
+            vscodeApi.postMessage(msg)
+            deadline = window.setTimeout({
+                settle(requestId, Result.failure(RuntimeException("The editor did not answer.")))
+            }, HTTP_REPLAY_TIMEOUT_MS)
+        }
+    }
+
+    /** Settles the request a `http-replay-response` [data] answers. */
+    fun complete(data: dynamic) {
+        val requestId = (data.requestId as? String) ?: return
+        val error = (data.error as? String)?.takeIf { it.isNotBlank() }
+        val result = if (error != null) {
+            Result.failure(RuntimeException(error))
+        } else {
+            val headers = mutableListOf<HttpHeader>()
+            val jsHeaders = data.headers
+            val count = (jsHeaders?.length as? Number)?.toInt() ?: 0
+            for (i in 0 until count) {
+                val pair = jsHeaders[i]
+                headers += HttpHeader((pair[0] as? String).orEmpty(), (pair[1] as? String).orEmpty())
+            }
+            Result.success(
+                HttpReplayResponse(
+                    status = (data.status as? Number)?.toInt() ?: 0,
+                    statusText = (data.statusText as? String).orEmpty(),
+                    headers = headers,
+                    body = messageBytesOrNull(data.body) ?: ByteArray(0),
+                    elapsedMillis = (data.elapsedMs as? Number)?.toLong() ?: 0L,
+                ),
+            )
+        }
+        settle(requestId, result)
+    }
+
+    private fun settle(requestId: String, result: Result<HttpReplayResponse>) {
+        pending.remove(requestId)?.invoke(result)
+    }
+}
+
+/** Longer than the host's own 60-second replay timeout. */
+private const val HTTP_REPLAY_TIMEOUT_MS = 75_000
+
+/**
+ * Asks the extension host to write a replayed request as an `.http` file -
+ * and its body next to it, when [bodyFileName] is set - and open it for the
+ * REST Client extension.
+ */
+fun postOpenHttpRequestFileToHost(fileName: String, text: String, bodyFileName: String?, body: ByteArray) {
+    val msg = js("{}")
+    msg.type = "open-http-request-file"
+    msg.fileName = fileName
+    msg.text = text
+    msg.bodyFileName = bodyFileName ?: ""
+    val jsArray = js("[]").unsafeCast<dynamic>()
+    for (b in body) jsArray.push(b.toInt() and 0xFF)
+    msg.body = jsArray
+    vscodeApi.postMessage(msg)
+}
+
 /** Answers a pending `open(path)`; called from the inbound message listener. */
 internal fun completeScriptBinaryRead(requestId: String, bytes: ByteArray?, error: String?) =
     ScriptBinaryReads.complete(requestId, bytes, error)
@@ -598,6 +688,11 @@ class VscodeHost : Host {
     override fun readScriptFile(scriptPath: String) = postReadScriptFileToHost(scriptPath)
     override val canOpenBinaryFile: Boolean get() = true
     override fun readBinaryFile(path: String): Promise<ByteArray> = ScriptBinaryReads.request(path)
+    override val canReplayHttp: Boolean get() = true
+    override fun sendHttpReplay(method: String, url: String, headers: List<HttpHeader>, body: ByteArray) =
+        HttpReplaySends.request(method, url, headers, body)
+    override fun openHttpRequestFile(fileName: String, text: String, bodyFileName: String?, body: ByteArray) =
+        postOpenHttpRequestFileToHost(fileName, text, bodyFileName, body)
     override fun scriptTabAdded(scriptPath: String) = postScriptTabAddedToHost(scriptPath)
     override fun scriptTabRemoved(scriptPath: String) = postScriptTabRemovedToHost(scriptPath)
     override fun ready() = postMessageToHost("ready")
@@ -743,7 +838,11 @@ fun VscodeMessageListener(onMessage: (VscodeMessage) -> Unit) {
         val handler: (Event) -> Unit = { event ->
             val messageEvent = event as? MessageEvent
             val data = messageEvent?.data?.asDynamic()
-            if (data != null && data.type != undefined) {
+            if (data != null && data.type == "http-replay-response") {
+                // Answers a promise rather than changing UI state, so it never
+                // needs to reach the composable message handler.
+                HttpReplaySends.complete(data)
+            } else if (data != null && data.type != undefined) {
                 val type = data.type as String
                 // A message whose payload we did not expect can fail to
                 // decode. Whatever that costs, it must not cost a script its

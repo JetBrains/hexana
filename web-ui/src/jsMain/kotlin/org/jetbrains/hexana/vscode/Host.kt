@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.staticCompositionLocalOf
+import org.jetbrains.hexana.pcap.HttpHeader
 import kotlin.js.Promise
 
 /**
@@ -114,6 +115,35 @@ interface Host {
      */
     fun readBinaryFile(path: String): Promise<ByteArray> =
         Promise.reject(UnsupportedOperationException("This host cannot read local files."))
+    /**
+     * Whether the host can send a request replayed from a PCAP and write it
+     * as an `.http` file. False in the browser webapp, where CORS would block
+     * the request and there is no editor to open a file in; the replay actions
+     * are then not offered.
+     */
+    val canReplayHttp: Boolean get() = false
+
+    /**
+     * Sends a replayed request. [headers] are what a client may send - see
+     * `HttpReplay.sendableHeaders`. The promise rejects with a message meant
+     * for the user when nothing came back; any HTTP status resolves.
+     */
+    fun sendHttpReplay(
+        method: String,
+        url: String,
+        headers: List<HttpHeader>,
+        body: ByteArray,
+    ): Promise<HttpReplayResponse> =
+        Promise.reject(UnsupportedOperationException("This host cannot send HTTP requests."))
+
+    /**
+     * Writes [text], a request in `.http` syntax, to [fileName] and opens it,
+     * so a REST client can send it. When [bodyFileName] is set, the text reads
+     * that file with `< ./name` and the host writes [body] to it, next to the
+     * request.
+     */
+    fun openHttpRequestFile(fileName: String, text: String, bodyFileName: String?, body: ByteArray) {}
+
     fun scriptTabAdded(scriptPath: String)
     fun scriptTabRemoved(scriptPath: String)
     fun ready()
@@ -124,3 +154,12 @@ interface Host {
  * composable via [androidx.compose.runtime.CompositionLocalProvider].
  */
 val LocalHost = staticCompositionLocalOf<Host> { error("Host not provided") }
+/** What a server answered to a request sent through [Host.sendHttpReplay]. */
+class HttpReplayResponse(
+    val status: Int,
+    val statusText: String,
+    val headers: List<HttpHeader>,
+    /** Content coding already undone by the host's client. */
+    val body: ByteArray,
+    val elapsedMillis: Long,
+)

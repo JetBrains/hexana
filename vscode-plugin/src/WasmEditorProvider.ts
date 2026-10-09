@@ -14,6 +14,13 @@ import {
     scriptOpenOversizeReason,
     toWebviewBytes,
 } from "./scriptBinaryRead";
+import {
+    HttpReplaySendMessage,
+    HttpRequestFileMessage,
+    REST_CLIENT_EXTENSION_ID,
+    sendHttpReplay,
+    writeHttpRequestFile,
+} from "./httpReplay";
 
 /**
  * In-memory store for nested module byte arrays.
@@ -922,6 +929,11 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 }
             } else if (message.type === "open-http-body") {
                 this.openHttpBody(document, message as any);
+            } else if (message.type === "http-replay-send") {
+                const reply = await sendHttpReplay(message as HttpReplaySendMessage);
+                webviewPanel.webview.postMessage({ ...reply, body: toWebviewBytes(reply.body) });
+            } else if (message.type === "open-http-request-file") {
+                this.openHttpRequestFile(message as HttpRequestFileMessage);
             } else if (message.type === "open-dts") {
                 this.openDtsReference(message.raw === true);
             } else if (message.type === "open-script-for-editing") {
@@ -1447,6 +1459,34 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
     // -------------------------------------------------------------------
     // HTTP body extraction
     // -------------------------------------------------------------------
+
+    /**
+     * Writes a request replayed from a PCAP as an `.http` file and opens it,
+     * so the REST Client extension can send it. Without REST Client the file
+     * still opens as text, and the user is offered the extension.
+     */
+    private async openHttpRequestFile(message: HttpRequestFileMessage): Promise<void> {
+        try {
+            const filePath = await writeHttpRequestFile(message);
+            const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+            await vscode.window.showTextDocument(doc, {
+                viewColumn: vscode.ViewColumn.Beside,
+                preserveFocus: false,
+            });
+            if (!vscode.extensions.getExtension(REST_CLIENT_EXTENSION_ID)) {
+                const install = "Show REST Client";
+                const choice = await vscode.window.showInformationMessage(
+                    "Install the REST Client extension to send this request from the editor.",
+                    install,
+                );
+                if (choice === install) {
+                    await vscode.commands.executeCommand("extension.open", REST_CLIENT_EXTENSION_ID);
+                }
+            }
+        } catch (err) {
+            vscode.window.showErrorMessage(`Failed to open the HTTP request: ${err}`);
+        }
+    }
 
     /**
      * Opens an HTTP response body extracted from a PCAP packet in a new

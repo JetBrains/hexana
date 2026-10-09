@@ -37,6 +37,12 @@ class HttpReplayTest {
     }
 
     @Test
+    fun sendableHeadersLeaveClientOwnedOnesOut() {
+        val headers = HttpReplay.parseHeaders("Host: h\nExpect: 100-continue\nConnection: close\nAccept: */*")
+        assertEquals(listOf(HttpHeader("Accept", "*/*")), HttpReplay.sendableHeaders(headers))
+    }
+
+    @Test
     fun reportsTruncatedBody() {
         val raw = "PUT /x HTTP/1.1\r\nHost: h\r\nContent-Length: 10\r\n\r\nabc".encodeToByteArray()
         val request = assertNotNull(HttpReplay.parseRequest(raw, "http", "10.0.0.2", 80))

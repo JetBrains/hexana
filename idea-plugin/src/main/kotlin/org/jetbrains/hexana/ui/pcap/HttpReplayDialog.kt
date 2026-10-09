@@ -20,6 +20,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.HexanaLog
 import org.jetbrains.hexana.HexanaService
+import org.jetbrains.hexana.pcap.CapturedHttpRequest
 import org.jetbrains.hexana.pcap.HttpReplay
 import org.jetbrains.hexana.pcap.HttpReplayRequest
 import org.jetbrains.hexana.ui.decompressHttpBody
@@ -38,11 +39,11 @@ import javax.swing.JLabel
  */
 internal class HttpReplayDialog(
     private val project: Project,
-    private val captured: HttpReplayRequest,
-    private val packetNumber: Int,
-    /** Lines describing where the request came from, shown under the title. */
-    private val origin: List<String>,
+    private val source: CapturedHttpRequest,
 ) : DialogWrapper(project, true, IdeModalityType.MODELESS) {
+
+    private val captured: HttpReplayRequest = source.request
+    private val packetNumber: Int = source.packetNumber
 
     private val methodField = ComboBox(arrayOf("GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS")).apply {
         isEditable = true
@@ -68,7 +69,7 @@ internal class HttpReplayDialog(
         override fun actionPerformed(e: ActionEvent?) {
             val request = editedRequest() ?: return
             HexanaService.getInstance().coroutineScope.launch {
-                HttpClientReplayExport.open(project, request, packetNumber, origin)
+                HttpClientReplayExport.open(project, source, request)
             }
         }
     }
@@ -88,7 +89,7 @@ internal class HttpReplayDialog(
         if (HttpClientReplayExport.isAvailable) arrayOf(openInHttpClientAction) else emptyArray()
 
     override fun createCenterPanel(): JComponent = panel {
-        for (line in origin) row { comment(line) }
+        row { comment(source.origin) }
         if (!captured.bodyComplete) {
             row { comment("The capture holds only part of this request's body; only that part is sent.") }
         }
@@ -116,8 +117,7 @@ internal class HttpReplayDialog(
         val ui = Dispatchers.EDT + ModalityState.any().asContextElement()
         sendJob = HexanaService.getInstance().coroutineScope.launch(Dispatchers.IO) {
             val shown = try {
-                val headers = request.headers.filterNot { HttpReplaySender.isDropped(it.name) }
-                val response = HttpReplaySender.send(request.method, request.url, headers, request.body)
+                val response = HttpReplaySender.send(request.method, request.url, request.headers, request.body)
                 "${response.version} ${response.statusCode}  ·  ${response.elapsedMillis} ms  ·  " +
                     "${response.body.size} bytes" to formatResponse(response)
             } catch (c: CancellationException) {
