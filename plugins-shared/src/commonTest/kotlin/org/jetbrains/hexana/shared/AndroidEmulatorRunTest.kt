@@ -51,6 +51,23 @@ class AndroidEmulatorRunTest {
     }
 
     @Test
+    fun aaptCandidatesPreferStableOverPrerelease() {
+        for (versions in listOf(listOf("37.0.0-rc1", "37.0.0", "37.0.0-rc2"), listOf("37.0.0", "37.0.0-rc2", "37.0.0-rc1"))) {
+            val candidates = AndroidEmulatorRun.aaptCandidates("/sdk", versions, isWindows = false)
+            assertEquals(
+                listOf("37.0.0", "37.0.0-rc2", "37.0.0-rc1"),
+                candidates.filter { it.endsWith("/aapt2") }.map { it.removePrefix("/sdk/build-tools/").removeSuffix("/aapt2") },
+            )
+        }
+    }
+
+    @Test
+    fun parsesAvdName() {
+        assertEquals("Pixel_8_API_35", AndroidEmulatorRun.parseAvdName("Pixel_8_API_35\r\nOK\r\n"))
+        assertNull(AndroidEmulatorRun.parseAvdName("OK\n"))
+    }
+
+    @Test
     fun packageNameArgsDependOnTool() {
         assertEquals(listOf("dump", "packagename", "a.apk"), AndroidEmulatorRun.packageNameArgs("/x/aapt2.exe", "a.apk"))
         assertEquals(listOf("dump", "badging", "a.apk"), AndroidEmulatorRun.packageNameArgs("/x/aapt", "a.apk"))
@@ -60,7 +77,13 @@ class AndroidEmulatorRunTest {
     fun interpretsInstallAndLaunchOutput() {
         assertTrue(AndroidEmulatorRun.isInstallSuccess("Performing Streamed Install\nSuccess\n"))
         assertFalse(AndroidEmulatorRun.isInstallSuccess("Failure [INSTALL_FAILED_NO_MATCHING_ABIS]"))
+        assertFalse(
+            AndroidEmulatorRun.isInstallSuccess("adb: failed to install /tmp/Success.apk: Failure [INSTALL_FAILED_INVALID_APK]"),
+        )
         assertFalse(AndroidEmulatorRun.hasLauncherActivity("** No activities found to run, monkey aborted."))
+        assertTrue(AndroidEmulatorRun.isLaunchSuccess("  bash arg: -p\nEvents injected: 1\n## Network stats: elapsed time=12ms"))
+        assertFalse(AndroidEmulatorRun.isLaunchSuccess("adb: device offline"))
+        assertFalse(AndroidEmulatorRun.isLaunchSuccess("** No activities found to run, monkey aborted."))
         assertTrue(AndroidEmulatorRun.isBootCompleted("1\n"))
         assertEquals(
             "adb install failed: Failure [INSTALL_FAILED_NO_MATCHING_ABIS]",

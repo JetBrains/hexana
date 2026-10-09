@@ -18,7 +18,8 @@ object AndroidEmulatorRun {
 
     /**
      * SDK roots to probe, in order: `ANDROID_HOME`, `ANDROID_SDK_ROOT`, then Android Studio's
-     * default locations on macOS, Linux and Windows. The first one with `platform-tools` wins.
+     * default locations on macOS, Linux and Windows. The first one with executable `adb` and
+     * `emulator` wins.
      */
     fun sdkRootCandidates(env: Map<String, String>, userHome: String?): List<String> = buildList {
         env["ANDROID_HOME"]?.takeIf { it.isNotBlank() }?.let(::add)
@@ -56,6 +57,9 @@ object AndroidEmulatorRun {
 
     val devicesArgs: List<String> = listOf("devices")
 
+    /** Asks the emulator console which AVD [serial] runs, so boot polling waits for the chosen one. */
+    fun avdNameArgs(serial: String): List<String> = listOf("-s", serial, "emu", "avd", "name")
+
     fun bootCompletedArgs(serial: String): List<String> = listOf("-s", serial, "shell", "getprop", "sys.boot_completed")
 
     fun installArgs(serial: String, apkPath: String): List<String> = listOf("-s", serial, "install", "-r", "-t", apkPath)
@@ -84,6 +88,10 @@ object AndroidEmulatorRun {
             parts.takeIf { it.size >= 2 && it[0].startsWith("emulator-") && it[1] == "device" }?.get(0)
         }
 
+    /** `adb emu avd name` prints the AVD name followed by an `OK` line. */
+    fun parseAvdName(output: String): String? =
+        output.lines().map { it.trim() }.firstOrNull { it.isNotEmpty() && it != "OK" }
+
     fun isBootCompleted(output: String): Boolean = output.trim() == "1"
 
     /** Package name from `aapt2 dump packagename` (bare name) or `aapt dump badging` (`package: name='…'`). */
@@ -92,7 +100,11 @@ object AndroidEmulatorRun {
         return output.lines().map { it.trim() }.firstOrNull { it.matches(Regex("[A-Za-z_][\\w.]*")) }
     }
 
-    fun isInstallSuccess(output: String): Boolean = output.contains("Success")
+    /** `adb install` prints `Success` on its own line; failure output may echo a path containing it. */
+    fun isInstallSuccess(output: String): Boolean = output.lines().any { it.trim() == "Success" }
+
+    /** `monkey` reports `Events injected: 1` only when it actually started the launcher activity. */
+    fun isLaunchSuccess(monkeyOutput: String): Boolean = Regex("Events injected: [1-9]").containsMatchIn(monkeyOutput)
 
     fun hasLauncherActivity(monkeyOutput: String): Boolean = !monkeyOutput.contains("No activities found")
 
@@ -112,20 +124,38 @@ object AndroidEmulatorRun {
     fun noLauncherMessage(packageName: String, serial: String): String =
         "Installed $packageName on $serial, but it has no launcher activity"
 
+    fun launchFailedMessage(packageName: String, serial: String, output: String?): String =
+        "Installed $packageName on $serial, but launching it failed: " +
+            (output?.trim()?.lines()?.lastOrNull()?.takeIf { it.isNotBlank() } ?: "no output")
+
     fun launchedMessage(packageName: String, serial: String): String = "Launched $packageName on $serial"
 
     private fun exe(name: String, isWindows: Boolean) = if (isWindows) "$name.exe" else name
 
-    /** Orders `build-tools` directory names such as `30.0.3`, `36.1.0`, `37.0.0-rc1` numerically. */
+    /**
+     * Orders `build-tools` directory names such as `30.0.3`, `36.1.0`, `37.0.0-rc1` numerically;
+     * a stable release sorts after its prereleases (`37.0.0-rc1` < `37.0.0-rc2` < `37.0.0`).
+     */
     private object VersionComparator : Comparator<String> {
         override fun compare(a: String, b: String): Int {
-            val pa = a.split('.', '-').map { it.toIntOrNull() ?: 0 }
-            val pb = b.split('.', '-').map { it.toIntOrNull() ?: 0 }
-            for (i in 0 until maxOf(pa.size, pb.size)) {
-                val c = pa.getOrElse(i) { 0 }.compareTo(pb.getOrElse(i) { 0 })
+            val (baseA, qualifierA) = split(a)
+            val (baseB, qualifierB) = split(b)
+            for (i in 0 until maxOf(baseA.size, baseB.size)) {
+                val c = baseA.getOrElse(i) { 0 }.compareTo(baseB.getOrElse(i) { 0 })
                 if (c != 0) return c
             }
-            return 0
+            return when {
+                qualifierA == qualifierB -> 0
+                qualifierA == null -> 1
+                qualifierB == null -> -1
+                else -> compareValuesBy(qualifierA, qualifierB, { it.trimEnd(Char::isDigit) }, { it.takeLastWhile(Char::isDigit).toIntOrNull() ?: 0 }, { it })
+            }
+        }
+
+        private fun split(version: String): Pair<List<Int>, String?> {
+            val base = version.substringBefore('-')
+            val qualifier = version.substringAfter('-', missingDelimiterValue = "").takeIf { it.isNotEmpty() }
+            return base.split('.').map { it.toIntOrNull() ?: 0 } to qualifier
         }
     }
 }

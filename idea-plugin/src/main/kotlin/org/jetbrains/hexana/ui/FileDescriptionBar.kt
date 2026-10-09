@@ -499,8 +499,8 @@ private fun NormalModeContent(
         }
     }
 
-    // APK Run button: only for on-disk .apk files when a local Android SDK already
-    // has the emulator and at least one AVD. Detection runs `emulator -list-avds`.
+    // APK Run button: only for on-disk .apk files when a local Android SDK has `adb` and the
+    // emulator. Detection is file checks only; AVDs are listed when the button is clicked.
     val apkFile = filePath
         ?.takeIf { !isSubmodule && it.endsWith(".apk", ignoreCase = true) }
         ?.let { java.io.File(it) }

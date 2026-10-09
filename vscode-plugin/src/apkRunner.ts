@@ -39,33 +39,35 @@ export function detectAndroidSdk(): AndroidSdk | null {
     }
     const keys = ["ANDROID_HOME", "ANDROID_SDK_ROOT", "LOCALAPPDATA"].filter((k) => process.env[k]);
     const candidates = lib.androidSdkRootCandidates(keys, keys.map((k) => process.env[k] ?? ""), os.homedir());
-    const root = candidates.find((c) => {
+    for (const root of candidates) {
         try {
-            return fs.statSync(lib.androidPlatformToolsDir(c)).isDirectory();
+            if (!fs.statSync(lib.androidPlatformToolsDir(root)).isDirectory()) {
+                continue;
+            }
         } catch {
-            return false;
+            continue;
         }
-    });
-    if (!root) {
-        return null;
+        const adb = lib.androidAdbPath(root, isWindows);
+        const emulator = lib.androidEmulatorPath(root, isWindows);
+        if (isExecutable(adb) && isExecutable(emulator)) {
+            return { root, adb, emulator };
+        }
     }
-    const adb = lib.androidAdbPath(root, isWindows);
-    const emulator = lib.androidEmulatorPath(root, isWindows);
-    if (!isExecutable(adb) || !isExecutable(emulator)) {
-        return null;
-    }
-    return { root, adb, emulator };
+    return null;
 }
 
-/** Runs a tool and resolves with stdout+stderr, or `null` on spawn failure or timeout. */
-function runTool(command: string, args: string[], timeoutMs = 30_000): Promise<string | null> {
+/**
+ * Runs a tool and resolves with stdout+stderr, or `null` on spawn failure, timeout or abort.
+ * Aborting [signal] kills the process.
+ */
+function runTool(command: string, args: string[], timeoutMs = 30_000, signal?: AbortSignal): Promise<string | null> {
     return new Promise((resolve) => {
-        execFile(command, args, { timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+        execFile(command, args, { timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024, signal }, (error, stdout, stderr) => {
             const output = `${stdout ?? ""}${stderr ?? ""}`;
             // A non-zero exit still carries output worth parsing (e.g. `adb install` failures).
             if (error && (error as NodeJS.ErrnoException).code === "ENOENT") {
                 resolve(null);
-            } else if (error && error.killed) {
+            } else if (error && (error.killed || error.name === "AbortError")) {
                 resolve(null);
             } else {
                 resolve(output);
@@ -74,7 +76,22 @@ function runTool(command: string, args: string[], timeoutMs = 30_000): Promise<s
     });
 }
 
+/** Starts the emulator detached (it outlives this task and the VS Code window); rejects if it fails to spawn. */
+function startEmulator(sdk: AndroidSdk, avd: string): Promise<void> {
+    const lib = extensionLib!;
+    return new Promise((resolve, reject) => {
+        const child = spawn(sdk.emulator, lib.androidBootArgs(avd), { detached: true, stdio: "ignore" });
+        child.once("error", (e) => reject(new ApkRunError(`Failed to start emulator ${avd}: ${e.message}`)));
+        child.once("spawn", () => {
+            child.unref();
+            resolve();
+        });
+    });
+}
+
 class ApkRunError extends Error {}
+
+class ApkRunCancelled extends Error {}
 
 type EmulatorTarget = { kind: "running"; serial: string } | { kind: "boot"; avd: string };
 
@@ -116,15 +133,21 @@ export async function runApkOnEmulator(apkPath: string): Promise<void> {
     await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: `Running ${apkName} on ${label}`, cancellable: true },
         async (progress, token) => {
+            const abort = new AbortController();
+            const subscription = token.onCancellationRequested(() => abort.abort());
             try {
-                const message = await runApk(sdk, apkPath, target, progress, token);
+                const message = await runApk(sdk, apkPath, target, progress, token, abort.signal);
                 vscode.window.showInformationMessage(message);
             } catch (e) {
-                if (e instanceof ApkRunError) {
+                if (e instanceof ApkRunCancelled || token.isCancellationRequested) {
+                    // Cancelled by the user: nothing to report.
+                } else if (e instanceof ApkRunError) {
                     vscode.window.showErrorMessage(e.message);
-                } else if (!token.isCancellationRequested) {
+                } else {
                     vscode.window.showErrorMessage(`Failed to run ${apkName}: ${e}`);
                 }
+            } finally {
+                subscription.dispose();
             }
         },
     );
@@ -136,40 +159,52 @@ async function runApk(
     target: EmulatorTarget,
     progress: vscode.Progress<{ message?: string }>,
     token: vscode.CancellationToken,
+    signal: AbortSignal,
 ): Promise<string> {
     const lib = extensionLib!;
     const apkName = path.basename(apkPath);
+    const checkCancelled = () => {
+        if (token.isCancellationRequested) {
+            throw new ApkRunCancelled();
+        }
+    };
 
     let serial: string;
     if (target.kind === "running") {
         serial = target.serial;
     } else {
         progress.report({ message: `Starting emulator ${target.avd}…` });
-        // Detached: the emulator outlives this task and the VS Code window.
-        spawn(sdk.emulator, lib.androidBootArgs(target.avd), { detached: true, stdio: "ignore" }).unref();
-        serial = await waitForBoot(sdk, progress, token);
+        await startEmulator(sdk, target.avd);
+        serial = await waitForBoot(sdk, target.avd, progress, token, signal);
     }
 
+    checkCancelled();
     progress.report({ message: `Installing ${apkName}…` });
-    const install = await runTool(sdk.adb, lib.androidInstallArgs(serial, apkPath), lib.androidInstallTimeoutMs);
+    const install = await runTool(sdk.adb, lib.androidInstallArgs(serial, apkPath), lib.androidInstallTimeoutMs, signal);
+    checkCancelled();
     if (install === null || !lib.androidIsInstallSuccess(install)) {
         throw new ApkRunError(lib.androidInstallFailedMessage(install));
     }
 
-    const packageName = await readPackageName(sdk, apkPath);
+    const packageName = await readPackageName(sdk, apkPath, signal);
+    checkCancelled();
     if (!packageName) {
         return lib.androidUnknownPackageMessage(apkName, serial);
     }
 
     progress.report({ message: `Launching ${packageName}…` });
-    const launch = await runTool(sdk.adb, lib.androidLaunchArgs(serial, packageName));
-    if (launch === null || !lib.androidHasLauncherActivity(launch)) {
+    const launch = await runTool(sdk.adb, lib.androidLaunchArgs(serial, packageName), undefined, signal);
+    checkCancelled();
+    if (launch !== null && lib.androidIsLaunchSuccess(launch)) {
+        return lib.androidLaunchedMessage(packageName, serial);
+    }
+    if (launch !== null && !lib.androidHasLauncherActivity(launch)) {
         return lib.androidNoLauncherMessage(packageName, serial);
     }
-    return lib.androidLaunchedMessage(packageName, serial);
+    throw new ApkRunError(lib.androidLaunchFailedMessage(packageName, serial, launch));
 }
 
-async function readPackageName(sdk: AndroidSdk, apkPath: string): Promise<string | null> {
+async function readPackageName(sdk: AndroidSdk, apkPath: string, signal: AbortSignal): Promise<string | null> {
     const lib = extensionLib!;
     let versions: string[] = [];
     try {
@@ -181,26 +216,36 @@ async function readPackageName(sdk: AndroidSdk, apkPath: string): Promise<string
     if (!aapt) {
         return null;
     }
-    const output = await runTool(aapt, lib.androidPackageNameArgs(aapt, apkPath));
+    const output = await runTool(aapt, lib.androidPackageNameArgs(aapt, apkPath), undefined, signal);
     return output === null ? null : lib.androidParsePackageName(output);
 }
 
+/** Waits for the emulator running [avd] — not just any emulator that comes online meanwhile. */
 async function waitForBoot(
     sdk: AndroidSdk,
+    avd: string,
     progress: vscode.Progress<{ message?: string }>,
     token: vscode.CancellationToken,
+    signal: AbortSignal,
 ): Promise<string> {
     const lib = extensionLib!;
     const deadline = Date.now() + lib.androidBootTimeoutMs;
     while (Date.now() < deadline) {
         if (token.isCancellationRequested) {
-            throw new Error("cancelled");
+            throw new ApkRunCancelled();
         }
-        const devices = await runTool(sdk.adb, lib.androidDevicesArgs());
-        const serial = devices ? lib.androidParseOnlineEmulators(devices)[0] : undefined;
+        const devices = await runTool(sdk.adb, lib.androidDevicesArgs(), undefined, signal);
+        let serial: string | undefined;
+        for (const candidate of devices ? lib.androidParseOnlineEmulators(devices) : []) {
+            const name = await runTool(sdk.adb, lib.androidAvdNameArgs(candidate), undefined, signal);
+            if (name !== null && lib.androidParseAvdName(name) === avd) {
+                serial = candidate;
+                break;
+            }
+        }
         if (serial) {
             progress.report({ message: `Waiting for ${serial} to boot…` });
-            const booted = await runTool(sdk.adb, lib.androidBootCompletedArgs(serial));
+            const booted = await runTool(sdk.adb, lib.androidBootCompletedArgs(serial), undefined, signal);
             if (booted !== null && lib.androidIsBootCompleted(booted)) {
                 return serial;
             }

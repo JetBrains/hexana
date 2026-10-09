@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.android
 
+import com.intellij.execution.ExecutionException
 import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.execution.process.CapturingProcessHandler
 import com.intellij.notification.NotificationGroupManager
@@ -14,6 +15,7 @@ import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.util.SystemInfo
 import org.jetbrains.hexana.shared.AndroidEmulatorRun
 import java.io.File
+import java.io.IOException
 
 /**
  * A locally installed Android SDK with `adb` and the Android Emulator package (as installed by
@@ -40,13 +42,13 @@ internal class AndroidSdk(val root: File, val adb: File, val emulator: File) {
         runTool(listOf(adb.path) + AndroidEmulatorRun.devicesArgs)?.let(AndroidEmulatorRun::parseOnlineEmulators)?.firstOrNull()
 
     companion object {
-        fun detect(): AndroidSdk? {
-            val root = AndroidEmulatorRun.sdkRootCandidates(System.getenv(), System.getProperty("user.home"))
-                .firstOrNull { File(AndroidEmulatorRun.platformToolsDir(it)).isDirectory } ?: return null
-            val adb = File(AndroidEmulatorRun.adbPath(root, SystemInfo.isWindows)).takeIf { it.canExecute() } ?: return null
-            val emulator = File(AndroidEmulatorRun.emulatorPath(root, SystemInfo.isWindows)).takeIf { it.canExecute() } ?: return null
-            return AndroidSdk(File(root), adb, emulator)
-        }
+        fun detect(): AndroidSdk? =
+            AndroidEmulatorRun.sdkRootCandidates(System.getenv(), System.getProperty("user.home")).firstNotNullOfOrNull { root ->
+                if (!File(AndroidEmulatorRun.platformToolsDir(root)).isDirectory) return@firstNotNullOfOrNull null
+                val adb = File(AndroidEmulatorRun.adbPath(root, SystemInfo.isWindows)).takeIf { it.canExecute() }
+                val emulator = File(AndroidEmulatorRun.emulatorPath(root, SystemInfo.isWindows)).takeIf { it.canExecute() }
+                if (adb != null && emulator != null) AndroidSdk(File(root), adb, emulator) else null
+            }
     }
 }
 
@@ -111,11 +113,15 @@ private fun runApk(indicator: ProgressIndicator, apk: File, sdk: AndroidSdk, tar
         is EmulatorTarget.Boot -> {
             indicator.text = "Starting emulator ${target.avd}…"
             // Detached: the emulator outlives this task and the IDE run.
-            ProcessBuilder(listOf(sdk.emulator.path) + AndroidEmulatorRun.bootArgs(target.avd))
-                .redirectErrorStream(true)
-                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                .start()
-            waitForBoot(indicator, adb)
+            try {
+                ProcessBuilder(listOf(sdk.emulator.path) + AndroidEmulatorRun.bootArgs(target.avd))
+                    .redirectErrorStream(true)
+                    .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                    .start()
+            } catch (e: IOException) {
+                throw ApkRunException("Failed to start emulator ${target.avd}: ${e.message}")
+            }
+            waitForBoot(indicator, adb, target.avd)
         }
     }
 
@@ -123,33 +129,40 @@ private fun runApk(indicator: ProgressIndicator, apk: File, sdk: AndroidSdk, tar
     val install = runTool(
         listOf(adb) + AndroidEmulatorRun.installArgs(serial, apk.path),
         timeoutMs = AndroidEmulatorRun.INSTALL_TIMEOUT_MS.toInt(),
+        indicator = indicator,
     )
     if (install == null || !AndroidEmulatorRun.isInstallSuccess(install)) {
         throw ApkRunException(AndroidEmulatorRun.installFailedMessage(install))
     }
 
     val packageName = sdk.aapt?.let { aapt ->
-        runTool(listOf(aapt.path) + AndroidEmulatorRun.packageNameArgs(aapt.path, apk.path))
+        runTool(listOf(aapt.path) + AndroidEmulatorRun.packageNameArgs(aapt.path, apk.path), indicator = indicator)
             ?.let(AndroidEmulatorRun::parsePackageName)
     } ?: return AndroidEmulatorRun.unknownPackageMessage(apk.name, serial)
 
     indicator.text = "Launching $packageName…"
-    val launch = runTool(listOf(adb) + AndroidEmulatorRun.launchArgs(serial, packageName))
-    if (launch == null || !AndroidEmulatorRun.hasLauncherActivity(launch)) {
-        return AndroidEmulatorRun.noLauncherMessage(packageName, serial)
+    val launch = runTool(listOf(adb) + AndroidEmulatorRun.launchArgs(serial, packageName), indicator = indicator)
+    return when {
+        launch != null && AndroidEmulatorRun.isLaunchSuccess(launch) -> AndroidEmulatorRun.launchedMessage(packageName, serial)
+        launch != null && !AndroidEmulatorRun.hasLauncherActivity(launch) -> AndroidEmulatorRun.noLauncherMessage(packageName, serial)
+        else -> throw ApkRunException(AndroidEmulatorRun.launchFailedMessage(packageName, serial, launch))
     }
-    return AndroidEmulatorRun.launchedMessage(packageName, serial)
 }
 
-private fun waitForBoot(indicator: ProgressIndicator, adb: String): String {
+/** Waits for the emulator running [avd] — not just any emulator that comes online meanwhile. */
+private fun waitForBoot(indicator: ProgressIndicator, adb: String, avd: String): String {
     val deadline = System.currentTimeMillis() + AndroidEmulatorRun.BOOT_TIMEOUT_MS
     while (System.currentTimeMillis() < deadline) {
         indicator.checkCanceled()
-        val serial = runTool(listOf(adb) + AndroidEmulatorRun.devicesArgs)
-            ?.let(AndroidEmulatorRun::parseOnlineEmulators)?.firstOrNull()
+        val serial = runTool(listOf(adb) + AndroidEmulatorRun.devicesArgs, indicator = indicator)
+            ?.let(AndroidEmulatorRun::parseOnlineEmulators).orEmpty()
+            .firstOrNull { serial ->
+                runTool(listOf(adb) + AndroidEmulatorRun.avdNameArgs(serial), indicator = indicator)
+                    ?.let(AndroidEmulatorRun::parseAvdName) == avd
+            }
         if (serial != null) {
             indicator.text = "Waiting for $serial to boot…"
-            val booted = runTool(listOf(adb) + AndroidEmulatorRun.bootCompletedArgs(serial))
+            val booted = runTool(listOf(adb) + AndroidEmulatorRun.bootCompletedArgs(serial), indicator = indicator)
             if (booted != null && AndroidEmulatorRun.isBootCompleted(booted)) return serial
         }
         Thread.sleep(AndroidEmulatorRun.BOOT_POLL_INTERVAL_MS)
@@ -157,11 +170,19 @@ private fun waitForBoot(indicator: ProgressIndicator, adb: String): String {
     throw ApkRunException(AndroidEmulatorRun.BOOT_TIMEOUT_MESSAGE)
 }
 
-private fun runTool(command: List<String>, timeoutMs: Int = 30_000): String? = try {
-    val output = CapturingProcessHandler(GeneralCommandLine(command)).runProcess(timeoutMs)
-    if (output.isTimeout) null else output.stdout + output.stderr
-} catch (_: Exception) {
-    null
+/**
+ * Runs a tool and returns stdout+stderr, or null on start failure or timeout. With an [indicator],
+ * cancelling it kills the process and throws [com.intellij.openapi.progress.ProcessCanceledException].
+ */
+private fun runTool(command: List<String>, timeoutMs: Int = 30_000, indicator: ProgressIndicator? = null): String? {
+    val output = try {
+        val handler = CapturingProcessHandler(GeneralCommandLine(command))
+        if (indicator != null) handler.runProcessWithProgressIndicator(indicator, timeoutMs) else handler.runProcess(timeoutMs)
+    } catch (_: ExecutionException) {
+        return null
+    }
+    indicator?.checkCanceled()
+    return if (output.isTimeout || output.isCancelled) null else output.stdout + output.stderr
 }
 
 private fun notify(project: Project, content: String, type: NotificationType) {

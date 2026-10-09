@@ -702,6 +702,7 @@ export function androidAaptCandidates(root: string, buildToolsVersions: string[]
 export function androidListAvdsArgs(): string[];
 export function androidBootArgs(avd: string): string[];
 export function androidDevicesArgs(): string[];
+export function androidAvdNameArgs(serial: string): string[];
 export function androidBootCompletedArgs(serial: string): string[];
 export function androidInstallArgs(serial: string, apkPath: string): string[];
 export function androidPackageNameArgs(aaptPath: string, apkPath: string): string[];
@@ -709,13 +710,16 @@ export function androidLaunchArgs(serial: string, packageName: string): string[]
 
 export function androidParseAvdList(output: string): string[];
 export function androidParseOnlineEmulators(output: string): string[];
+export function androidParseAvdName(output: string): string | null;
 export function androidIsBootCompleted(output: string): boolean;
 export function androidParsePackageName(output: string): string | null;
 export function androidIsInstallSuccess(output: string): boolean;
+export function androidIsLaunchSuccess(output: string): boolean;
 export function androidHasLauncherActivity(output: string): boolean;
 
 export function androidNoAvdMessage(apkName: string): string;
 export function androidInstallFailedMessage(output: string | null): string;
 export function androidUnknownPackageMessage(apkName: string, serial: string): string;
 export function androidNoLauncherMessage(packageName: string, serial: string): string;
+export function androidLaunchFailedMessage(packageName: string, serial: string, output: string | null): string;
 export function androidLaunchedMessage(packageName: string, serial: string): string;

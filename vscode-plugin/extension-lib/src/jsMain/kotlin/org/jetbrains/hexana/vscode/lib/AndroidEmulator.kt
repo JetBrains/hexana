@@ -55,6 +55,9 @@ fun androidBootArgs(avd: String): Array<String> = AndroidEmulatorRun.bootArgs(av
 fun androidDevicesArgs(): Array<String> = AndroidEmulatorRun.devicesArgs.toTypedArray()
 
 @JsExport
+fun androidAvdNameArgs(serial: String): Array<String> = AndroidEmulatorRun.avdNameArgs(serial).toTypedArray()
+
+@JsExport
 fun androidBootCompletedArgs(serial: String): Array<String> = AndroidEmulatorRun.bootCompletedArgs(serial).toTypedArray()
 
 @JsExport
@@ -77,6 +80,9 @@ fun androidParseOnlineEmulators(output: String): Array<String> =
     AndroidEmulatorRun.parseOnlineEmulators(output).toTypedArray()
 
 @JsExport
+fun androidParseAvdName(output: String): String? = AndroidEmulatorRun.parseAvdName(output)
+
+@JsExport
 fun androidIsBootCompleted(output: String): Boolean = AndroidEmulatorRun.isBootCompleted(output)
 
 @JsExport
@@ -84,6 +90,9 @@ fun androidParsePackageName(output: String): String? = AndroidEmulatorRun.parseP
 
 @JsExport
 fun androidIsInstallSuccess(output: String): Boolean = AndroidEmulatorRun.isInstallSuccess(output)
+
+@JsExport
+fun androidIsLaunchSuccess(output: String): Boolean = AndroidEmulatorRun.isLaunchSuccess(output)
 
 @JsExport
 fun androidHasLauncherActivity(output: String): Boolean = AndroidEmulatorRun.hasLauncherActivity(output)
@@ -101,6 +110,10 @@ fun androidUnknownPackageMessage(apkName: String, serial: String): String =
 @JsExport
 fun androidNoLauncherMessage(packageName: String, serial: String): String =
     AndroidEmulatorRun.noLauncherMessage(packageName, serial)
+
+@JsExport
+fun androidLaunchFailedMessage(packageName: String, serial: String, output: String?): String =
+    AndroidEmulatorRun.launchFailedMessage(packageName, serial, output)
 
 @JsExport
 fun androidLaunchedMessage(packageName: String, serial: String): String =
