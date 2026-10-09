@@ -115,7 +115,7 @@ internal fun BinaryEditorView(
     classFileNavTargetFlow: MutableStateFlow<ClassFileNavTarget?> = remember { MutableStateFlow(null) },
     onOpenZipEntry: ((ZipEntry) -> Unit)? = null,
     onOpenTarEntry: ((TarEntry) -> Unit)? = null,
-    decompiledContentPanel: Panel? = null,
+    decompiledContentPanelFlow: StateFlow<Panel?> = remember { MutableStateFlow(null) },
     gutterMarksModelFlow: StateFlow<GutterMarksModel?>? = null,
     executionOffsetFlow: StateFlow<Long?>? = null,
     onToggleWasmBreakpoint: ((funcIdx: Int, byteOffset: Long, instrOrdinal: Int) -> Unit)? = null,
@@ -357,8 +357,19 @@ internal fun BinaryEditorView(
             }
             val placeholders = if (hexEditedSinceOpen) emptyList() else binaryProvider.discoverPanelNames()
                 .map { name -> Panel(name) { LoadingTabContent() } }
-            val decompiled = if (decompiledContentPanel != null) listOf(decompiledContentPanel) else emptyList()
+            val decompiled = decompiledContentPanelFlow.value?.let { listOf(it) } ?: emptyList()
             mutableStateListOf(*(placeholders + decompiled + scriptPanels).toTypedArray())
+        }
+        // The decompiled panel may arrive late: for in-memory files its backing
+        // VirtualFile is resolved in the background (the VFS refresh involved is
+        // forbidden on the EDT). Insert it before the script panels when it lands.
+        LaunchedEffect(panels) {
+            decompiledContentPanelFlow.collect { decompiled ->
+                if (decompiled != null && panels.none { it === decompiled }) {
+                    val scriptStart = panels.indexOfFirst { it is ScriptPanel }.takeIf { it >= 0 } ?: panels.size
+                    panels.add(scriptStart, decompiled)
+                }
+            }
         }
         // Publish the live tab names so non-composition observers (the UI-test
         // probe) see what is actually rendered, including placeholder swaps.

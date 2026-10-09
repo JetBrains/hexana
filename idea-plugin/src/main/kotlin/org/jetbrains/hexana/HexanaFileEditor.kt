@@ -298,7 +298,21 @@ class HexanaFileEditor(
 
         val parentFile = myFile.getUserData(HexanaBinaryVirtualFile.PARENT_FILE_KEY)
 
-        val decompPanel = createDecompiledPanel(decompilerFile = resolveDecompilerFile() ?: myFile)
+        // Local files need no resolution and keep the synchronous path. For in-memory and
+        // non-local files, resolveDecompilerFile() does disk I/O and a synchronous VFS
+        // refresh, which SlowOperations forbids on the EDT (createEditor runs there), so
+        // the resolve goes to the editor scope and the panel arrives via the flow.
+        val decompPanelFlow = MutableStateFlow<Panel?>(null)
+        if (myFile.toNioPathOrNull() != null && myFile !is LightVirtualFile) {
+            decompPanelFlow.value = createDecompiledPanel(decompilerFile = myFile)
+        } else {
+            editorScope.launch {
+                val decompilerFile = resolveDecompilerFile() ?: myFile
+                withContext(Dispatchers.EDT) {
+                    decompPanelFlow.value = createDecompiledPanel(decompilerFile)
+                }
+            }
+        }
 
         val hexView = createComposePanel {
             val hexFocusRequester = remember { FocusRequester() }
@@ -327,7 +341,7 @@ class HexanaFileEditor(
                         val tarBuffer = (binaryProvider as? TarBinaryProvider)?.bytes ?: commonBuffer
                         openTarEntry(entry, tarBuffer)
                     },
-                    decompiledContentPanel = decompPanel,
+                    decompiledContentPanelFlow = decompPanelFlow,
                     gutterMarksModelFlow = editor.gutterMarksModelFlow,
                     executionOffsetFlow = editor.executionOffsetFlow,
                     onToggleWasmBreakpoint = { funcIdx, byteOffset, instrOrdinal ->
@@ -597,6 +611,10 @@ class HexanaFileEditor(
      *
      * Returns `null` when the file is already on the local file system (no
      * extraction needed) or when the bytes cannot be obtained.
+     *
+     * Must not run on the EDT: the temp-file fallback does disk I/O and a
+     * synchronous VFS refresh ([com.intellij.openapi.vfs.LocalFileSystem.refreshAndFindFileByNioFile]),
+     * which `SlowOperations` forbids there.
      */
     private fun resolveDecompilerFile(): VirtualFile? {
         // If the file is already on the local file system, no extraction needed.
@@ -609,8 +627,11 @@ class HexanaFileEditor(
         if (parentFile != null) {
             val parentPath = parentFile.toNioPathOrNull()
             if (parentPath != null) {
+                // ENTRY_PATH_KEY holds the full path inside the archive; myFile.name is only
+                // the leaf name and misses entries in subdirectories (e.g. classes in packages).
+                val entryPath = myFile.getUserData(HexanaBinaryVirtualFile.ENTRY_PATH_KEY) ?: myFile.name
                 val jarFs = com.intellij.openapi.vfs.JarFileSystem.getInstance()
-                val jarEntry = jarFs.findFileByPath("${parentPath}!/${myFile.name}")
+                val jarEntry = jarFs.findFileByPath("${parentPath}!/${entryPath}")
                 if (jarEntry != null) return jarEntry
             }
         }
@@ -1031,6 +1052,7 @@ class HexanaFileEditor(
                 buffer = bytes.toCommonByteBuffer(),
                 baseOffset = entry.dataOffset.toInt(),
                 parentFile = myFile,
+                entryPath = entry.name,
             )
             FileEditorManager.getInstance(myProject).openFile(childFile, true)
             return
