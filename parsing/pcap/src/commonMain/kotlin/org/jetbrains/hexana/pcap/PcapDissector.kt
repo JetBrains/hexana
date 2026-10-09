@@ -556,6 +556,61 @@ object PcapDissector {
     }
 
     /**
+     * The TCP endpoints of [packet], or `null` when it is not a TCP segment
+     * this dissector can reach. Replay uses the destination as the server a
+     * request was sent to.
+     */
+    fun tcpEndpoints(buffer: CommonByteBuffer, packet: PcapPacketRecord, linkType: Long): TcpEndpoints? {
+        val info = extractTcpPayloadInfo(buffer, packet, linkType) ?: return null
+        return TcpEndpoints(info.srcIp, info.srcPort, info.dstIp, info.dstPort)
+    }
+
+    /**
+     * The raw bytes of the cleartext HTTP request that starts in the packet at
+     * [packetIndex] - request line, headers and body - or `null` when that
+     * packet does not start one.
+     *
+     * Later segments of the same stream and direction are appended until the
+     * body announced by `Content-Length` or chunked framing is complete, the
+     * next request starts, or the stream closes. Segments whose sequence number
+     * and length were already taken are retransmissions and are skipped. What
+     * comes back can be short when the capture missed segments;
+     * [HttpReplay.parseRequest] reports that as an incomplete body.
+     */
+    fun reassembleHttpRequest(
+        buffer: CommonByteBuffer,
+        packets: List<PcapPacketRecord>,
+        packetIndex: Int,
+        linkType: Long,
+    ): ByteArray? {
+        val first = extractTcpPayloadInfo(buffer, packets[packetIndex], linkType) ?: return null
+        if (first.payloadLen <= 0 || !isHttpPayload(buffer, first.payloadOffset, first.payloadLen)) return null
+        val head = readAscii(buffer, first.payloadOffset, minOf(first.payloadLen, HTTP_PREVIEW_LIMIT))
+        if (head.startsWith("HTTP/") || HTTP_METHODS.none { head.startsWith(it) }) return null
+
+        val assembly = HttpRequestAssembly()
+        assembly.append(buffer.slice(first.payloadOffset, first.payloadLen).toByteArray())
+        val taken = mutableSetOf(first.seq to first.payloadLen)
+        var closed = first.fin || first.rst
+        var i = packetIndex + 1
+        while (!closed && i < packets.size && !assembly.isComplete && assembly.size <= MAX_REPLAY_REQUEST_BYTES) {
+            val tcp = extractTcpPayloadInfo(buffer, packets[i++], linkType) ?: continue
+            if (tcp.srcIp != first.srcIp || tcp.dstIp != first.dstIp ||
+                tcp.srcPort != first.srcPort || tcp.dstPort != first.dstPort) continue
+            closed = tcp.fin || tcp.rst
+            if (tcp.payloadLen <= 0 || !taken.add(tcp.seq to tcp.payloadLen)) continue
+            // A new request on a kept-alive connection means this one is over.
+            val preview = readAscii(buffer, tcp.payloadOffset, minOf(tcp.payloadLen, 16))
+            if (HTTP_METHODS.any { preview.startsWith(it) }) break
+            assembly.append(buffer.slice(tcp.payloadOffset, tcp.payloadLen).toByteArray())
+        }
+        return assembly.toByteArray()
+    }
+
+    /** Upper bound on a reassembled request, so a runaway upload cannot fill the heap. */
+    private const val MAX_REPLAY_REQUEST_BYTES = 64 * 1024 * 1024
+
+    /**
      * The HTTP body carried by a decrypted TLS record, or `null` when the
      * plaintext is not an HTTP response with a body.
      *
@@ -614,7 +669,7 @@ object PcapDissector {
         return -1
     }
 
-    private fun concatenateByteArrays(arrays: List<ByteArray>): ByteArray {
+    internal fun concatenateByteArrays(arrays: List<ByteArray>): ByteArray {
         if (arrays.size == 1) return arrays[0]
         val total = arrays.sumOf { it.size }
         val result = ByteArray(total)
@@ -636,6 +691,7 @@ object PcapDissector {
         val srcPort: Int, val dstPort: Int,
         val payloadOffset: Int, val payloadLen: Int,
         val fin: Boolean, val rst: Boolean,
+        val seq: Long = 0,
     )
 
     private fun extractTcpStreamId(
@@ -762,6 +818,7 @@ object PcapDissector {
             payloadOffset, payloadLen,
             fin = flags and 0x01 != 0,
             rst = flags and 0x04 != 0,
+            seq = readBigU32(buffer, offset + 4),
         )
     }
 
@@ -949,6 +1006,14 @@ object PcapDissector {
         else -> "IP Proto $protocol"
     }
 }
+
+/** Addresses and ports of a TCP segment, as the dissector prints them. */
+data class TcpEndpoints(
+    val sourceAddress: String,
+    val sourcePort: Int,
+    val destinationAddress: String,
+    val destinationPort: Int,
+)
 
 /**
  * An HTTP body read straight out of decrypted TLS plaintext, with the header

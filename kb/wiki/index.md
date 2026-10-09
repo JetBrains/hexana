@@ -11,6 +11,8 @@ consult-first / write-back rules.
   detection, `.hexana/runtimes.json`, the runtime-compatibility problems, and the Compatibility tab.
 - [[entities/dwarf-outline-model]] — the shared row model behind the `.debug_*` editor tabs:
   node ids, deferred children, whole-tree search, and the grouping rule both editors follow.
+- [[entities/pcap-http-replay]] — re-sending captured HTTP requests: request reassembly and
+  `.http` rendering in `parsing/pcap`, IntelliJ replay dialog and HTTP Client scratch export.
 - [[entities/binary-provider-selection]] — the one factory that turns bytes plus a name into a
   `BinaryProvider`, why gzip stays outside it, and the per-host lists that decide which files
   reach the editor in the first place.

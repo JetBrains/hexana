@@ -80,6 +80,10 @@ import org.jetbrains.hexana.ui.panel.*
 import org.jetbrains.hexana.pcap.PcapDissectedPacket
 import org.jetbrains.hexana.pcap.PcapDissector
 import org.jetbrains.hexana.pcap.PlaintextHttpBody
+import org.jetbrains.hexana.pcap.HttpReplay
+import org.jetbrains.hexana.pcap.HttpReplayRequest
+import org.jetbrains.hexana.ui.pcap.HttpClientReplayExport
+import org.jetbrains.hexana.ui.pcap.HttpReplayDialog
 import org.jetbrains.hexana.providers.PcapBinaryProvider
 import org.jetbrains.hexana.providers.TarBinaryProvider
 import org.jetbrains.hexana.providers.memory.isMemoryBudgetEligible
@@ -1664,6 +1668,76 @@ private fun PcapBinaryProvider.enrichPcapPacketsTab(
         },
     )
 
+    // A request is replayable when it starts in this row: in the clear, or as
+    // the plaintext of a decrypted record. Cleartext requests are reassembled
+    // across segments; a decrypted one is what its single record holds.
+    fun replayableRequest(index: Int): Pair<HttpReplayRequest, List<String>>? {
+        val endpoints = PcapDissector.tcpEndpoints(provider.bytes, packets[index], linkType) ?: return null
+        val cleartext = PcapDissector.reassembleHttpRequest(provider.bytes, packets, index, linkType)
+        val (raw, scheme) = if (cleartext != null) {
+            cleartext to "http"
+        } else {
+            (tab.rowDetailProvider?.invoke(index)?.bytes ?: return null) to "https"
+        }
+        val request = HttpReplay.parseRequest(
+            raw, scheme, endpoints.destinationAddress, endpoints.destinationPort,
+        ) ?: return null
+        val origin = buildString {
+            append("Captured ${endpoints.sourceAddress}:${endpoints.sourcePort} → ")
+            append("${endpoints.destinationAddress}:${endpoints.destinationPort}")
+            if (scheme == "https") append(", decrypted from TLS")
+        }
+        return request to listOf(origin)
+    }
+
+    val isReplayableCache = HashMap<Int, Boolean>()
+    fun isReplayable(index: Int): Boolean = isReplayableCache.getOrPut(index) {
+        val d = dissected(index)
+        when {
+            // Cheap rejection first: only rows whose dissection already reads as
+            // an HTTP request, or that decrypted at all, can hold one.
+            d.protocol == "HTTP" && !d.info.startsWith("HTTP/") -> true
+            tab.rowDetailProvider == null -> false
+            else -> try {
+                val plaintext = tab.rowDetailProvider?.invoke(index)?.bytes
+                plaintext != null && HttpReplay.parseRequest(plaintext, "https", "", 443) != null
+            } catch (_: Exception) {
+                false
+            }
+        }
+    }
+
+    fun replayItem(label: String, open: suspend (HttpReplayRequest, List<String>, Int) -> Unit) =
+        RowContextMenuItemDescriptor(
+            labelProvider = { label },
+            action = { index ->
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        val (request, origin) = replayableRequest(index) ?: return@launch
+                        open(request, origin, index + 1)
+                    } catch (c: CancellationException) {
+                        throw c
+                    } catch (t: Throwable) {
+                        HexanaLog.LOG.warn("Failed to rebuild the HTTP request in packet ${index + 1}", t)
+                    }
+                }
+            },
+            isVisible = { index -> isReplayable(index) },
+        )
+
+    val replayItems = buildList {
+        add(replayItem("Replay HTTP Request…") { request, origin, packetNumber ->
+            withContext(Dispatchers.EDT) {
+                if (!project.isDisposed) HttpReplayDialog(project, request, packetNumber, origin).show()
+            }
+        })
+        if (HttpClientReplayExport.isAvailable) {
+            add(replayItem("Open Request in HTTP Client") { request, origin, packetNumber ->
+                HttpClientReplayExport.open(project, request, packetNumber, origin)
+            })
+        }
+    }
+
     return TableTabDescriptor(
         name = tab.name,
         columns = tab.columns,
@@ -1672,7 +1746,7 @@ private fun PcapBinaryProvider.enrichPcapPacketsTab(
         defaultSortAscending = tab.defaultSortAscending,
         rowSelectionProvider = tab.rowSelectionProvider,
         rowAction = tab.rowAction,
-        contextMenuItems = tab.contextMenuItems + openBodyItem,
+        contextMenuItems = tab.contextMenuItems + openBodyItem + replayItems,
         rowClickAction = tab.rowClickAction,
         rowDoubleClickAction = tab.rowDoubleClickAction,
         dynamicContextMenuProvider = tab.dynamicContextMenuProvider,
@@ -1696,7 +1770,7 @@ private fun PcapBinaryProvider.enrichPcapPacketsTab(
  * Returns the original bytes unchanged when the encoding is `identity`,
  * absent, or unrecognised.
  */
-private fun decompressHttpBody(body: ByteArray, contentEncoding: String?): ByteArray {
+internal fun decompressHttpBody(body: ByteArray, contentEncoding: String?): ByteArray {
     if (body.isEmpty()) return body
     val encoding = contentEncoding?.trim()?.lowercase() ?: return body
     return when (encoding) {

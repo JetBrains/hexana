@@ -124,3 +124,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-09-30 — `entities/binary-inspections`, `entities/wasm-runtime-compatibility` — Proposal badges warning-coloured (no icon) with ⚠ in tooltips; `CellValue.tint`/`RowTint.Warning` tints the failing runtime cell; runtime-compatibility Problems rows open the Compatibility tab via `ProblemNavigator.selectTab`.
 - 2026-09-30 — `entities/wasm-runtime-compatibility` — Proposal tooltips: affected proposals first, warning-coloured, with a shared remark; VS Code badge tooltip becomes a hover popover.
 - 2026-09-30 — `entities/binary-inspections` — Problems → Compatibility navigation moved to double click (`TableTabDescriptor.rowDoubleClickAction`).
+- 2026-10-09 — `entities/pcap-http-replay` — PCAP HTTP request replay: common reassembly/parse/`.http` rendering, IntelliJ replay dialog and HTTP Client scratch export.
