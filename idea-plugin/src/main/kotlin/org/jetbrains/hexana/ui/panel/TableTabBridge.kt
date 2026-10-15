@@ -22,12 +22,15 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerIcon
@@ -340,6 +343,16 @@ private fun TableTabTable(
 
     val actionColumnWidth = textMeasurer.measureWidthMonospace("__")
 
+    // External "select row N" requests, e.g. from an APK's "Reveal in DEX".
+    var externalSelectedIndex by remember { mutableStateOf<Int?>(null) }
+    val pendingRow by state.pendingTableRowSelection.collectAsState()
+    LaunchedEffect(pendingRow, filteredIndices) {
+        val request = pendingRow?.takeIf { it.tabName == descriptor.name } ?: return@LaunchedEffect
+        val target = filteredIndices?.indexOf(request.rowIndex) ?: request.rowIndex
+        if (target in 0 until effectiveRowCount) reselect(externalSelectedIndex, target) { externalSelectedIndex = it }
+        state.pendingTableRowSelection.value = null
+    }
+
     Table(
         columns = columns,
         dataCount = effectiveRowCount,
@@ -402,6 +415,7 @@ private fun TableTabTable(
         searchPlaceholder = descriptor.searchPlaceholder,
         searchBarLeading = searchBarLeading,
         showIdColumn = descriptor.showIdColumn,
+        externalSelectedIndex = externalSelectedIndex,
     )
 }
 
@@ -507,6 +521,19 @@ private fun flattenTree(
     return result
 }
 
+/**
+ * Points a [Table]'s `externalSelectedIndex` at [target]. The table reacts to changes only, so
+ * a repeat request for the row it already holds — the user scrolled away from a revealed class
+ * and reveals it again — first clears the index for a frame.
+ */
+private suspend fun reselect(current: Int?, target: Int, set: (Int?) -> Unit) {
+    if (current == target) {
+        set(null)
+        withFrameNanos { }
+    }
+    set(target)
+}
+
 private const val DEFAULT_TREEMAP_FRACTION = 0.35f
 private const val MIN_TREEMAP_FRACTION = 0.15f
 private const val MAX_TREEMAP_FRACTION = 0.6f
@@ -604,6 +631,17 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
         }
     }
 
+    // External "select row N" requests, e.g. from an APK's "Reveal in DEX".
+    // N is a top-level descriptor row; it is selected wherever sorting put it.
+    val pendingRow by state.pendingTableRowSelection.collectAsState()
+    LaunchedEffect(pendingRow, flatRows) {
+        val request = pendingRow?.takeIf { it.tabName == descriptor.name } ?: return@LaunchedEffect
+        val target = flatRows.indexOfFirst { it.depth == 0 && it.index == request.rowIndex }
+        // The table selects it like a keyboard pick, onRowSelect included.
+        if (target >= 0) reselect(externalSelectedIndex, target) { externalSelectedIndex = it }
+        state.pendingTableRowSelection.value = null
+    }
+
     // The descriptor's menu items are indexed by top-level row, so only
     // top-level rows get them; child rows have no index of their own there.
     val onRowContextMenu: (Int) -> List<ContextMenuItem> = { flatIndex ->
@@ -674,14 +712,8 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
                         // Find and select the row matching the clicked treePath.
                         val updatedRows = flattenTree(descriptor, expandedPaths.toSet(), sortColumnIndex, sortAscending, searchQuery, activeFilter)
                         val targetIndex = updatedRows.indexOfFirst { it.treePath == treePath }
-                        if (targetIndex >= 0) {
-                            val row = updatedRows[targetIndex]
-                            externalSelectedIndex = targetIndex
-                            val selection = row.rowSelectionProvider(row.index)
-                            if (selection != null) {
-                                state.scrollHexViewTo(selection.offset, selection.size)
-                            }
-                        }
+                        // The table selects it, and its onRowSelect scrolls the hex view.
+                        if (targetIndex >= 0) externalSelectedIndex = targetIndex
                     },
                 )
             }
@@ -704,6 +736,7 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
             onRowSelect = onRowSelect,
             onRow = onRow,
             onRowContextMenu = onRowContextMenu,
+            externalSelectedIndex = externalSelectedIndex,
         )
     }
 }

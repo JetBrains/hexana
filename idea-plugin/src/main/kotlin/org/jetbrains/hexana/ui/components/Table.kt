@@ -184,12 +184,18 @@ fun Table(
     }
 
     LaunchedEffect(externalSelectedIndex) {
-        if (externalSelectedIndex != null && externalSelectedIndex != selectedOriginalIndex) {
-            selectedOriginalIndex = externalSelectedIndex
-            val viewIndex = viewData.indexOf(externalSelectedIndex)
-            if (viewIndex >= 0) {
-                lazyListState.animateScrollToItem(viewIndex)
-            }
+        val id = externalSelectedIndex ?: return@LaunchedEffect
+        // A real selection, as if the row had been picked with the keyboard:
+        // highlighted, focused so the arrow keys carry on from it, and reported
+        // through onRowSelect. It also scrolls when the row is already the
+        // selected one, since the user may have scrolled away from it.
+        selectedOriginalIndex = id
+        hoveredOriginalIndex = null
+        focusRequester.requestFocus()
+        onRowSelect?.invoke(id)
+        val viewIndex = viewData.indexOf(id)
+        if (viewIndex >= 0) {
+            lazyListState.animateScrollToItem(viewIndex)
         }
     }
 

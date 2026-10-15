@@ -91,6 +91,8 @@ import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.shared.RowContextMenuItemDescriptor
 import org.jetbrains.hexana.tar.TarEntry
 import org.jetbrains.hexana.zip.ZipEntry
+import org.jetbrains.hexana.shared.APK_CLASSES_TAB_NAME
+import org.jetbrains.hexana.shared.isApkFileName
 import org.jetbrains.jewel.foundation.theme.JewelTheme
 import org.jetbrains.jewel.ui.component.*
 import org.jetbrains.jewel.ui.icons.AllIconsKeys
@@ -118,6 +120,8 @@ internal fun BinaryEditorView(
     wasmUiProbeSink: ((String, String) -> Unit)? = null,
     classFileNavTargetFlow: MutableStateFlow<ClassFileNavTarget?> = remember { MutableStateFlow(null) },
     onOpenZipEntry: ((ZipEntry) -> Unit)? = null,
+    /** Opens an APK's DEX [ZipEntry] with class `classDefIndex` selected on its Classes tab. */
+    onRevealApkDexClass: ((entry: ZipEntry, classDefIndex: Int) -> Unit)? = null,
     onOpenTarEntry: ((TarEntry) -> Unit)? = null,
     decompiledContentPanelFlow: StateFlow<Panel?> = remember { MutableStateFlow(null) },
     gutterMarksModelFlow: StateFlow<GutterMarksModel?>? = null,
@@ -359,7 +363,7 @@ internal fun BinaryEditorView(
             val scriptPanels = scriptSettings.getScriptPaths(fileName).map { scriptPath ->
                 createScriptPanel(scriptPath, binaryProvider, fileName, filePath, state.project)
             }
-            val placeholders = if (hexEditedSinceOpen) emptyList() else binaryProvider.discoverPanelNames()
+            val placeholders = if (hexEditedSinceOpen) emptyList() else binaryProvider.discoverPanelNames(fileName)
                 .map { name -> Panel(name) { LoadingTabContent() } }
             val decompiled = decompiledContentPanelFlow.value?.let { listOf(it) } ?: emptyList()
             mutableStateListOf(*(placeholders + decompiled + scriptPanels).toTypedArray())
@@ -427,6 +431,7 @@ internal fun BinaryEditorView(
                     wasmUiProbeSink = wasmUiProbeSink,
                     classFileNavTargetFlow = classFileNavTargetFlow,
                     fileName = fileName,
+                    onRevealApkDexClass = onRevealApkDexClass,
                     gutterMarksModelFlow = gutterMarksModelFlow,
                     executionOffsetFlow = executionOffsetFlow,
                     onToggleWasmBreakpoint = onToggleWasmBreakpoint,
@@ -1213,6 +1218,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
     wasmUiProbeSink: ((String, String) -> Unit)? = null,
     classFileNavTargetFlow: MutableStateFlow<ClassFileNavTarget?>? = null,
     fileName: String? = null,
+    onRevealApkDexClass: ((entry: ZipEntry, classDefIndex: Int) -> Unit)? = null,
     gutterMarksModelFlow: StateFlow<GutterMarksModel?>? = null,
     executionOffsetFlow: StateFlow<Long?>? = null,
     onToggleWasmBreakpoint: ((funcIdx: Int, byteOffset: Long, instrOrdinal: Int) -> Unit)? = null,
@@ -1233,6 +1239,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
         }
     }
     is DexBinaryProvider -> dexSmaliPanels(this, state)
+    is ZipBinaryProvider -> if (isApkFileName(fileName)) apkClassesPanels(this, state, onRevealApkDexClass) else emptyList()
     is GenericBinaryProvider -> emptyList()
     is ArchiveBinaryProvider -> emptyList()
     is ElfBinaryProvider -> {
@@ -1892,7 +1899,7 @@ private fun BinaryVirtualFileProvider.errorPanel(state: HexViewStateHolder): Lis
  * immediately with loading indicators while the full content resolves on a
  * background thread.
  */
-private fun BinaryProvider.discoverPanelNames(): List<String> {
+private fun BinaryProvider.discoverPanelNames(fileName: String): List<String> {
     val providers = TableTabsProviderRegistry.providers
     val context = TableTabsContext()
 
@@ -1925,7 +1932,7 @@ private fun BinaryProvider.discoverPanelNames(): List<String> {
     val (lowEntries, normalEntries) = nameEntries.partition { it.priority == TabPriority.Low }
 
     // Hardcoded provider panel names (non-table panels like Dominators, WAT, etc.)
-    val providerPanelNames = discoverHardcodedPanelNames()
+    val providerPanelNames = discoverHardcodedPanelNames(fileName)
 
     return normalEntries.map { it.name } + providerPanelNames + lowEntries.map { it.name }
 }
@@ -1934,9 +1941,10 @@ private fun BinaryProvider.discoverPanelNames(): List<String> {
  * Returns the names of hardcoded (non-table-tab) panels that this provider
  * will produce, based on cheap type checks only.
  */
-private fun BinaryProvider.discoverHardcodedPanelNames(): List<String> = when (this) {
+private fun BinaryProvider.discoverHardcodedPanelNames(fileName: String): List<String> = when (this) {
     is ClassFileBinaryProvider -> listOf("Header", "Methods")
     is DexBinaryProvider -> listOf(DEX_SMALI_TAB_NAME)
+    is ZipBinaryProvider -> if (isApkFileName(fileName)) listOf(APK_CLASSES_TAB_NAME) else emptyList()
     is GenericBinaryProvider -> emptyList()
     is ArchiveBinaryProvider -> emptyList()
     is ElfBinaryProvider -> {
@@ -1995,14 +2003,14 @@ private fun BinaryProvider.discoverDwarfPanelNames(): List<String>? =
  * panel content is being resolved on a background thread.
  */
 @Composable
-private fun LoadingTabContent() {
+internal fun LoadingTabContent(message: String = "Loading\u2026") {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             CircularProgressIndicator()
-            Text("Loading\u2026")
+            Text(message)
         }
     }
 }

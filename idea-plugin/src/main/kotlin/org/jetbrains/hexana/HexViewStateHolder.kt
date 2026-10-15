@@ -51,6 +51,12 @@ data class HexScrollRequest(
     val highlightLine: Boolean = false,
 )
 
+/** Select the top-level row [rowIndex] — a descriptor row index, not a view position — of table tab [tabName]. */
+data class TableRowSelectionRequest(
+    val tabName: String,
+    val rowIndex: Int,
+)
+
 class HexViewStateHolder(
     val project: Project,
 ) {
@@ -108,6 +114,17 @@ class HexViewStateHolder(
     fun requestRevealDexClassInSmali(classDefIndex: Int) {
         dexSmaliClassNav.value = classDefIndex
         requestSelectTabByDescription(DEX_SMALI_TAB_NAME)
+    }
+
+    // Pending "select top-level row N of table tab T" request, e.g. from an
+    // APK's "Reveal in DEX". A state flow for the same reason as
+    // dexSmaliClassNav: table tabs resolve in the background and compose only
+    // once selected. The table resets it to null after consuming.
+    val pendingTableRowSelection: MutableStateFlow<TableRowSelectionRequest?> = MutableStateFlow(null)
+
+    fun requestSelectTableRow(tabName: String, rowIndex: Int) {
+        pendingTableRowSelection.value = TableRowSelectionRequest(tabName, rowIndex)
+        requestSelectTabByDescription(tabName)
     }
 
     // Live tab names as rendered by BinaryEditorView, in display order. Empty

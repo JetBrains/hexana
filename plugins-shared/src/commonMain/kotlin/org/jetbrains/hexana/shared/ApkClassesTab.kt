@@ -1,0 +1,137 @@
+package org.jetbrains.hexana.shared
+
+import org.jetbrains.hexana.dex.DexFile
+import org.jetbrains.hexana.dex.DexFileParser
+import org.jetbrains.hexana.dex.renderDexClassAccessFlags
+import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.providers.ZipBinaryProvider
+import org.jetbrains.hexana.zip.ZipEntry
+
+/** Name of the APK tab that lists the classes of every DEX file in the archive. */
+const val APK_CLASSES_TAB_NAME: String = "Classes"
+
+/** Label of the APK Classes-table action that opens a class's DEX with that class selected. */
+const val APK_REVEAL_IN_DEX_LABEL: String = "Reveal in DEX"
+
+/** Whether [fileName] names an Android package; matches the APK flavour of the Entries tab. */
+fun isApkFileName(fileName: String?): Boolean = fileName?.endsWith(".apk", ignoreCase = true) == true
+
+/**
+ * One class of an APK: the DEX [entry] it is defined in and its [classDefIndex] there — an
+ * index into `DexFile.classDefs`, which is also the row index of that DEX's own Classes tab.
+ */
+class ApkDexClassRow(
+    val entry: ZipEntry,
+    val classDefIndex: Int,
+    val className: String,
+    val accessFlags: String,
+    val superclass: String,
+)
+
+/** Every class of an APK, plus the DEX entries that could not be read. */
+class ApkDexClasses(
+    val dexEntries: List<ZipEntry>,
+    val rows: List<ApkDexClassRow>,
+    val unreadableEntries: List<String>,
+)
+
+/**
+ * The archive's `.dex` entries in the order the runtime loads them — `classes.dex`,
+ * `classes2.dex`, … `classes10.dex` — followed by any other DEX entry by name.
+ */
+fun apkDexEntries(provider: ZipBinaryProvider): List<ZipEntry> =
+    provider.displayEntries
+        .filter { it.name.endsWith(".dex", ignoreCase = true) }
+        .sortedWith(compareBy<ZipEntry> { multiDexOrdinal(it.name) }.thenBy { it.name })
+
+private val MULTI_DEX_NAME = Regex("classes(\\d*)\\.dex")
+
+private fun multiDexOrdinal(name: String): Int {
+    val match = MULTI_DEX_NAME.matchEntire(name) ?: return Int.MAX_VALUE
+    val suffix = match.groupValues[1]
+    return if (suffix.isEmpty()) 1 else suffix.toIntOrNull() ?: Int.MAX_VALUE
+}
+
+/**
+ * Reads the classes of every DEX entry in [provider]. [readEntry] inflates one entry — inflation
+ * is host-specific — and returns `null` when it cannot. Decodes every DEX in the archive, so call
+ * it off the UI thread; [onProgress] is told before each entry is read.
+ */
+fun collectApkDexClasses(
+    provider: ZipBinaryProvider,
+    onProgress: ((index: Int, total: Int, entry: ZipEntry) -> Unit)? = null,
+    readEntry: (ZipEntry) -> CommonByteBuffer?,
+): ApkDexClasses {
+    val dexEntries = apkDexEntries(provider)
+    val rows = mutableListOf<ApkDexClassRow>()
+    val unreadable = mutableListOf<String>()
+    for ((index, entry) in dexEntries.withIndex()) {
+        onProgress?.invoke(index, dexEntries.size, entry)
+        val dex = try {
+            readEntry(entry)?.let { DexFileParser.parse(it.position(0)) }
+        } catch (_: Exception) {
+            null
+        }
+        if (dex == null) {
+            unreadable += entry.name
+            continue
+        }
+        rows += apkDexClassRows(entry, dex)
+    }
+    return ApkDexClasses(dexEntries, rows, unreadable)
+}
+
+private fun apkDexClassRows(entry: ZipEntry, dex: DexFile): List<ApkDexClassRow> =
+    dex.classDefs.mapIndexed { index, cd ->
+        ApkDexClassRow(
+            entry = entry,
+            classDefIndex = index,
+            className = dex.typeName(cd.classIdx) ?: "<#${cd.classIdx}>",
+            accessFlags = renderDexClassAccessFlags(cd.accessFlags),
+            superclass = if (cd.superclassIdx == -1) "" else dex.typeName(cd.superclassIdx) ?: "<#${cd.superclassIdx}>",
+        )
+    }
+
+/**
+ * The APK Classes table: one row per class across all DEX files, in load order. With several
+ * DEX files, each gets a filter. [onRevealInDex], when given, backs a "Reveal in DEX" row action
+ * that each host wires to opening [ApkDexClassRow.entry] with the class selected.
+ */
+fun apkClassesDescriptor(
+    classes: ApkDexClasses,
+    onRevealInDex: ((ApkDexClassRow) -> Unit)? = null,
+): TableTabDescriptor {
+    val rows = classes.rows
+    val filters = if (classes.dexEntries.size > 1) {
+        classes.dexEntries.map { entry ->
+            PredefinedFilter(entry.name) { index -> rows[index].entry.name == entry.name }
+        }
+    } else emptyList()
+    val prologue = classes.unreadableEntries.takeIf { it.isNotEmpty() }
+        ?.joinToString(prefix = "Could not read: ")
+    return TableTabDescriptor(
+        name = APK_CLASSES_TAB_NAME,
+        columns = listOf(
+            col("Class", ColumnWidth.Fill()) { CellValue(rows[it].className) },
+            col("Access", ColumnWidth.MeasuredMin("public abstract interface")) { CellValue(rows[it].accessFlags) },
+            col("Superclass", ColumnWidth.Fill(0.4f)) { CellValue(rows[it].superclass) },
+            col("DEX", ColumnWidth.MeasuredMin("classes00.dex")) { CellValue(rows[it].entry.name) },
+        ),
+        rowCount = rows.size,
+        contextMenuItems = if (onRevealInDex != null) {
+            listOf(
+                RowContextMenuItemDescriptor(
+                    labelProvider = { APK_REVEAL_IN_DEX_LABEL },
+                    action = { index -> onRevealInDex(rows[index]) },
+                ),
+            )
+        } else emptyList(),
+        alwaysShowSearch = true,
+        searchPlaceholder = "Search classes",
+        emptyMessage = if (classes.dexEntries.isEmpty()) "(no DEX files)" else "(no classes)",
+        showIdColumn = false,
+        prologueText = prologue,
+        predefinedFilters = filters,
+        defaultFilterShowAll = true,
+    )
+}
