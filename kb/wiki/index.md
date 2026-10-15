@@ -26,6 +26,9 @@ consult-first / write-back rules.
 - [[entities/apk-emulator-run]] — the trivial APK Run button: SDK/AVD detection gate, boot →
   install → launch flow shared by IntelliJ and VS Code via `AndroidEmulatorRun`, and what it
   deliberately does not do.
+- [[entities/dex-reveal-in-smali]] — DEX Classes → Smali navigation: shared
+  `withDexRevealInSmali`/`withExtraContextMenuItems`, IntelliJ state-flow and web
+  composition-local host bindings, top-level-only tree-table context menus.
 
 ## Sources
 
