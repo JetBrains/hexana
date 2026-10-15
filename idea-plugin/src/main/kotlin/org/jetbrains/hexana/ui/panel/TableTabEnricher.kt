@@ -830,41 +830,5 @@ private fun enrichFatMachOUniversalTab(
 internal fun List<TableTabDescriptor>.enrichDexTabs(
     hexViewState: HexViewStateHolder,
 ): List<TableTabDescriptor> = map { tab ->
-    if (tab.name == "Classes" && tab.rowCount > 0) enrichDexClassesTab(tab, hexViewState) else tab
+    tab.withDexRevealInSmali { classDefIndex -> hexViewState.requestRevealDexClassInSmali(classDefIndex) }
 }
-
-private fun enrichDexClassesTab(
-    tab: TableTabDescriptor,
-    hexViewState: HexViewStateHolder,
-): TableTabDescriptor = TableTabDescriptor(
-    name = tab.name,
-    columns = tab.columns,
-    rowCount = tab.rowCount,
-    defaultSortColumn = tab.defaultSortColumn,
-    defaultSortAscending = tab.defaultSortAscending,
-    rowSelectionProvider = tab.rowSelectionProvider,
-    rowAction = tab.rowAction,
-    // Rows are class_def_item indices, which is what the Smali tab's class
-    // bodies are keyed by.
-    contextMenuItems = tab.contextMenuItems + RowContextMenuItemDescriptor(
-        labelProvider = { "Reveal in Smali" },
-        action = { index -> hexViewState.requestRevealDexClassInSmali(index) },
-    ),
-    rowClickAction = tab.rowClickAction,
-    rowDoubleClickAction = tab.rowDoubleClickAction,
-    dynamicContextMenuProvider = tab.dynamicContextMenuProvider,
-    prologueText = tab.prologueText,
-    prologueActions = tab.prologueActions,
-    emptyMessage = tab.emptyMessage,
-    childrenProvider = tab.childrenProvider,
-    alwaysShowSearch = tab.alwaysShowSearch,
-    searchPlaceholder = tab.searchPlaceholder,
-    showIdColumn = tab.showIdColumn,
-    priority = tab.priority,
-    rowHighlightRangesProvider = tab.rowHighlightRangesProvider,
-    predefinedFilters = tab.predefinedFilters,
-    defaultFilterShowAll = tab.defaultFilterShowAll,
-    treemapData = tab.treemapData,
-    rowDetailProvider = tab.rowDetailProvider,
-    rowTintProvider = tab.rowTintProvider,
-)

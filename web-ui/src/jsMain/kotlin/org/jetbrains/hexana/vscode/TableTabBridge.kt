@@ -1643,6 +1643,11 @@ private fun TreeTableBody(
         flatRows.getOrNull(focusedFlatIndex)?.let { row -> rowClipboardText(row.columns, row.index, id = null) }
     }
 
+    // The descriptor's menu items are indexed by top-level row, so only
+    // top-level rows get them; child rows have no index of their own there.
+    val hasContextMenu = descriptor.contextMenuItems.isNotEmpty() || descriptor.dynamicContextMenuProvider != null
+    var contextMenuState by remember(descriptor) { mutableStateOf<ContextMenuState?>(null) }
+
     val totalRows = flatRows.size
     val firstVisible = maxOf(0, (scrollTop / rowHeight).toInt() - bufferRows)
     val lastVisible = minOf(totalRows - 1, ((scrollTop + viewportHeight) / rowHeight).toInt() + bufferRows)
@@ -1891,6 +1896,10 @@ private fun TreeTableBody(
                                     toggleNode(row.treePath, row.isExpanded)
                                 }
                             },
+                            onContextMenu = if (hasContextMenu && row.depth == 0) { { x, y ->
+                                onFocusedFlatIndexChange(flatIndex)
+                                contextMenuState = ContextMenuState(row.index, x, y)
+                            } } else null,
                         ) {
                             // Action column placeholder
                             Td({ classes("cell-id"); style { property("width", "12px") } }) {}
@@ -1950,6 +1959,15 @@ private fun TreeTableBody(
                     }
                 }
             }
+        }
+        contextMenuState?.let { state ->
+            RowContextMenu(
+                rowIndex = state.rowIndex,
+                x = state.x,
+                y = state.y,
+                descriptor = descriptor,
+                onDismiss = { contextMenuState = null },
+            )
         }
     }
 }

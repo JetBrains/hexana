@@ -45,6 +45,19 @@ class DexEditorContentTest {
     }
 
     @Test
+    fun headerIndexOfAccountsForExpandedClassesAndFilteredOnes() {
+        val index = DexSmaliItemIndex(classes, mapOf(0 to rows(4, "c0")))
+        assertEquals(0, index.headerIndexOf(0))
+        assertEquals(5, index.headerIndexOf(1))
+        assertEquals(6, index.headerIndexOf(2))
+
+        // A class a search filtered out is not listed, so it has no header.
+        val filtered = DexSmaliItemIndex(listOf(classes[0], classes[2]), emptyMap())
+        assertNull(filtered.headerIndexOf(1))
+        assertEquals(1, filtered.headerIndexOf(2))
+    }
+
+    @Test
     fun expandingAClassInsertsItsRowsAfterItsHeader() {
         val index = DexSmaliItemIndex(classes, mapOf(1 to rows(2, "c1")))
 

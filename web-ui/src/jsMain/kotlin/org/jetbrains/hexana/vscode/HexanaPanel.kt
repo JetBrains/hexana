@@ -13,6 +13,7 @@ import org.jetbrains.hexana.pcap.PcapDissector
 import org.jetbrains.hexana.pcap.PlaintextHttpBody
 import org.jetbrains.hexana.providers.ArchiveBinaryProvider
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.DexBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.providers.PcapBinaryProvider
 import org.jetbrains.hexana.providers.SbomLocator
@@ -20,6 +21,7 @@ import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.TarBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
+import org.jetbrains.hexana.shared.DEX_SMALI_TAB_NAME
 import org.jetbrains.hexana.shared.RowContextMenuItemDescriptor
 import org.jetbrains.hexana.shared.buildInvokeOption
 import org.jetbrains.hexana.shared.TableTabDescriptor
@@ -28,6 +30,7 @@ import org.jetbrains.hexana.shared.features.WasmRuntimeCompatibility
 import org.jetbrains.hexana.shared.scripting.ScriptApiReference
 import org.jetbrains.hexana.shared.TabPriority
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
+import org.jetbrains.hexana.shared.withDexRevealInSmali
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.events.Event
 
@@ -97,6 +100,10 @@ fun HexanaPanel(
     // consumed (reset to null) by the WAT view once handled.
     val watNavFuncIdx = remember { mutableStateOf<Int?>(null) }
 
+    // "Reveal in Smali" channel from the DEX Classes tab into the Smali tab,
+    // which the caller builds; see [LocalDexSmaliReveal].
+    val dexSmaliReveal = remember(provider) { mutableStateOf<Int?>(null) }
+
     // Lazy SBOM detection: nativeImageInfo is expensive (string scan + symbol resolution).
     // Populated by a LaunchedEffect so it never runs synchronously in the composition path.
     // Its presence is a remember key so the SBOM tab appears once detection completes.
@@ -156,6 +163,11 @@ fun HexanaPanel(
                         enrichArchiveMembersTab(d, provider, host)
                     } else if (d.name == "Packets" && provider is PcapBinaryProvider) {
                         enrichPcapPacketsTab(d, provider, host) { pendingHttpReplay = it }
+                    } else if (provider is DexBinaryProvider) {
+                        d.withDexRevealInSmali { classDefIndex ->
+                            dexSmaliReveal.value = classDefIndex
+                            onActiveTabChange(DEX_SMALI_TAB_NAME)
+                        }
                     } else d
                     tabEntries += TabEntry(
                         PanelTab(desc.name) { sel -> TableTabContent(desc, sel) },
@@ -486,7 +498,9 @@ fun HexanaPanel(
                 onDispose { tabContentRef = null }
             }
         }) {
-            currentTab?.content?.invoke(selection)
+            CompositionLocalProvider(LocalDexSmaliReveal provides dexSmaliReveal) {
+                currentTab?.content?.invoke(selection)
+            }
         }
     }
 }

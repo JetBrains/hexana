@@ -31,6 +31,16 @@ internal fun dexSmaliExtraTabs(dex: DexFile, bytes: CommonByteBuffer): List<Pane
     PanelTab(DEX_SMALI_TAB_NAME, padding = false) { selection -> DexSmaliTab(dex, bytes, selection) },
 )
 
+/**
+ * Pending "Reveal in Smali" request from the Classes table: an index into
+ * `DexFile.classDefs`, reset to `null` by the Smali tab once handled.
+ *
+ * A composition local because the Smali tab is built by the caller of
+ * [computeExtraTabs], outside [HexanaPanel], which owns the table tabs and
+ * provides this around the tab content. Unprovided, requests go nowhere.
+ */
+internal val LocalDexSmaliReveal = staticCompositionLocalOf<MutableState<Int?>> { mutableStateOf(null) }
+
 /** Height of one smali line, in px. [VirtualizedList] needs it fixed and exact. */
 private const val SMALI_ROW_HEIGHT_PX = 18
 
@@ -84,6 +94,12 @@ internal class DexSmaliItemIndex(
         return DexSmaliItem.Row(cls.index, row)
     }
 
+    /** Item index of the header line of class [classDefIndex], or `null` when it is not listed. */
+    fun headerIndexOf(classDefIndex: Int): Int? {
+        val slot = classes.indexOfFirst { it.index == classDefIndex }
+        return if (slot < 0) null else headerAt[slot]
+    }
+
     private fun lastHeaderAtOrBefore(itemIndex: Int): Int {
         var low = 0
         var high = headerAt.size - 1
@@ -100,6 +116,9 @@ internal class DexSmaliItemIndex(
         return result
     }
 }
+
+/** A "Reveal in Smali" request; [requestId] makes revealing the same class twice scroll again. */
+private data class DexSmaliRevealTarget(val classDefIndex: Int, val requestId: Int)
 
 /**
  * Holds the search index, built on first use and then reused.
@@ -168,6 +187,32 @@ private fun DexSmaliTab(dex: DexFile, bytes: CommonByteBuffer, selection: HexSel
         DexSmaliItemIndex(visibleClasses, rows)
     }
 
+    // "Reveal in Smali": expand the class, drop a search that hides it, then
+    // scroll its header into view. The reveal is resolved against the index
+    // once, when the request lands, so later fold toggles do not re-scroll.
+    val revealRequest = LocalDexSmaliReveal.current
+    var revealTarget by remember(dex) { mutableStateOf<DexSmaliRevealTarget?>(null) }
+    var revealRequests by remember(dex) { mutableStateOf(0) }
+    val pendingReveal = revealRequest.value
+    LaunchedEffect(pendingReveal) {
+        val classDefIndex = pendingReveal ?: return@LaunchedEffect
+        revealRequest.value = null
+        if (classDefIndex !in classes.indices) return@LaunchedEffect
+        if (visibleClasses.none { it.index == classDefIndex }) {
+            searchQuery = ""
+            debouncedQuery = ""
+        }
+        expanded = expanded + classDefIndex
+        // The item index is only known once the expansion above has rebuilt
+        // itemIndex, so the class is resolved below, on the next composition.
+        revealTarget = DexSmaliRevealTarget(classDefIndex, ++revealRequests)
+    }
+    val listReveal = remember(revealTarget) {
+        revealTarget?.let { target ->
+            itemIndex.headerIndexOf(target.classDefIndex)?.let { ListReveal(it, target.requestId) }
+        }
+    }
+
     Div({
         style {
             display(DisplayStyle.Flex)
@@ -210,7 +255,7 @@ private fun DexSmaliTab(dex: DexFile, bytes: CommonByteBuffer, selection: HexSel
             return@Div
         }
 
-        VirtualizedList(itemCount = itemIndex.size, itemHeightPx = SMALI_ROW_HEIGHT_PX) { index ->
+        VirtualizedList(itemCount = itemIndex.size, itemHeightPx = SMALI_ROW_HEIGHT_PX, reveal = listReveal) { index ->
             when (val item = itemIndex.at(index)) {
                 is DexSmaliItem.Header -> DexClassHeaderRow(item) {
                     expanded = if (item.cls.index in expanded) {

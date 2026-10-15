@@ -277,6 +277,39 @@ class TableTabDescriptor(
 }
 
 /**
+ * This descriptor with [items] appended to its [TableTabDescriptor.contextMenuItems]; every
+ * other property is carried over. Lets a host add actions to a shared tab without restating it.
+ */
+fun TableTabDescriptor.withExtraContextMenuItems(items: List<RowContextMenuItemDescriptor>): TableTabDescriptor =
+    TableTabDescriptor(
+        name = name,
+        columns = columns,
+        rowCount = rowCount,
+        defaultSortColumn = defaultSortColumn,
+        defaultSortAscending = defaultSortAscending,
+        rowSelectionProvider = rowSelectionProvider,
+        rowAction = rowAction,
+        contextMenuItems = contextMenuItems + items,
+        rowClickAction = rowClickAction,
+        rowDoubleClickAction = rowDoubleClickAction,
+        dynamicContextMenuProvider = dynamicContextMenuProvider,
+        prologueText = prologueText,
+        prologueActions = prologueActions,
+        emptyMessage = emptyMessage,
+        childrenProvider = childrenProvider,
+        alwaysShowSearch = alwaysShowSearch,
+        searchPlaceholder = searchPlaceholder,
+        showIdColumn = showIdColumn,
+        priority = priority,
+        rowHighlightRangesProvider = rowHighlightRangesProvider,
+        predefinedFilters = predefinedFilters,
+        defaultFilterShowAll = defaultFilterShowAll,
+        treemapData = treemapData,
+        rowDetailProvider = rowDetailProvider,
+        rowTintProvider = rowTintProvider,
+    )
+
+/**
  * A set of nested child rows for a tree-table row.
  *
  * Shares the same column layout as the parent [TableTabDescriptor]: each

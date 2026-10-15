@@ -16,6 +16,30 @@ class DexTableTabsProvider : TableTabsProvider {
     }
 }
 
+/** Name of the DEX class table; see [dexClassesTab]. */
+const val DEX_CLASSES_TAB_NAME: String = "Classes"
+
+/** Label of the Classes-table action that jumps to a class in the [DEX_SMALI_TAB_NAME] tab. */
+const val DEX_REVEAL_IN_SMALI_LABEL: String = "Reveal in Smali"
+
+/**
+ * Adds "Reveal in Smali" to the DEX Classes tab; other tabs, and an empty Classes tab, are
+ * returned as they are. Each host supplies [onReveal], which receives the row's index into
+ * `DexFile.classDefs` — the same index the smali view keys its classes by
+ * (see [dexSmaliClassBodyId]) — and switches to the Smali tab.
+ */
+fun TableTabDescriptor.withDexRevealInSmali(onReveal: (classDefIndex: Int) -> Unit): TableTabDescriptor {
+    if (name != DEX_CLASSES_TAB_NAME || rowCount == 0) return this
+    return withExtraContextMenuItems(
+        listOf(
+            RowContextMenuItemDescriptor(
+                labelProvider = { DEX_REVEAL_IN_SMALI_LABEL },
+                action = onReveal,
+            ),
+        ),
+    )
+}
+
 private fun dexHeaderTab(dex: DexFile): TableTabDescriptor {
     val h = dex.header
     val rows = listOf(
@@ -47,7 +71,7 @@ private fun dexHeaderTab(dex: DexFile): TableTabDescriptor {
 private fun dexClassesTab(dex: DexFile, provider: DexBinaryProvider): TableTabDescriptor {
     val classDefs = dex.classDefs
     if (classDefs.isEmpty()) return TableTabDescriptor(
-        name = "Classes",
+        name = DEX_CLASSES_TAB_NAME,
         columns = emptyList(),
         rowCount = 0,
         emptyMessage = "(no classes)",
@@ -82,7 +106,7 @@ private fun dexClassesTab(dex: DexFile, provider: DexBinaryProvider): TableTabDe
     }
 
     return TableTabDescriptor(
-        name = "Classes",
+        name = DEX_CLASSES_TAB_NAME,
         columns = listOf(
             col("Index", ColumnWidth.MeasuredMin("9999")) { CellValue(it) },
             col("Class", ColumnWidth.Fill()) { CellValue(classNames[it]) },
