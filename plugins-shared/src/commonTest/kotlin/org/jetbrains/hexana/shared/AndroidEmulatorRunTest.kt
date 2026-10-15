@@ -43,6 +43,24 @@ class AndroidEmulatorRunTest {
     }
 
     @Test
+    fun windowsPathsUseExeSuffixAndLocalAppData() {
+        val candidates = AndroidEmulatorRun.sdkRootCandidates(mapOf("LOCALAPPDATA" to "C:\\Users\\u\\AppData\\Local"), "C:\\Users\\u")
+        assertEquals("C:\\Users\\u\\AppData\\Local/Android/Sdk", candidates.last())
+        assertEquals("C:/sdk/platform-tools/adb.exe", AndroidEmulatorRun.adbPath("C:/sdk", isWindows = true))
+        assertEquals("C:/sdk/emulator/emulator.exe", AndroidEmulatorRun.emulatorPath("C:/sdk", isWindows = true))
+        assertEquals("C:/sdk/build-tools/36.0.0/aapt2.exe", AndroidEmulatorRun.aaptCandidates("C:/sdk", listOf("36.0.0"), isWindows = true).first())
+    }
+
+    @Test
+    fun parsesCrlfOutput() {
+        assertEquals(listOf("Pixel_8"), AndroidEmulatorRun.parseAvdList("Pixel_8\r\n"))
+        assertEquals(listOf("emulator-5554"), AndroidEmulatorRun.parseOnlineEmulators("List of devices attached\r\nemulator-5554\tdevice\r\n\r\n"))
+        assertTrue(AndroidEmulatorRun.isBootCompleted("1\r\r\n"))
+        assertTrue(AndroidEmulatorRun.isInstallSuccess("Performing Streamed Install\r\nSuccess\r\n"))
+        assertEquals("com.example.app", AndroidEmulatorRun.parsePackageName("com.example.app\r\n"))
+    }
+
+    @Test
     fun aaptCandidatesAreNewestFirst() {
         val candidates = AndroidEmulatorRun.aaptCandidates("/sdk", listOf("30.0.3", "37.0.0", "36.1.0"), isWindows = false)
         assertEquals("/sdk/build-tools/37.0.0/aapt2", candidates.first())
@@ -71,6 +89,14 @@ class AndroidEmulatorRunTest {
     fun packageNameArgsDependOnTool() {
         assertEquals(listOf("dump", "packagename", "a.apk"), AndroidEmulatorRun.packageNameArgs("/x/aapt2.exe", "a.apk"))
         assertEquals(listOf("dump", "badging", "a.apk"), AndroidEmulatorRun.packageNameArgs("/x/aapt", "a.apk"))
+        assertEquals(
+            listOf("dump", "packagename", "a.apk"),
+            AndroidEmulatorRun.packageNameArgs("C:\\sdk\\build-tools\\36.0.0\\aapt2.exe", "a.apk"),
+        )
+        assertEquals(
+            listOf("dump", "badging", "a.apk"),
+            AndroidEmulatorRun.packageNameArgs("C:\\aapt2-tools\\aapt.exe", "a.apk"),
+        )
     }
 
     @Test

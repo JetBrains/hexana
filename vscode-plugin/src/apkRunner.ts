@@ -62,7 +62,9 @@ export function detectAndroidSdk(): AndroidSdk | null {
  */
 function runTool(command: string, args: string[], timeoutMs = 30_000, signal?: AbortSignal): Promise<string | null> {
     return new Promise((resolve) => {
-        execFile(command, args, { timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024, signal }, (error, stdout, stderr) => {
+        // `windowsHide`: without it every call (boot polling runs one every 2s) flashes a console window on Windows.
+        const options = { timeout: timeoutMs, maxBuffer: 16 * 1024 * 1024, signal, windowsHide: true };
+        execFile(command, args, options, (error, stdout, stderr) => {
             const output = `${stdout ?? ""}${stderr ?? ""}`;
             // A non-zero exit still carries output worth parsing (e.g. `adb install` failures).
             if (error && (error as NodeJS.ErrnoException).code === "ENOENT") {
@@ -80,7 +82,7 @@ function runTool(command: string, args: string[], timeoutMs = 30_000, signal?: A
 function startEmulator(sdk: AndroidSdk, avd: string): Promise<void> {
     const lib = extensionLib!;
     return new Promise((resolve, reject) => {
-        const child = spawn(sdk.emulator, lib.androidBootArgs(avd), { detached: true, stdio: "ignore" });
+        const child = spawn(sdk.emulator, lib.androidBootArgs(avd), { detached: true, stdio: "ignore", windowsHide: true });
         child.once("error", (e) => reject(new ApkRunError(`Failed to start emulator ${avd}: ${e.message}`)));
         child.once("spawn", () => {
             child.unref();

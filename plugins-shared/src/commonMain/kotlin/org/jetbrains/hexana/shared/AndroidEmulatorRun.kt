@@ -64,9 +64,12 @@ object AndroidEmulatorRun {
 
     fun installArgs(serial: String, apkPath: String): List<String> = listOf("-s", serial, "install", "-r", "-t", apkPath)
 
-    /** `aapt2 dump packagename` prints the bare name; old `aapt` only has `dump badging`. */
+    /**
+     * `aapt2 dump packagename` prints the bare name; old `aapt` only has `dump badging`.
+     * [aaptPath] may use `\\` separators (`java.io.File.path` on Windows).
+     */
     fun packageNameArgs(aaptPath: String, apkPath: String): List<String> =
-        if (aaptPath.substringAfterLast('/').startsWith("aapt2")) {
+        if (aaptPath.substringAfterLast('/').substringAfterLast('\\').startsWith("aapt2")) {
             listOf("dump", "packagename", apkPath)
         } else {
             listOf("dump", "badging", apkPath)
