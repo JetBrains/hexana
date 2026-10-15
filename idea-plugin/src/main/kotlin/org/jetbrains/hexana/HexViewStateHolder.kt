@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.jetbrains.hexana.shared.DEX_SMALI_TAB_NAME
 import org.jetbrains.hexana.shared.RowDetailData
 import org.jetbrains.hexana.ui.panel.WatConversionState
 
@@ -95,6 +96,18 @@ class HexViewStateHolder(
 
     fun requestSelectTabByDescription(description: String) {
         _pendingTabSelection.tryEmit(description)
+    }
+
+    // Pending "reveal class N in the Smali tab" request (index into
+    // DexFile.classDefs). A state flow rather than a shared one: the Smali
+    // panel only composes once its tab is selected, so the request has to
+    // wait for it. The panel resets it to null after consuming, which lets
+    // an identical re-request fire again.
+    val dexSmaliClassNav: MutableStateFlow<Int?> = MutableStateFlow(null)
+
+    fun requestRevealDexClassInSmali(classDefIndex: Int) {
+        dexSmaliClassNav.value = classDefIndex
+        requestSelectTabByDescription(DEX_SMALI_TAB_NAME)
     }
 
     // Live tab names as rendered by BinaryEditorView, in display order. Empty

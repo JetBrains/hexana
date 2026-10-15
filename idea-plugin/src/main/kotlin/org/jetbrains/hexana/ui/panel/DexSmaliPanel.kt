@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -170,10 +171,22 @@ private fun DexSmaliContent(model: DexSmaliModel, state: HexViewStateHolder) {
         )
     }
 
+    // External "Reveal in Smali" requests, e.g. from the Classes table.
+    var navigatorRef by remember(model) { mutableStateOf<ChunkPanelNavigator?>(null) }
+    val revealTarget by state.dexSmaliClassNav.collectAsState()
+    LaunchedEffect(revealTarget, navigatorRef) {
+        val classDefIndex = revealTarget ?: return@LaunchedEffect
+        val nav = navigatorRef ?: return@LaunchedEffect
+        // Navigating to the body unfolds its class header on the way.
+        nav.gotoChunk(dexSmaliClassBodyId(classDefIndex))
+        state.dexSmaliClassNav.value = null
+    }
+
     VirtualizedChunkPanel(
         chunkTree = model.tree,
         config = config,
         foldedSectionsExternal = foldedSections,
+        onNavigatorReady = { navigatorRef = it },
         // The shortcut bar renders one un-virtualized label per top-level
         // section; with a class per section that is thousands of composables.
         // The collapsed class list is the index here anyway.

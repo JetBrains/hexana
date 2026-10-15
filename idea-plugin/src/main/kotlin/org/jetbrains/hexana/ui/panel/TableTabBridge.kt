@@ -604,6 +604,27 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
         }
     }
 
+    // The descriptor's menu items are indexed by top-level row, so only
+    // top-level rows get them; child rows have no index of their own there.
+    val onRowContextMenu: (Int) -> List<ContextMenuItem> = { flatIndex ->
+        val row = flatRows.getOrNull(flatIndex)
+        if (row == null || row.depth != 0) {
+            emptyList()
+        } else {
+            val staticItems = descriptor.contextMenuItems
+                .filter { item -> item.isVisible(row.index) }
+                .map { item ->
+                    ContextMenuItem(item.labelProvider(row.index)) {
+                        item.action(row.index)
+                    }
+                }
+            val dynamicItems = descriptor.dynamicContextMenuProvider?.invoke(row.index)
+                ?.map { entry -> ContextMenuItem(entry.label, entry.action) }
+                ?: emptyList()
+            staticItems + dynamicItems
+        }
+    }
+
     val treemapData = descriptor.treemapData
     if (treemapData != null) {
         var treemapFraction by remember { mutableFloatStateOf(DEFAULT_TREEMAP_FRACTION) }
@@ -626,6 +647,7 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
                     },
                     onRowSelect = onRowSelect,
                     onRow = onRow,
+                    onRowContextMenu = onRowContextMenu,
                     externalSelectedIndex = externalSelectedIndex,
                 )
             }
@@ -681,6 +703,7 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
             },
             onRowSelect = onRowSelect,
             onRow = onRow,
+            onRowContextMenu = onRowContextMenu,
         )
     }
 }

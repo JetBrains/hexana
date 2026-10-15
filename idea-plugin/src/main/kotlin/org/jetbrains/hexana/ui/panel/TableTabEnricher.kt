@@ -18,6 +18,7 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.hexana.HexanaBinaryVirtualFile
 import org.jetbrains.hexana.navigation.SymbolNavigator
+import org.jetbrains.hexana.providers.DexBinaryProvider
 import org.jetbrains.hexana.providers.FatMachOBinaryProvider
 import org.jetbrains.hexana.providers.HexanaSourceLocation
 import org.jetbrains.hexana.providers.WasmBinaryProvider
@@ -66,6 +67,7 @@ fun BinaryProvider.getTabEnricher(): List<TableTabDescriptor>.(
         is WasmBinaryVirtualFileProvider -> { hexViewState, pathsNavigationState -> enrichWasmTabs(provider, hexViewState, pathsNavigationState) }
         is WasmComponentBinaryVirtualFileProvider -> { hexViewState, _ -> enrichComponentTabs(provider, provider.file, hexViewState.project) }
         is FatMachOBinaryProvider -> { hexViewState, _ -> enrichFatMachOTabs(provider, hexViewState.project) }
+        is DexBinaryProvider -> { hexViewState, _ -> enrichDexTabs(hexViewState) }
         else -> { _, _ -> this }
     }
 }
@@ -816,3 +818,53 @@ private fun enrichFatMachOUniversalTab(
         },
     )
 }
+
+// ---------------------------------------------------------------------------
+// DEX enrichment
+// ---------------------------------------------------------------------------
+
+/**
+ * Enriches [TableTabDescriptor]s produced by [DexTableTabsProvider] with
+ * cross-tab navigation: "Reveal in Smali" on the Classes tab.
+ */
+internal fun List<TableTabDescriptor>.enrichDexTabs(
+    hexViewState: HexViewStateHolder,
+): List<TableTabDescriptor> = map { tab ->
+    if (tab.name == "Classes" && tab.rowCount > 0) enrichDexClassesTab(tab, hexViewState) else tab
+}
+
+private fun enrichDexClassesTab(
+    tab: TableTabDescriptor,
+    hexViewState: HexViewStateHolder,
+): TableTabDescriptor = TableTabDescriptor(
+    name = tab.name,
+    columns = tab.columns,
+    rowCount = tab.rowCount,
+    defaultSortColumn = tab.defaultSortColumn,
+    defaultSortAscending = tab.defaultSortAscending,
+    rowSelectionProvider = tab.rowSelectionProvider,
+    rowAction = tab.rowAction,
+    // Rows are class_def_item indices, which is what the Smali tab's class
+    // bodies are keyed by.
+    contextMenuItems = tab.contextMenuItems + RowContextMenuItemDescriptor(
+        labelProvider = { "Reveal in Smali" },
+        action = { index -> hexViewState.requestRevealDexClassInSmali(index) },
+    ),
+    rowClickAction = tab.rowClickAction,
+    rowDoubleClickAction = tab.rowDoubleClickAction,
+    dynamicContextMenuProvider = tab.dynamicContextMenuProvider,
+    prologueText = tab.prologueText,
+    prologueActions = tab.prologueActions,
+    emptyMessage = tab.emptyMessage,
+    childrenProvider = tab.childrenProvider,
+    alwaysShowSearch = tab.alwaysShowSearch,
+    searchPlaceholder = tab.searchPlaceholder,
+    showIdColumn = tab.showIdColumn,
+    priority = tab.priority,
+    rowHighlightRangesProvider = tab.rowHighlightRangesProvider,
+    predefinedFilters = tab.predefinedFilters,
+    defaultFilterShowAll = tab.defaultFilterShowAll,
+    treemapData = tab.treemapData,
+    rowDetailProvider = tab.rowDetailProvider,
+    rowTintProvider = tab.rowTintProvider,
+)

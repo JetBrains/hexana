@@ -130,3 +130,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-10-09 — `entities/apk-emulator-run` — APK Run button: installs and launches on an existing Android emulator AVD; hidden unless SDK + emulator + AVD are present.
 - 2026-10-09 — `entities/apk-emulator-run` — Logic moved to `plugins-shared` `AndroidEmulatorRun`; VS Code gets the APK Run button (`extension-lib` exports + `src/apkRunner.ts`, `Host.canRunApk`).
 - 2026-10-09 — `entities/apk-emulator-run` — Review fixes: SDK root fallthrough, AVD-matched boot polling, strict install/launch success, prerelease ordering, cancellation.
+- 2026-10-15 — (no page) — DEX Classes tab "Reveal in Smali" (IntelliJ): `enrichDexTabs` + `HexViewStateHolder.requestRevealDexClassInSmali` → Smali panel `gotoChunk(dexSmaliClassBodyId)`. Tree tables (`childrenProvider`) now show `contextMenuItems` on top-level rows.
