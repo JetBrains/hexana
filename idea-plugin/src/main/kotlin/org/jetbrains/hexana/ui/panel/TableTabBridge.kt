@@ -196,14 +196,14 @@ internal fun TableTabContent(
                 descriptor.emptyMessage?.let { Text(it) }
                 return
             }
-            TableTabTable(descriptor, state, combinedLeading, activeFilter)
+            TableTabTable(descriptor, state, combinedLeading, activeFilter) { selectedFilterIndex = null }
         }
         return
     }
 
     if (descriptor.rowCount == 0 && !descriptor.alwaysShowSearch) return
 
-    TableTabTable(descriptor, state, combinedLeading, activeFilter)
+    TableTabTable(descriptor, state, combinedLeading, activeFilter) { selectedFilterIndex = null }
 }
 
 /**
@@ -294,9 +294,11 @@ private fun TableTabTable(
     state: HexViewStateHolder,
     searchBarLeading: (@Composable () -> Unit)? = null,
     activeFilter: PredefinedFilter? = null,
+    /** Switches the predefined filter to "Show all". */
+    onShowAll: () -> Unit = {},
 ) {
     if (descriptor.childrenProvider != null) {
-        TreeTableTabTable(descriptor, state, activeFilter)
+        TreeTableTabTable(descriptor, state, activeFilter, onShowAll)
         return
     }
 
@@ -343,12 +345,18 @@ private fun TableTabTable(
 
     val actionColumnWidth = textMeasurer.measureWidthMonospace("__")
 
-    // External "select row N" requests, e.g. from an APK's "Reveal in DEX".
+    // External "select row N" requests, e.g. from an APK's "Reveal in DEX". A
+    // row the predefined filter hides switches it to "Show all" first; the
+    // request is kept until the recomputed rows show it.
     var externalSelectedIndex by remember { mutableStateOf<Int?>(null) }
     val pendingRow by state.pendingTableRowSelection.collectAsState()
     LaunchedEffect(pendingRow, filteredIndices) {
         val request = pendingRow?.takeIf { it.tabName == descriptor.name } ?: return@LaunchedEffect
         val target = filteredIndices?.indexOf(request.rowIndex) ?: request.rowIndex
+        if (target < 0 && activeFilter != null) {
+            onShowAll()
+            return@LaunchedEffect
+        }
         if (target in 0 until effectiveRowCount) reselect(externalSelectedIndex, target) { externalSelectedIndex = it }
         state.pendingTableRowSelection.value = null
     }
@@ -544,12 +552,18 @@ private const val CHEVRON_PLACEHOLDER = "  "
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStateHolder, activeFilter: PredefinedFilter? = null) {
+private fun TreeTableTabTable(
+    descriptor: TableTabDescriptor,
+    state: HexViewStateHolder,
+    activeFilter: PredefinedFilter? = null,
+    onShowAll: () -> Unit = {},
+) {
     val expandedPaths = remember(descriptor) { mutableStateListOf<List<Int>>() }
     var sortColumnIndex by remember { mutableStateOf(descriptor.defaultSortColumn ?: -1) }
     var sortAscending by remember { mutableStateOf(descriptor.defaultSortAscending) }
     var searchQuery by remember(descriptor) { mutableStateOf("") }
     var externalSelectedIndex by remember { mutableStateOf<Int?>(null) }
+    var searchResetRequest by remember(descriptor) { mutableStateOf(0) }
     val flatRows = remember(descriptor, expandedPaths.toList(), sortColumnIndex, sortAscending, searchQuery, activeFilter) {
         flattenTree(descriptor, expandedPaths.toSet(), sortColumnIndex, sortAscending, searchQuery, activeFilter)
     }
@@ -633,10 +647,18 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
 
     // External "select row N" requests, e.g. from an APK's "Reveal in DEX".
     // N is a top-level descriptor row; it is selected wherever sorting put it.
+    // A row the search or the predefined filter hides clears them first; the
+    // request is kept until the recomputed rows show it.
     val pendingRow by state.pendingTableRowSelection.collectAsState()
     LaunchedEffect(pendingRow, flatRows) {
         val request = pendingRow?.takeIf { it.tabName == descriptor.name } ?: return@LaunchedEffect
         val target = flatRows.indexOfFirst { it.depth == 0 && it.index == request.rowIndex }
+        if (target < 0 && (searchQuery.isNotEmpty() || activeFilter != null)) {
+            // The table owns the search field and reports the cleared query back.
+            if (searchQuery.isNotEmpty()) searchResetRequest++
+            onShowAll()
+            return@LaunchedEffect
+        }
         // The table selects it like a keyboard pick, onRowSelect included.
         if (target >= 0) reselect(externalSelectedIndex, target) { externalSelectedIndex = it }
         state.pendingTableRowSelection.value = null
@@ -687,6 +709,7 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
                     onRow = onRow,
                     onRowContextMenu = onRowContextMenu,
                     externalSelectedIndex = externalSelectedIndex,
+                    searchResetRequest = searchResetRequest,
                 )
             }
             VerticalDraggableDivider(
@@ -737,6 +760,7 @@ private fun TreeTableTabTable(descriptor: TableTabDescriptor, state: HexViewStat
             onRow = onRow,
             onRowContextMenu = onRowContextMenu,
             externalSelectedIndex = externalSelectedIndex,
+            searchResetRequest = searchResetRequest,
         )
     }
 }

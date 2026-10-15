@@ -2,6 +2,7 @@ package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,16 +29,23 @@ import kotlin.js.Promise
  * Tab content composes only while its tab is active, so nothing is read before the tab is
  * first opened. DEX entries are inflated by the browser's own streams, off the page's thread,
  * and the collection yields between entries, so the webview keeps painting — a spinner and
- * which DEX is being read — while it works.
+ * which DEX is being read — while it works. The result goes to [loaded], which the caller keeps
+ * beyond this tab's composition, so switching away and back does not read the DEX files again.
  *
  * "Reveal in DEX" is offered where [Host.canRevealZipEntryRow] holds: it opens the class's DEX
  * entry, or brings it forward when already open, with the class selected on its Classes tab.
  */
 @Composable
-internal fun ApkClassesTabContent(provider: ZipBinaryProvider, selection: HexSelectionState, host: Host) {
-    var classes by remember(provider) { mutableStateOf<Result<ApkDexClasses>?>(null) }
+internal fun ApkClassesTabContent(
+    provider: ZipBinaryProvider,
+    loaded: MutableState<Result<ApkDexClasses>?>,
+    selection: HexSelectionState,
+    host: Host,
+) {
+    var classes by loaded
     var progress by remember(provider) { mutableStateOf<String?>(null) }
     LaunchedEffect(provider) {
+        if (classes != null) return@LaunchedEffect
         classes = try {
             val archive = provider.bytes
             Result.success(
@@ -114,17 +122,23 @@ private external class DecompressionStream(format: String) {
     val writable: dynamic
 }
 
-/** Inflates raw deflate [data], stopping as soon as the output passes [expectedSize]. */
+/**
+ * Inflates raw deflate [data], stopping as soon as the output passes [expectedSize]. Cancelled —
+ * the tab was left mid-read — it cancels the stream too, so the browser stops inflating.
+ */
 private suspend fun inflateRaw(data: ByteArray, expectedSize: Long): ByteArray? {
     // Kotlin/JS ByteArray is an Int8Array at runtime; view it without copying.
     val int8 = data.unsafeCast<Int8Array>()
     val input = Uint8Array(int8.buffer, int8.byteOffset, data.size)
+    var reader: dynamic = null
     return try {
         val stream = DecompressionStream("deflate-raw")
         val writer = stream.writable.getWriter()
-        val reader = stream.readable.getReader()
-        // Not awaited before reading: the write only settles once its output is drained.
+        reader = stream.readable.getReader()
+        // Not awaited before reading: the write only settles once its output is drained. It
+        // rejects once the readable side is cancelled; that outcome is handled below.
         val wrote = writer.write(input).then { writer.close() }.unsafeCast<Promise<Unit>>()
+        wrote.catch { }
 
         val chunks = ArrayList<Uint8Array>()
         var total = 0L
@@ -134,7 +148,7 @@ private suspend fun inflateRaw(data: ByteArray, expectedSize: Long): ByteArray? 
             val chunk = read.value.unsafeCast<Uint8Array>()
             total += chunk.length
             if (total > expectedSize) {
-                reader.cancel()
+                cancelReader(reader)
                 return null
             }
             chunks += chunk
@@ -150,8 +164,17 @@ private suspend fun inflateRaw(data: ByteArray, expectedSize: Long): ByteArray? 
         }
         Int8Array(out.buffer, out.byteOffset, out.byteLength).unsafeCast<ByteArray>()
     } catch (c: CancellationException) {
+        if (reader != null) cancelReader(reader)
         throw c
     } catch (_: Throwable) {
         null
     }
+}
+
+/**
+ * Cancels a stream [reader] without awaiting it. Cancelling the readable side of a transform
+ * stream errors its writable side too, which rejects the pending write and frees its buffers.
+ */
+private fun cancelReader(reader: dynamic) {
+    reader.cancel().unsafeCast<Promise<Unit>>().catch { }
 }

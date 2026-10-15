@@ -789,7 +789,10 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         void WasmEditorProvider.noteResolvedSide(document.uri);
 
         this.openWebviews.set(webviewPanel, document.uri);
-        webviewPanel.onDidDispose(() => this.openWebviews.delete(webviewPanel));
+        webviewPanel.onDidDispose(() => {
+            this.openWebviews.delete(webviewPanel);
+            this.dropOrphanedTableRowSelection(document.uri.toString());
+        });
 
         // Once the webview signals it is ready, send the binary payload.
         webviewPanel.webview.onDidReceiveMessage(async (message) => {
@@ -1311,6 +1314,19 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             this.pendingTableRowSelections.delete(key);
             void webviewPanel.webview.postMessage({ type: "select-table-row", ...selection });
         }
+    }
+
+    /**
+     * Drops the row selection waiting for [key] once no open editor can still deliver it — the
+     * one opening closed before its binary arrived — so a later open of that entry does not
+     * select a stale row.
+     */
+    private dropOrphanedTableRowSelection(key: string): void {
+        if (!this.pendingTableRowSelections.has(key)) return;
+        for (const [panel, uri] of this.openWebviews) {
+            if (uri.toString() === key && !this.loadedWebviews.has(panel)) return;
+        }
+        this.pendingTableRowSelections.delete(key);
     }
 
     /** The open editor showing [key], preferring one whose webview already has its binary. */

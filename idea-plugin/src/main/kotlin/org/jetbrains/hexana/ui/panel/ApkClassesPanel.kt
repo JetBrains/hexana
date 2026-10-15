@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,25 +36,31 @@ import org.jetbrains.jewel.ui.component.Text
  *
  * Nothing is read until the tab is first selected — tabs compose only then — and the DEX
  * files are inflated and parsed off the EDT, so the editor opens at the cost of the ZIP
- * central directory alone. [onRevealInDex] opens a class's DEX entry with that class
+ * central directory alone. The result is held by the panel, not the tab's composition, so
+ * switching away and back does not read the DEX files again. [onRevealInDex] opens a class's DEX entry with that class
  * selected on its own Classes tab.
  */
 internal fun apkClassesPanels(
     provider: ZipBinaryProvider,
     state: HexViewStateHolder,
     onRevealInDex: ((entry: ZipEntry, classDefIndex: Int) -> Unit)?,
-): List<Panel> =
-    listOf(Panel(APK_CLASSES_TAB_NAME) { ApkClassesTab(provider, state, onRevealInDex) })
+): List<Panel> {
+    val classes = mutableStateOf<Result<ApkDexClasses>?>(null)
+    return listOf(Panel(APK_CLASSES_TAB_NAME) { ApkClassesTab(provider, classes, state, onRevealInDex) })
+}
 
+/** [loaded] outlives this composition: it is filled once, and left set when the tab is left. */
 @Composable
 private fun ApkClassesTab(
     provider: ZipBinaryProvider,
+    loaded: MutableState<Result<ApkDexClasses>?>,
     state: HexViewStateHolder,
     onRevealInDex: ((entry: ZipEntry, classDefIndex: Int) -> Unit)?,
 ) {
-    var classes by remember(provider) { mutableStateOf<Result<ApkDexClasses>?>(null) }
+    var classes by loaded
     var progress by remember(provider) { mutableStateOf<String?>(null) }
     LaunchedEffect(provider) {
+        if (classes != null) return@LaunchedEffect
         classes = withContext(Dispatchers.IO) {
             try {
                 val archive = provider.bytes

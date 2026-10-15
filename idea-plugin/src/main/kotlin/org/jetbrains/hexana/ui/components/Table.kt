@@ -76,6 +76,11 @@ fun Table(
     onSearchChanged: ((String) -> Unit)? = null,
     externalSelectedIndex: Int? = null,
     /**
+     * Each change other than to `0` clears the search field, e.g. so an outside request can
+     * select a row the current search hides.
+     */
+    searchResetRequest: Int = 0,
+    /**
      * When set, the table sizes itself to at most this many rows instead of
      * filling the available height.
      *
@@ -126,6 +131,10 @@ fun Table(
     }
 
     val lazyListState = rememberLazyListState()
+
+    LaunchedEffect(searchResetRequest) {
+        if (searchResetRequest != 0) searchQuery = TextFieldValue("")
+    }
 
     LaunchedEffect(searchQuery.text) {
         selectedOriginalIndex = null

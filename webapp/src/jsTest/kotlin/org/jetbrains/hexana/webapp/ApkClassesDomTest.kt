@@ -22,6 +22,8 @@ import org.khronos.webgl.Int8Array
 import org.khronos.webgl.Uint8Array
 import org.w3c.dom.HTMLDivElement
 import org.w3c.dom.HTMLElement
+import org.w3c.dom.HTMLInputElement
+import org.w3c.dom.events.Event
 import org.w3c.dom.events.MouseEvent
 import org.w3c.dom.events.MouseEventInit
 import org.w3c.fetch.Response
@@ -101,6 +103,43 @@ class ApkClassesDomTest {
                     ?.takeIf { it.textContent.orEmpty().contains("Lcom/example/A;") }
             }
             assertNull(elements(root, "tr[data-focused]").getOrNull(1))
+        }
+    }
+
+    @Test
+    fun aRowSelectionRequestClearsASearchThatHidesTheClass(): Promise<Unit> = GlobalScope.promise {
+        val dex = minimalDex(listOf("Lcom/example/A;", "Lcom/example/B;", "Lcom/example/C;"))
+        // Built once: a provider made during composition would be a new file on every
+        // recomposition, and reset the search this test is about.
+        val provider = DexBinaryProvider(dex.toCommonByteBuffer())
+        val request: MutableState<TableRowSelectionRequest?> = mutableStateOf(null)
+        withRendered({
+            CompositionLocalProvider(LocalHost provides RevealRecordingHost()) {
+                BinaryEditorContent(
+                    fileName = "classes.dex",
+                    provider = provider,
+                    tableRowSelection = request.value,
+                )
+            }
+        }) { root ->
+            awaitElement(root, "the DEX editor") { tab(root, "Classes") }.click()
+            val search = awaitElement(root, "the search field") {
+                root.querySelector(".hexana-search-input") as? HTMLInputElement
+            }
+            search.value = "example/A"
+            search.dispatchEvent(Event("input", org.w3c.dom.EventInit(bubbles = true)))
+            awaitElement(root, "the search to hide class C") {
+                root.takeIf { rows(it).size == 1 && !it.textContent.orEmpty().contains("Lcom/example/C;") }
+            }
+
+            request.value = TableRowSelectionRequest("Classes", 2, requestId = 1)
+            awaitElement(root, "the selected class") {
+                (root.querySelector("tr[data-focused]") as? HTMLElement)
+                    ?.takeIf { it.textContent.orEmpty().contains("Lcom/example/C;") }
+            }
+            // The same search field, cleared, rather than a table built afresh.
+            assertTrue(search.isConnected)
+            assertEquals("", (root.querySelector(".hexana-search-input") as HTMLInputElement).value)
         }
     }
 }

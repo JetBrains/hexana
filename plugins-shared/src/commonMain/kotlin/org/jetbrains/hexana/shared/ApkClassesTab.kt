@@ -15,6 +15,14 @@ const val APK_CLASSES_TAB_NAME: String = "Classes"
 /** Label of the APK Classes-table action that opens a class's DEX with that class selected. */
 const val APK_REVEAL_IN_DEX_LABEL: String = "Reveal in DEX"
 
+/**
+ * Largest declared uncompressed size of a DEX entry the Classes tab inflates. Real DEX files stay
+ * well below it; a larger declaration is treated as unreadable rather than allocated, so a crafted
+ * archive cannot exhaust the heap. Entries are read one at a time and dropped once parsed, so a
+ * per-entry cap bounds the peak.
+ */
+const val APK_MAX_DEX_ENTRY_SIZE: Long = 256L * 1024 * 1024
+
 /** Whether [fileName] names an Android package; matches the APK flavour of the Entries tab. */
 fun isApkFileName(fileName: String?): Boolean = fileName?.endsWith(".apk", ignoreCase = true) == true
 
@@ -57,7 +65,8 @@ private fun multiDexOrdinal(name: String): Int {
 /**
  * Reads the classes of every DEX entry in [provider]. [readEntry] inflates one entry — inflation
  * is host-specific, and asynchronous in a browser — and returns `null` when it cannot.
- * [onProgress] is told before each entry is read.
+ * [onProgress] is told before each entry is read. An entry declaring more than
+ * [APK_MAX_DEX_ENTRY_SIZE] bytes is reported unreadable without being inflated.
  *
  * Decodes every DEX in the archive: on the JVM call it off the UI thread. A browser has only the
  * one thread, so it yields between entries to let the page repaint and stay responsive.
@@ -73,6 +82,10 @@ suspend fun collectApkDexClasses(
     for ((index, entry) in dexEntries.withIndex()) {
         onProgress?.invoke(index, dexEntries.size, entry)
         yield()
+        if (entry.uncompressedSize !in 0..APK_MAX_DEX_ENTRY_SIZE) {
+            unreadable += entry.name
+            continue
+        }
         val dex = try {
             readEntry(entry)?.let { DexFileParser.parse(it.position(0)) }
         } catch (c: CancellationException) {

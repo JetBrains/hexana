@@ -409,15 +409,23 @@ fun TableTabContent(
     }
 
     // Outside "select row N" requests: select it as a click would, minus the
-    // row's click action, and scroll it to the middle of the viewport.
+    // row's click action, and scroll it to the middle of the viewport. A row
+    // hidden by the search or a filter clears them first; the request is kept
+    // until the recomputed rows show it.
     var flatTableWrapper by remember { mutableStateOf<HTMLElement?>(null) }
     val rowSelection = LocalTableRowSelection.current
     val pendingRow = rowSelection.value
     LaunchedEffect(pendingRow, visibleIndices, flatTableWrapper) {
         val request = pendingRow?.takeIf { it.tabName == descriptor.name } ?: return@LaunchedEffect
         val wrapper = flatTableWrapper ?: return@LaunchedEffect
-        rowSelection.value = null
         val position = visibleIndices.indexOf(request.rowIndex)
+        if (position < 0 && (debouncedQuery.isNotEmpty() || activeFilter != null)) {
+            searchQuery = ""
+            debouncedQuery = ""
+            selectedFilterIndex = null
+            return@LaunchedEffect
+        }
+        rowSelection.value = null
         if (position < 0) return@LaunchedEffect
         val index = request.rowIndex
         applyRowDetailVsc(descriptor, index, selection)
@@ -1285,13 +1293,21 @@ private fun TreeTableTabContent(
     }
 
     // Outside "select row N" requests, e.g. an APK's "Reveal in DEX". N is a
-    // top-level descriptor row, selected wherever sorting put it.
+    // top-level descriptor row, selected wherever sorting put it. A row hidden
+    // by the search or a filter clears them first; the request is kept until
+    // the recomputed rows show it.
     val rowSelection = LocalTableRowSelection.current
     val pendingRow = rowSelection.value
     LaunchedEffect(pendingRow, flatRows) {
         val request = pendingRow?.takeIf { it.tabName == descriptor.name } ?: return@LaunchedEffect
-        rowSelection.value = null
         val target = flatRows.indexOfFirst { it.depth == 0 && it.index == request.rowIndex }
+        if (target < 0 && (debouncedQuery.isNotEmpty() || activeFilter != null)) {
+            searchQuery = ""
+            debouncedQuery = ""
+            selectedFilterIndex = null
+            return@LaunchedEffect
+        }
+        rowSelection.value = null
         if (target >= 0) selectFlatRow(flatRows, target)
     }
 

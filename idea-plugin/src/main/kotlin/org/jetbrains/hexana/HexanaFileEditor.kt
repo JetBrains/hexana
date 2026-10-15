@@ -1045,10 +1045,11 @@ class HexanaFileEditor(
         classDefIndex: Int,
         parentBuffer: CommonByteBuffer,
     ) {
-        openZipEntry(entry, parentBuffer)
-            .firstNotNullOfOrNull { it as? HexanaFileEditor }
-            ?.stateHolder
-            ?.requestSelectTableRow(DEX_CLASSES_TAB_NAME, classDefIndex)
+        openZipEntry(entry, parentBuffer) { editors ->
+            editors.firstNotNullOfOrNull { it as? HexanaFileEditor }
+                ?.stateHolder
+                ?.requestSelectTableRow(DEX_CLASSES_TAB_NAME, classDefIndex)
+        }
     }
 
     /** The open editor file showing entry [entryPath] of this archive, if there is one. */
@@ -1059,34 +1060,38 @@ class HexanaFileEditor(
                 file.getUserData(HexanaBinaryVirtualFile.ENTRY_PATH_KEY) == entryPath
         }
 
-    /** Opens [entry] in an editor tab and returns the editors opened for it, if any. */
+    /**
+     * Opens [entry] in an editor tab and hands the editors opened for it, if any, to [onOpened]
+     * on the EDT. An entry that has to be inflated is inflated off the EDT first, so a large one
+     * does not freeze the IDE; [onOpened] is then called later, and not at all if that fails.
+     */
     private fun openZipEntry(
         entry: org.jetbrains.hexana.zip.ZipEntry,
         parentBuffer: CommonByteBuffer,
-    ): List<FileEditor> {
+        onOpened: (List<FileEditor>) -> Unit = {},
+    ) {
         val childName = entry.name.substringAfterLast('/').ifEmpty { entry.name }
+        val editorManager = FileEditorManager.getInstance(myProject)
 
         if (isHexanaSupportedExtension(childName) || isUnsupportedByIntelliJ(childName)) {
             // Binary entries and files unknown to IntelliJ need the hex viewer — always use HexanaBinaryVirtualFile.
             // An entry already open from this archive is brought forward rather than opened twice.
             findOpenZipEntryFile(entry.name)?.let { open ->
-                return FileEditorManager.getInstance(myProject).openFile(open, true).toList()
+                onOpened(editorManager.openFile(open, true).toList())
+                return
             }
-            val bytes = decompressZipEntry(entry, parentBuffer)
-            if (bytes == null) {
-                HexanaLog.LOG.warn(
-                    "Cannot open ${entry.name}: unsupported compression method ${entry.compressionMethod} or decode failure",
+            inflateZipEntryThenOnEdt(entry, parentBuffer) { bytes ->
+                // Checked again: a second request may have opened the entry while this one inflated.
+                val childFile = findOpenZipEntryFile(entry.name) ?: HexanaBinaryVirtualFile(
+                    name = childName,
+                    buffer = bytes.toCommonByteBuffer(),
+                    baseOffset = entry.dataOffset.toInt(),
+                    parentFile = myFile,
+                    entryPath = entry.name,
                 )
-                return emptyList()
+                onOpened(editorManager.openFile(childFile, true).toList())
             }
-            val childFile = HexanaBinaryVirtualFile(
-                name = childName,
-                buffer = bytes.toCommonByteBuffer(),
-                baseOffset = entry.dataOffset.toInt(),
-                parentFile = myFile,
-                entryPath = entry.name,
-            )
-            return FileEditorManager.getInstance(myProject).openFile(childFile, true).toList()
+            return
         }
 
         // For text entries, prefer JarFileSystem when the parent archive is a real on-disk file.
@@ -1095,22 +1100,33 @@ class HexanaFileEditor(
             val jarFs = com.intellij.openapi.vfs.JarFileSystem.getInstance()
             val entryFile = jarFs.findFileByPath("${myFile.path}!/${entry.name}")
             if (entryFile != null) {
-                return FileEditorManager.getInstance(myProject).openFile(entryFile, true).toList()
+                onOpened(editorManager.openFile(entryFile, true).toList())
+                return
             }
         }
 
         // Fallback for in-memory parents (nested archives) — decompress and wrap manually.
-        val bytes = decompressZipEntry(entry, parentBuffer)
-        if (bytes == null) {
-            HexanaLog.LOG.warn(
-                "Cannot open ${entry.name}: unsupported compression method ${entry.compressionMethod} or decode failure",
-            )
-            return emptyList()
+        inflateZipEntryThenOnEdt(entry, parentBuffer) { bytes ->
+            onOpened(editorManager.openFile(LightVirtualFile(childName, String(bytes)), true).toList())
         }
-        return FileEditorManager.getInstance(myProject).openFile(
-            LightVirtualFile(childName, String(bytes)),
-            true,
-        ).toList()
+    }
+
+    /** Inflates [entry] in the editor scope, off the EDT, then hands its bytes to [open] on the EDT. */
+    private fun inflateZipEntryThenOnEdt(
+        entry: org.jetbrains.hexana.zip.ZipEntry,
+        parentBuffer: CommonByteBuffer,
+        open: (ByteArray) -> Unit,
+    ) {
+        editorScope.launch {
+            val bytes = decompressZipEntry(entry, parentBuffer)
+            if (bytes == null) {
+                HexanaLog.LOG.warn(
+                    "Cannot open ${entry.name}: unsupported compression method ${entry.compressionMethod} or decode failure",
+                )
+                return@launch
+            }
+            withContext(Dispatchers.EDT) { open(bytes) }
+        }
     }
 
     private fun openTarEntry(

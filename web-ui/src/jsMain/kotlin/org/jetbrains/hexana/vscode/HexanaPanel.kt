@@ -22,6 +22,7 @@ import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.TarBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.shared.APK_CLASSES_TAB_NAME
+import org.jetbrains.hexana.shared.ApkDexClasses
 import org.jetbrains.hexana.shared.DEX_SMALI_TAB_NAME
 import org.jetbrains.hexana.shared.isApkFileName
 import org.jetbrains.hexana.shared.RowContextMenuItemDescriptor
@@ -114,6 +115,10 @@ fun HexanaPanel(
     // Outside row-selection requests, handed to the table tabs through
     // [LocalTableRowSelection]. The tab switch makes the target table compose.
     val pendingRowSelection = remember(provider) { mutableStateOf<TableRowSelectionRequest?>(null) }
+
+    // An APK's classes, kept here rather than in the Classes tab, which composes only while
+    // it is active: leaving the tab and coming back must not read every DEX file again.
+    val apkClasses = remember(provider) { mutableStateOf<Result<ApkDexClasses>?>(null) }
     LaunchedEffect(tableRowSelection) {
         val request = tableRowSelection ?: return@LaunchedEffect
         pendingRowSelection.value = request
@@ -218,7 +223,7 @@ fun HexanaPanel(
 
             // Every class across the APK's DEX files, read only once the tab is opened.
             if (zipProvider != null && isApkFileName(fileName)) {
-                add(PanelTab(APK_CLASSES_TAB_NAME) { sel -> ApkClassesTabContent(zipProvider, sel, host) })
+                add(PanelTab(APK_CLASSES_TAB_NAME) { sel -> ApkClassesTabContent(zipProvider, apkClasses, sel, host) })
             }
 
             // WAT tabs (always present for Wasm and component): the classic

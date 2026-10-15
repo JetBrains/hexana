@@ -97,6 +97,23 @@ class ApkClassesTabTest {
     }
 
     @Test
+    fun aDexEntryDeclaringAnOversizedUncompressedSizeIsNotRead() = runTest {
+        val provider = ZipBinaryProvider(
+            buildStoredZip(
+                listOf("classes.dex" to dex, "classes2.dex" to dex),
+                declaredSizes = mapOf("classes2.dex" to Int.MAX_VALUE),
+            ).toCommonByteBuffer(),
+        )
+        val reader = storedReader(provider)
+        val read = mutableListOf<String>()
+        val classes = collectApkDexClasses(provider) { entry -> read += entry.name; reader(entry) }
+
+        assertEquals(listOf("classes.dex"), read)
+        assertEquals(1, classes.rows.size)
+        assertEquals(listOf("classes2.dex"), classes.unreadableEntries)
+    }
+
+    @Test
     fun anApkWithoutDexFilesHasAnEmptyTableWithoutActions() = runTest {
         val provider = apk("AndroidManifest.xml" to byteArrayOf(0))
         val tab = apkClassesDescriptor(collectApkDexClasses(provider, readEntry = storedReader(provider)))
@@ -115,8 +132,14 @@ class ApkClassesTabTest {
     }
 }
 
-/** A minimal ZIP whose entries are all stored (method 0); CRCs are left zero. */
-private fun buildStoredZip(entries: List<Pair<String, ByteArray>>): ByteArray {
+/**
+ * A minimal ZIP whose entries are all stored (method 0); CRCs are left zero. [declaredSizes]
+ * overrides the uncompressed size the headers declare for the named entries.
+ */
+private fun buildStoredZip(
+    entries: List<Pair<String, ByteArray>>,
+    declaredSizes: Map<String, Int> = emptyMap(),
+): ByteArray {
     val out = mutableListOf<Byte>()
     fun u2(v: Int) { out += (v and 0xFF).toByte(); out += ((v shr 8) and 0xFF).toByte() }
     fun u4(v: Int) { u2(v and 0xFFFF); u2((v ushr 16) and 0xFFFF) }
@@ -126,14 +149,14 @@ private fun buildStoredZip(entries: List<Pair<String, ByteArray>>): ByteArray {
         localOffsets += out.size
         val nameBytes = name.encodeToByteArray()
         u4(0x04034b50); u2(20); u2(0); u2(0); u2(0); u2(0); u4(0)
-        u4(data.size); u4(data.size); u2(nameBytes.size); u2(0)
+        u4(data.size); u4(declaredSizes[name] ?: data.size); u2(nameBytes.size); u2(0)
         out += nameBytes.toList(); out += data.toList()
     }
     val cdOffset = out.size
     entries.forEachIndexed { i, (name, data) ->
         val nameBytes = name.encodeToByteArray()
         u4(0x02014b50); u2(20); u2(20); u2(0); u2(0); u2(0); u2(0); u4(0)
-        u4(data.size); u4(data.size); u2(nameBytes.size); u2(0); u2(0); u2(0); u2(0); u4(0)
+        u4(data.size); u4(declaredSizes[name] ?: data.size); u2(nameBytes.size); u2(0); u2(0); u2(0); u2(0); u4(0)
         u4(localOffsets[i])
         out += nameBytes.toList()
     }
