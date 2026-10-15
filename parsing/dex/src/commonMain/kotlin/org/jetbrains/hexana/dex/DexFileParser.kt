@@ -44,6 +44,28 @@ object DexFileParser {
         return DexFile(header, stringIds, typeIds, protoIds, fieldIds, methodIds, classDefs)
     }
 
+    /**
+     * Reads just what a class list needs: the header, the `string_ids` and `type_ids` tables and
+     * the `class_defs`. Type names are decoded only when [DexClassDirectory.typeName] asks for
+     * them, so this costs a fraction of [parse], which decodes every string, prototype, field
+     * and method up front. [buffer] backs the result and must outlive it.
+     */
+    fun parseClassDirectory(buffer: CommonByteBuffer): DexClassDirectory {
+        buffer.position(0)
+        val header = parseHeader(buffer)
+        buffer.position(header.stringIdsOff.toInt())
+        val stringDataOffsets = IntArray(
+            header.stringIdsSize.toLong().requireEntriesFit(buffer, bytesPerEntry = 4, what = "string_ids"),
+        ) { buffer.readU4().toInt() }
+        buffer.position(header.typeIdsOff.toInt())
+        val typeDescriptorIdx = IntArray(
+            header.typeIdsSize.toLong().requireEntriesFit(buffer, bytesPerEntry = 4, what = "type_ids"),
+        ) { buffer.readU4().toInt() }
+        buffer.position(header.classDefsOff.toInt())
+        header.classDefsSize.toLong().requireEntriesFit(buffer, bytesPerEntry = 32, what = "class_defs")
+        return DexClassDirectory(buffer, stringDataOffsets, typeDescriptorIdx, parseClassDefs(buffer, header))
+    }
+
     private fun parseHeader(buffer: CommonByteBuffer): DexHeader {
         val magic = ByteArray(8).also { buffer.get(it, 0, 8) }
         // Validate magic prefix
@@ -386,7 +408,7 @@ private fun CommonByteBuffer.readSleb128(): Int {
  * Reads a Modified UTF-8 (MUTF-8) string as used in DEX `string_data_item`.
  * The format is: ULEB128 utf16_size, then MUTF-8 bytes terminated by 0x00.
  */
-private fun readMutf8String(buffer: CommonByteBuffer): String {
+internal fun readMutf8String(buffer: CommonByteBuffer): String {
     val utf16Size = buffer.readUleb128()
     val chars = CharArray(utf16Size)
     var charIdx = 0

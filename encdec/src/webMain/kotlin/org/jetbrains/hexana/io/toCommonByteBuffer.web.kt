@@ -16,20 +16,23 @@ private class WebByteBuffer(private val buffer: ArrayBuffer) : CommonByteBuffer 
     private var cursorPosition = 0
     private val dataView = DataView(buffer)
 
+    // One view for the buffer's lifetime: the cursor read is the parsers' hot path, and building
+    // a view per byte made every byte cost an allocation. The buffer never resizes.
+    private val bytes = Int8Array(buffer)
+    private val byteLength = buffer.byteLength
+
     // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/ArrayBuffer
     //
     // A JS TypedArray out-of-bounds (or negative) index yields `undefined`, which
     // coerces to 0 — it never throws. Check the bound ourselves so a read past the
     // end fails fast, matching the JVM implementation's BufferUnderflowException.
     override fun get(): Byte {
-        if (cursorPosition < 0 || cursorPosition >= buffer.byteLength) {
+        if (cursorPosition < 0 || cursorPosition >= byteLength) {
             throw IndexOutOfBoundsException(
-                "Read past end of buffer: position=$cursorPosition, byteLength=${buffer.byteLength}"
+                "Read past end of buffer: position=$cursorPosition, byteLength=$byteLength"
             )
         }
-        val res = Int8Array(buffer)[position()]
-        cursorPosition++
-        return res
+        return bytes[cursorPosition++]
     }
 
     override fun get(index: Int): Byte = dataView.getInt8(index)

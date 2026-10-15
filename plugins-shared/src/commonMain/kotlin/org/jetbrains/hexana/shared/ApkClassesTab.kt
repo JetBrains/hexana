@@ -1,6 +1,6 @@
 package org.jetbrains.hexana.shared
 
-import org.jetbrains.hexana.dex.DexFile
+import org.jetbrains.hexana.dex.DexClassDirectory
 import org.jetbrains.hexana.dex.DexFileParser
 import org.jetbrains.hexana.dex.renderDexClassAccessFlags
 import org.jetbrains.hexana.io.CommonByteBuffer
@@ -69,11 +69,13 @@ private fun multiDexOrdinal(name: String): Int {
  * [APK_MAX_DEX_ENTRY_SIZE] bytes is reported unreadable without being inflated.
  *
  * Decodes every DEX in the archive: on the JVM call it off the UI thread. A browser has only the
- * one thread, so it yields between entries to let the page repaint and stay responsive.
+ * one thread, so [pause] runs before each entry; there it must let the page paint — a plain
+ * coroutine yield does not — or the whole collection shows as a single freeze.
  */
 suspend fun collectApkDexClasses(
     provider: ZipBinaryProvider,
     onProgress: ((index: Int, total: Int, entry: ZipEntry) -> Unit)? = null,
+    pause: suspend () -> Unit = { yield() },
     readEntry: suspend (ZipEntry) -> CommonByteBuffer?,
 ): ApkDexClasses {
     val dexEntries = apkDexEntries(provider)
@@ -81,28 +83,30 @@ suspend fun collectApkDexClasses(
     val unreadable = mutableListOf<String>()
     for ((index, entry) in dexEntries.withIndex()) {
         onProgress?.invoke(index, dexEntries.size, entry)
-        yield()
+        pause()
         if (entry.uncompressedSize !in 0..APK_MAX_DEX_ENTRY_SIZE) {
             unreadable += entry.name
             continue
         }
-        val dex = try {
-            readEntry(entry)?.let { DexFileParser.parse(it.position(0)) }
+        // Only the class definitions and their type names: a full parse decodes every string,
+        // prototype, field and method, several times the work, on a browser's only thread.
+        val entryRows = try {
+            readEntry(entry)?.let { apkDexClassRows(entry, DexFileParser.parseClassDirectory(it.position(0))) }
         } catch (c: CancellationException) {
             throw c
         } catch (_: Exception) {
             null
         }
-        if (dex == null) {
+        if (entryRows == null) {
             unreadable += entry.name
             continue
         }
-        rows += apkDexClassRows(entry, dex)
+        rows += entryRows
     }
     return ApkDexClasses(dexEntries, rows, unreadable)
 }
 
-private fun apkDexClassRows(entry: ZipEntry, dex: DexFile): List<ApkDexClassRow> =
+private fun apkDexClassRows(entry: ZipEntry, dex: DexClassDirectory): List<ApkDexClassRow> =
     dex.classDefs.mapIndexed { index, cd ->
         ApkDexClassRow(
             entry = entry,

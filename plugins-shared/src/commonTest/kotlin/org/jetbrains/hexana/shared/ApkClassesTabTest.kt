@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.shared
 
+import org.jetbrains.hexana.dex.DexFileParser
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.ZipBinaryProvider
@@ -122,6 +123,15 @@ class ApkClassesTabTest {
         assertEquals("(no DEX files)", tab.emptyMessage)
         assertTrue(tab.contextMenuItems.isEmpty())
         assertNull(tab.prologueText)
+    }
+
+    @Test
+    fun theClassDirectoryResolvesWhatAFullParseDoes() {
+        val full = DexFileParser.parse(dex.toCommonByteBuffer())
+        val directory = DexFileParser.parseClassDirectory(dex.toCommonByteBuffer())
+
+        assertEquals(full.classDefs, directory.classDefs)
+        for (index in -1..full.typeIds.size) assertEquals(full.typeName(index), directory.typeName(index), "type $index")
     }
 
     @Test

@@ -11,6 +11,12 @@ in IntelliJ and VS Code; plus the generic "select row N of table tab T" request 
   the collector `yield()`s between entries so a browser repaints. Gated by `isApkFileName`
   (same as the APK flavour of the Entries tab). Rows carry the `ZipEntry` and the
   `classDefIndex`, which is the row index of that DEX's own Classes tab.
+- Rows come from `DexFileParser.parseClassDirectory` (header, string/type id tables, class defs;
+  type names decoded lazily and cached), not `parse`, which decodes every string, proto, field and
+  method. Measured in Chrome on an 8.8 MB DEX: 21 ms vs 70 ms.
+- `collectApkDexClasses(pause = …)` runs before each entry. A coroutine `yield()` does not let a
+  browser paint; the web host passes `awaitPaint` (animation frame, then a timer). Without it a
+  208 MB / 23-DEX APK froze the webview for the whole load with zero frames painted.
 - `APK_MAX_DEX_ENTRY_SIZE` (256 MiB): an entry declaring a larger uncompressed size is reported
   unreadable without calling `readEntry`, so a crafted APK cannot make a host allocate from an
   untrusted size. Entries are parsed one at a time and dropped, so a per-entry cap bounds the peak.

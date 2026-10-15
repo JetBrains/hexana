@@ -8,7 +8,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CancellationException
+import kotlinx.browser.window
 import kotlinx.coroutines.await
+import kotlinx.coroutines.awaitAnimationFrame
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.hexana.io.CommonByteBuffer
@@ -54,6 +56,7 @@ internal fun ApkClassesTabContent(
                     onProgress = { index, total, entry ->
                         progress = "Reading ${entry.name} (${index + 1} of $total)…"
                     },
+                    pause = ::awaitPaint,
                 ) { entry -> inflateZipEntry(entry, archive) },
             )
         } catch (c: CancellationException) {
@@ -95,6 +98,16 @@ internal fun ApkClassesTabContent(
         )
     }
     TableTabContent(descriptor, selection)
+}
+
+/**
+ * Suspends until the browser has painted a frame, so the progress label shows and the page
+ * stays responsive between DEX entries. A coroutine resumed from an animation frame callback
+ * still runs before that frame's paint, hence the timer after it.
+ */
+private suspend fun awaitPaint() {
+    window.awaitAnimationFrame()
+    Promise<Unit> { resolve, _ -> window.setTimeout({ resolve(Unit) }, 0) }.await()
 }
 
 /**
