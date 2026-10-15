@@ -21,7 +21,9 @@ import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.TarBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
+import org.jetbrains.hexana.shared.APK_CLASSES_TAB_NAME
 import org.jetbrains.hexana.shared.DEX_SMALI_TAB_NAME
+import org.jetbrains.hexana.shared.isApkFileName
 import org.jetbrains.hexana.shared.RowContextMenuItemDescriptor
 import org.jetbrains.hexana.shared.buildInvokeOption
 import org.jetbrains.hexana.shared.TableTabDescriptor
@@ -89,6 +91,11 @@ fun HexanaPanel(
     runtimeCompatibility: WasmRuntimeCompatibility? = null,
     /** Opened by the "Configure runtimes…" action; `null` hides the action. */
     onConfigureRuntimes: (() -> Unit)? = null,
+    /**
+     * Latest outside request to select a row of a table tab, e.g. from "Reveal in DEX" in
+     * another editor. Each new request switches to its tab and selects the row there.
+     */
+    tableRowSelection: TableRowSelectionRequest? = null,
 ) {
     val host = LocalHost.current
     val pendingRun = rememberPendingRunState()
@@ -103,6 +110,15 @@ fun HexanaPanel(
     // "Reveal in Smali" channel from the DEX Classes tab into the Smali tab,
     // which the caller builds; see [LocalDexSmaliReveal].
     val dexSmaliReveal = remember(provider) { mutableStateOf<Int?>(null) }
+
+    // Outside row-selection requests, handed to the table tabs through
+    // [LocalTableRowSelection]. The tab switch makes the target table compose.
+    val pendingRowSelection = remember(provider) { mutableStateOf<TableRowSelectionRequest?>(null) }
+    LaunchedEffect(tableRowSelection) {
+        val request = tableRowSelection ?: return@LaunchedEffect
+        pendingRowSelection.value = request
+        onActiveTabChange(request.tabName)
+    }
 
     // Lazy SBOM detection: nativeImageInfo is expensive (string scan + symbol resolution).
     // Populated by a LaunchedEffect so it never runs synchronously in the composition path.
@@ -199,6 +215,11 @@ fun HexanaPanel(
             tabEntries.sortWith(compareBy<TabEntry> { it.priority }.thenBy { it.providerIndex })
             val (lowEntries, normalEntries) = tabEntries.partition { it.priority == TabPriority.Low }
             addAll(normalEntries.map { it.tab })
+
+            // Every class across the APK's DEX files, read only once the tab is opened.
+            if (zipProvider != null && isApkFileName(fileName)) {
+                add(PanelTab(APK_CLASSES_TAB_NAME) { sel -> ApkClassesTabContent(zipProvider, sel, host) })
+            }
 
             // WAT tabs (always present for Wasm and component): the classic
             // wasmprinter text view and the virtualized view, like the
@@ -498,7 +519,10 @@ fun HexanaPanel(
                 onDispose { tabContentRef = null }
             }
         }) {
-            CompositionLocalProvider(LocalDexSmaliReveal provides dexSmaliReveal) {
+            CompositionLocalProvider(
+                LocalDexSmaliReveal provides dexSmaliReveal,
+                LocalTableRowSelection provides pendingRowSelection,
+            ) {
                 currentTab?.content?.invoke(selection)
             }
         }

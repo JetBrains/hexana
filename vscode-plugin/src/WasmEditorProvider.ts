@@ -33,6 +33,19 @@ import {
  */
 const inMemoryModules = new Map<string, { data: Uint8Array; fileName: string }>();
 
+/** A top-level row of a table tab, for a `select-table-row` message to a webview. */
+interface TableRowSelection {
+    tabName: string;
+    rowIndex: number;
+}
+
+/** The `hexana-module:` URI an archive entry opens under; stable, so an open entry is found again. */
+function zipEntryModuleUri(childName: string, parentUri: vscode.Uri, entryName: string): vscode.Uri {
+    return vscode.Uri.parse(
+        `hexana-module:/${childName}?parent=${encodeURIComponent(parentUri.toString())}&entry=${encodeURIComponent(entryName)}`,
+    );
+}
+
 /**
  * Type-definition sidecar written next to a script so the editor resolves the
  * scripting globals. Shipped with the extension and copied into the script's
@@ -635,6 +648,15 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
      */
     private readonly openWebviews = new Map<vscode.WebviewPanel, vscode.Uri>();
 
+    /** Webviews that have been sent their binary, and so can act on a `select-table-row`. */
+    private readonly loadedWebviews = new WeakSet<vscode.WebviewPanel>();
+
+    /**
+     * Table rows to select in an editor that is still opening, keyed by document URI. Posted
+     * right after the binary once its webview reports `ready`; see `openZipEntry`.
+     */
+    private readonly pendingTableRowSelections = new Map<string, TableRowSelection>();
+
     /** One per workspace folder, rebuilt whenever the folders change; see `watchRuntimeTargets`. */
     private runtimeTargetsWatchers: vscode.FileSystemWatcher[] = [];
 
@@ -847,6 +869,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                             reloadMsg.parentFileName = reloadParent;
                         }
                         webviewPanel.webview.postMessage(reloadMsg);
+                        this.markLoaded(document, webviewPanel);
                         return;
                     }
 
@@ -890,6 +913,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     loadMsg.canRunApk = true;
                 }
                 webviewPanel.webview.postMessage(loadMsg);
+                this.markLoaded(document, webviewPanel);
                 this.restoreScriptTabs(document, webviewPanel);
                 this.restoreSslKeyLog(document, webviewPanel);
             } else if (message.type === "open-module") {
@@ -1275,9 +1299,37 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
     }
 
     /**
+     * Records that [webviewPanel] has its binary, and posts the row selection waiting for its
+     * document, if any. Messages a webview receives are handled in order, so the selection
+     * lands after the payload it refers to.
+     */
+    private markLoaded(document: WasmDocument, webviewPanel: vscode.WebviewPanel): void {
+        this.loadedWebviews.add(webviewPanel);
+        const key = document.uri.toString();
+        const selection = this.pendingTableRowSelections.get(key);
+        if (selection) {
+            this.pendingTableRowSelections.delete(key);
+            void webviewPanel.webview.postMessage({ type: "select-table-row", ...selection });
+        }
+    }
+
+    /** The open editor showing [key], preferring one whose webview already has its binary. */
+    private findOpenWebview(key: string): vscode.WebviewPanel | undefined {
+        let found: vscode.WebviewPanel | undefined;
+        for (const [panel, uri] of this.openWebviews) {
+            if (uri.toString() !== key) continue;
+            if (this.loadedWebviews.has(panel)) return panel;
+            if (!found) found = panel;
+        }
+        return found;
+    }
+
+    /**
      * Handles an `open-zip-entry` message from the webview by reading the
      * compressed bytes from the archive, decompressing them, and opening the
-     * result in a new editor tab.
+     * result in an editor tab — or bringing forward the one already showing
+     * that entry. With `selectTabName`/`selectRowIndex` ("Reveal in DEX"),
+     * that editor then selects the row of its table tab.
      */
     private async openZipEntry(
         document: WasmDocument,
@@ -1287,11 +1339,32 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             compressedSize: number;
             uncompressedSize: number;
             compressionMethod: number;
+            selectTabName?: string;
+            selectRowIndex?: number;
         },
     ): Promise<void> {
         const { name, dataOffset, compressedSize, uncompressedSize, compressionMethod } = message;
         const childName = name.includes("/") ? name.substring(name.lastIndexOf("/") + 1) : name;
         if (!childName) {
+            return;
+        }
+        const selection: TableRowSelection | undefined =
+            typeof message.selectTabName === "string" && typeof message.selectRowIndex === "number"
+                ? { tabName: message.selectTabName, rowIndex: message.selectRowIndex }
+                : undefined;
+
+        // An entry already open from this archive is brought forward, not opened twice.
+        const entryKey = zipEntryModuleUri(childName, document.uri, name).toString();
+        const existing = this.findOpenWebview(entryKey);
+        if (existing) {
+            existing.reveal(existing.viewColumn);
+            if (selection) {
+                if (this.loadedWebviews.has(existing)) {
+                    void existing.webview.postMessage({ type: "select-table-row", ...selection });
+                } else {
+                    this.pendingTableRowSelections.set(entryKey, selection);
+                }
+            }
             return;
         }
 
@@ -1320,12 +1393,12 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
 
         if (OPENABLE_ENTRY_EXTENSIONS.has(ext) || isNativeBinary(bytes)) {
             // Open as a binary in our custom editor.
-            const parentKey = document.uri.toString();
-            const moduleUri = vscode.Uri.parse(
-                `hexana-module:/${childName}?parent=${encodeURIComponent(parentKey)}&entry=${encodeURIComponent(name)}`,
-            );
+            const moduleUri = zipEntryModuleUri(childName, document.uri, name);
             const key = moduleUri.toString();
             inMemoryModules.set(key, { data: bytes, fileName: childName });
+            if (selection) {
+                this.pendingTableRowSelections.set(key, selection);
+            }
 
             try {
                 await vscode.commands.executeCommand(
@@ -1334,6 +1407,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     WasmEditorProvider.viewType,
                 );
             } catch (err) {
+                this.pendingTableRowSelections.delete(key);
                 console.error("[Hexana] Failed to open zip entry:", err);
                 vscode.window.showErrorMessage(`Failed to open "${childName}": ${err}`);
             }

@@ -3,12 +3,14 @@ package org.jetbrains.hexana.vscode
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import kotlinx.coroutines.delay
 import org.jetbrains.compose.web.css.Color
 import org.jetbrains.compose.web.css.DisplayStyle
@@ -406,6 +408,34 @@ fun TableTabContent(
         }
     }
 
+    // Outside "select row N" requests: select it as a click would, minus the
+    // row's click action, and scroll it to the middle of the viewport.
+    var flatTableWrapper by remember { mutableStateOf<HTMLElement?>(null) }
+    val rowSelection = LocalTableRowSelection.current
+    val pendingRow = rowSelection.value
+    LaunchedEffect(pendingRow, visibleIndices, flatTableWrapper) {
+        val request = pendingRow?.takeIf { it.tabName == descriptor.name } ?: return@LaunchedEffect
+        val wrapper = flatTableWrapper ?: return@LaunchedEffect
+        rowSelection.value = null
+        val position = visibleIndices.indexOf(request.rowIndex)
+        if (position < 0) return@LaunchedEffect
+        val index = request.rowIndex
+        applyRowDetailVsc(descriptor, index, selection)
+        val highlightProvider = descriptor.rowHighlightRangesProvider
+        val selData = descriptor.rowSelectionProvider(index)
+        if (highlightProvider != null) {
+            applyHighlightRangesVsc(highlightProvider(index), selection)
+        } else if (selData != null) {
+            selection.anchorIndex = selData.offset
+            selection.activeIndex = selData.offset + selData.size - 1
+            selection.cursorIndex = selData.offset
+            scrollHexViewerTo(selData.offset)
+        }
+        clickedRow = ClickedRow(index, selection.anchorIndex, selection.activeIndex)
+        wrapper.scrollTop = maxOf(0.0, position * rowHeight - (wrapper.clientHeight - rowHeight) / 2.0)
+        scrollTop = wrapper.scrollTop
+    }
+
     val totalRows = visibleIndices.size
     val totalHeight = totalRows * rowHeight
     val firstVisible = maxOf(0, (scrollTop / rowHeight).toInt() - bufferRows)
@@ -481,13 +511,17 @@ fun TableTabContent(
             ref { tableWrapper ->
                 viewportHeight = tableWrapper.clientHeight.toDouble()
                 scrollTop = tableWrapper.scrollTop
+                flatTableWrapper = tableWrapper
 
                 val listener = EventListener {
                     viewportHeight = tableWrapper.clientHeight.toDouble()
                     scrollTop = tableWrapper.scrollTop
                 }
                 tableWrapper.addEventListener("scroll", listener)
-                onDispose { tableWrapper.removeEventListener("scroll", listener) }
+                onDispose {
+                    tableWrapper.removeEventListener("scroll", listener)
+                    flatTableWrapper = null
+                }
             }
         }) {
             Table({
@@ -780,6 +814,20 @@ private fun rowClipboardText(columns: List<ColumnDescriptor>, index: Int, id: In
 
 /** A clicked flat-table row and the hex selection (`anchorIndex`/`activeIndex`) it left behind. */
 private data class ClickedRow(val index: Int, val anchorIndex: Int, val activeIndex: Int)
+
+/**
+ * Select top-level row [rowIndex] — a descriptor row, not a view position — of table tab
+ * [tabName]. [requestId] tells a repeat request for the same row apart, so it selects again.
+ */
+data class TableRowSelectionRequest(val tabName: String, val rowIndex: Int, val requestId: Int)
+
+/**
+ * Pending outside row-selection request for the table tabs, provided by [HexanaPanel]; the table
+ * whose name matches selects the row and resets this to `null`. Unprovided, requests go nowhere.
+ */
+internal val LocalTableRowSelection = staticCompositionLocalOf<MutableState<TableRowSelectionRequest?>> {
+    mutableStateOf(null)
+}
 
 internal fun compareTableValues(first: Any?, second: Any?): Int = when {
     first is Number && second is Number -> {
@@ -1217,6 +1265,36 @@ private fun TreeTableTabContent(
     // Revision counter to force scroll even when focusedFlatIndex doesn't change.
     var scrollRevision by remember(descriptor) { mutableStateOf(0) }
 
+    // Selects row [targetIndex] of [rows] the way a click does, and scrolls it
+    // into view. Used by the treemap and by outside requests.
+    fun selectFlatRow(rows: List<VscFlatRow>, targetIndex: Int) {
+        focusedFlatIndex = targetIndex
+        scrollRevision++
+        val row = rows[targetIndex]
+        if (row.depth == 0) applyRowDetailVsc(descriptor, row.index, selection)
+        val highlightProvider = descriptor.rowHighlightRangesProvider
+        val selData = row.rowSelectionProvider(row.index)
+        if (highlightProvider != null && row.depth == 0) {
+            applyHighlightRangesVsc(highlightProvider(row.index), selection)
+        } else if (selData != null) {
+            selection.anchorIndex = selData.offset
+            selection.activeIndex = selData.offset + selData.size - 1
+            selection.cursorIndex = selData.offset
+            scrollHexViewerTo(selData.offset)
+        }
+    }
+
+    // Outside "select row N" requests, e.g. an APK's "Reveal in DEX". N is a
+    // top-level descriptor row, selected wherever sorting put it.
+    val rowSelection = LocalTableRowSelection.current
+    val pendingRow = rowSelection.value
+    LaunchedEffect(pendingRow, flatRows) {
+        val request = pendingRow?.takeIf { it.tabName == descriptor.name } ?: return@LaunchedEffect
+        rowSelection.value = null
+        val target = flatRows.indexOfFirst { it.depth == 0 && it.index == request.rowIndex }
+        if (target >= 0) selectFlatRow(flatRows, target)
+    }
+
     val headers = buildList {
         add("")
         descriptor.columns.forEach { add(it.name) }
@@ -1383,18 +1461,7 @@ private fun TreeTableTabContent(
                         )
                         flatRows = updatedRows
                         val targetIndex = updatedRows.indexOfFirst { it.treePath == treePath }
-                        if (targetIndex >= 0) {
-                            focusedFlatIndex = targetIndex
-                            scrollRevision++
-                            val row = updatedRows[targetIndex]
-                            val selData = row.rowSelectionProvider(row.index)
-                            if (selData != null) {
-                                selection.anchorIndex = selData.offset
-                                selection.activeIndex = selData.offset + selData.size - 1
-                                selection.cursorIndex = selData.offset
-                                scrollHexViewerTo(selData.offset)
-                            }
-                        }
+                        if (targetIndex >= 0) selectFlatRow(updatedRows, targetIndex)
                     },
                 )
             }
@@ -1552,7 +1619,8 @@ private fun TreeTableBody(
     //   2. After the DOM stabilises, locate the actual focused row element
     //      (marked with data-focused) and use scrollIntoView, then adjust
     //      for the sticky header.
-    LaunchedEffect(focusedFlatIndex, scrollRevision) {
+    // Keyed on the wrapper too: a request can land before the table's DOM exists.
+    LaunchedEffect(focusedFlatIndex, scrollRevision, tableWrapperElement) {
         val idx = focusedFlatIndex
         val wrapper = tableWrapperElement ?: return@LaunchedEffect
         if (idx < 0 || scrollRevision == 0) return@LaunchedEffect

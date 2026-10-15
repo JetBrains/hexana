@@ -33,6 +33,8 @@ fun BinaryEditorApp() {
     var featureCatalogJson by remember { mutableStateOf("") }
     var runtimeTargetsJson by remember { mutableStateOf("") }
     var openRuntimeTargetsRequest by remember { mutableStateOf(0) }
+    // Row the host asked to select, e.g. for "Reveal in DEX" from an APK's editor.
+    var tableRowSelection by remember { mutableStateOf<TableRowSelectionRequest?>(null) }
 
     // Global arrow-key handler for panel-table rows.  VSCode webviews
     // intercept keydown events before they reach focused DOM elements, so
@@ -71,6 +73,15 @@ fun BinaryEditorApp() {
                 // reachable from the command palette and not only from the Compatibility tab.
                 "open-runtime-targets-dialog" -> {
                     openRuntimeTargetsRequest++
+                }
+                "select-table-row" -> {
+                    if (message.tabName.isNotEmpty() && message.rowIndex >= 0) {
+                        tableRowSelection = TableRowSelectionRequest(
+                            message.tabName,
+                            message.rowIndex,
+                            requestId = (tableRowSelection?.requestId ?: 0) + 1,
+                        )
+                    }
                 }
                 // Sent when a background refresh replaces the host's cached catalog.
                 "feature-catalog-loaded" -> {
@@ -239,6 +250,7 @@ fun BinaryEditorApp() {
                 featureCatalogJson = featureCatalogJson,
                 runtimeTargetsJson = runtimeTargetsJson,
                 openRuntimeTargetsRequest = openRuntimeTargetsRequest,
+                tableRowSelection = tableRowSelection,
             )
         }
     }

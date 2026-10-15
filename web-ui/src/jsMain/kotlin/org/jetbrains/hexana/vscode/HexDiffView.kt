@@ -606,6 +606,12 @@ private fun DiffTabsPanel(state: HexDiffState, tabs: List<TableTabDiff>) {
 
 @Composable
 private fun TabsLoading() {
+    LoadingIndicator("Comparing tables…")
+}
+
+/** A centred spinner with [message] beside it, for content that is still being computed. */
+@Composable
+internal fun LoadingIndicator(message: String) {
     remember { ensureSpinnerStyle() }
     Div({
         style {
@@ -618,7 +624,7 @@ private fun TabsLoading() {
         }
     }) {
         Span({ classes(SPINNER_CLASS) }) {}
-        Text("Comparing tables…")
+        Text(message)
     }
 }
 

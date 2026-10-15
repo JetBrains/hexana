@@ -49,6 +49,10 @@ data class VscodeMessage(
     val featureCatalogJson: String = "",
     /** Raw `.hexana/runtimes.json`; blank when the workspace declares no runtimes. */
     val runtimeTargetsJson: String = "",
+    /** `select-table-row`: the table tab to select a row of. */
+    val tabName: String = "",
+    /** `select-table-row`: the top-level descriptor row to select. */
+    val rowIndex: Int = -1,
 )
 
 /**
@@ -223,6 +227,31 @@ fun postOpenZipEntryToHost(
     msg.compressedSize = compressedSize.toDouble()
     msg.uncompressedSize = uncompressedSize.toDouble()
     msg.compressionMethod = compressionMethod
+    vscodeApi.postMessage(msg)
+}
+
+/**
+ * Like [postOpenZipEntryToHost], and then has the host select top-level row [rowIndex] of table
+ * tab [tabName] in the entry's editor — reusing that editor when it is already open.
+ */
+fun postRevealZipEntryRowToHost(
+    name: String,
+    dataOffset: Long,
+    compressedSize: Long,
+    uncompressedSize: Long,
+    compressionMethod: Int,
+    tabName: String,
+    rowIndex: Int,
+) {
+    val msg = js("{}")
+    msg.type = "open-zip-entry"
+    msg.name = name
+    msg.dataOffset = dataOffset.toDouble()
+    msg.compressedSize = compressedSize.toDouble()
+    msg.uncompressedSize = uncompressedSize.toDouble()
+    msg.compressionMethod = compressionMethod
+    msg.selectTabName = tabName
+    msg.selectRowIndex = rowIndex
     vscodeApi.postMessage(msg)
 }
 
@@ -669,6 +698,13 @@ class VscodeHost(override val canRunApk: Boolean = false) : Host {
         name: String, dataOffset: Long, compressedSize: Long, uncompressedSize: Long, compressionMethod: Int,
     ) = postOpenZipEntryToHost(name, dataOffset, compressedSize, uncompressedSize, compressionMethod)
     override fun openTarEntry(name: String, dataOffset: Long, size: Long) = postOpenTarEntryToHost(name, dataOffset, size)
+    override val canRevealZipEntryRow: Boolean get() = true
+    override fun revealZipEntryRow(
+        name: String, dataOffset: Long, compressedSize: Long, uncompressedSize: Long, compressionMethod: Int,
+        tabName: String, rowIndex: Int,
+    ) = postRevealZipEntryRowToHost(
+        name, dataOffset, compressedSize, uncompressedSize, compressionMethod, tabName, rowIndex,
+    )
     override fun overwriteFile(bytes: ByteArray) = postOverwriteFileToHost(bytes)
     override fun saveCopy(outputName: String, bytes: ByteArray) = postSaveCopyToHost(outputName, bytes)
     override fun openUrl(url: String) = postOpenUrlToHost(url)
@@ -724,6 +760,13 @@ internal fun decodeVscodeMessage(type: String, data: dynamic): VscodeMessage =
                 canRunApk = (data.canRunApk as? Boolean) ?: false,
                 featureCatalogJson = (data.featureCatalogJson as? String) ?: "",
                 runtimeTargetsJson = (data.runtimeTargetsJson as? String) ?: "",
+            )
+        }
+        "select-table-row" -> {
+            VscodeMessage(
+                type = type,
+                tabName = (data.tabName as? String) ?: "",
+                rowIndex = (data.rowIndex as? Number)?.toInt() ?: -1,
             )
         }
         "update-setting" -> {

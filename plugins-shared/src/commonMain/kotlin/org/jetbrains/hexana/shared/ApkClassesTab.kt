@@ -6,6 +6,8 @@ import org.jetbrains.hexana.dex.renderDexClassAccessFlags
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.zip.ZipEntry
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.yield
 
 /** Name of the APK tab that lists the classes of every DEX file in the archive. */
 const val APK_CLASSES_TAB_NAME: String = "Classes"
@@ -54,21 +56,27 @@ private fun multiDexOrdinal(name: String): Int {
 
 /**
  * Reads the classes of every DEX entry in [provider]. [readEntry] inflates one entry — inflation
- * is host-specific — and returns `null` when it cannot. Decodes every DEX in the archive, so call
- * it off the UI thread; [onProgress] is told before each entry is read.
+ * is host-specific, and asynchronous in a browser — and returns `null` when it cannot.
+ * [onProgress] is told before each entry is read.
+ *
+ * Decodes every DEX in the archive: on the JVM call it off the UI thread. A browser has only the
+ * one thread, so it yields between entries to let the page repaint and stay responsive.
  */
-fun collectApkDexClasses(
+suspend fun collectApkDexClasses(
     provider: ZipBinaryProvider,
     onProgress: ((index: Int, total: Int, entry: ZipEntry) -> Unit)? = null,
-    readEntry: (ZipEntry) -> CommonByteBuffer?,
+    readEntry: suspend (ZipEntry) -> CommonByteBuffer?,
 ): ApkDexClasses {
     val dexEntries = apkDexEntries(provider)
     val rows = mutableListOf<ApkDexClassRow>()
     val unreadable = mutableListOf<String>()
     for ((index, entry) in dexEntries.withIndex()) {
         onProgress?.invoke(index, dexEntries.size, entry)
+        yield()
         val dex = try {
             readEntry(entry)?.let { DexFileParser.parse(it.position(0)) }
+        } catch (c: CancellationException) {
+            throw c
         } catch (_: Exception) {
             null
         }

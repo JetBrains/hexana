@@ -164,6 +164,8 @@ fun BinaryEditorContent(
      * invocations reopen it without the caller having to reset a flag.
      */
     openRuntimeTargetsRequest: Int = 0,
+    /** Latest host request to select a table row; see [HexanaPanel]'s parameter of that name. */
+    tableRowSelection: TableRowSelectionRequest? = null,
 ) {
     val selection = remember { HexSelectionState() }
     val buffer = remember(provider) { provider.bytes }
@@ -370,6 +372,7 @@ fun BinaryEditorContent(
             } else {
                 null
             },
+            tableRowSelection = tableRowSelection,
         )
     }
 

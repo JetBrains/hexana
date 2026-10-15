@@ -29,6 +29,8 @@ consult-first / write-back rules.
 - [[entities/dex-reveal-in-smali]] — DEX Classes → Smali navigation: shared
   `withDexRevealInSmali`/`withExtraContextMenuItems`, IntelliJ state-flow and web
   composition-local host bindings, top-level-only tree-table context menus.
+- [[entities/apk-classes-tab]] — APK Classes tab + "Reveal in DEX" in IntelliJ and VS Code:
+  shared async collection, lazy tabs, entry-editor reuse, and the cross-host "select table row" request.
 
 ## Sources
 

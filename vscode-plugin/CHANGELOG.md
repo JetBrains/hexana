@@ -4,6 +4,7 @@
 
 # Unreleased
 - **Run** button for on-disk `.apk` files when a local Android SDK has the emulator (as installed by Android Studio): reuses a running emulator or boots an existing virtual device (pick one if there are several), installs the APK with `adb` and launches it. Without a virtual device it points you to Android Studio's Device Manager
+- **Classes** tab for `.apk` files listing every class across the archive's DEX files (`classes.dex`, `classes2.dex`, …), with a filter per DEX file. The DEX files are read only once the tab is opened, in the background with a progress indicator. Right-click a class and choose **Reveal in DEX** to open its DEX file with the class selected on its **Classes** tab; an archive entry that is already open is brought forward instead of opened again
 
 # 0.13.0 - 01.10.2026
 - **hex diff**: comparisons get a second view next to the size and functions diff (renamed from "Hexana diff" — both views are Hexana's), switchable at the top of the diff — the two binaries side by side in hex, changed bytes highlighted (amber modified, red removed, green added), long unchanged stretches collapsed into expandable "N unchanged rows" lines, previous / next difference buttons, sections tinted in colors that never clash with the diff's own, one section bar for both sides marking which sections changed (click to jump), and the files' table tabs (Headers, Sections, Symbols, Imports, …) diffed row by row below. Works for any pair; a pair of different kinds gets the byte comparison alone

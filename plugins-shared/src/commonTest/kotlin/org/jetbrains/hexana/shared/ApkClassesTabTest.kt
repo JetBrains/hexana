@@ -4,6 +4,7 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.zip.ZipEntry
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -18,7 +19,7 @@ class ApkClassesTabTest {
         ZipBinaryProvider(buildStoredZip(entries.toList()).toCommonByteBuffer())
 
     /** Stored entries are their own bytes, so a slice of the archive reads them. */
-    private fun storedReader(provider: ZipBinaryProvider): (ZipEntry) -> CommonByteBuffer? {
+    private fun storedReader(provider: ZipBinaryProvider): suspend (ZipEntry) -> CommonByteBuffer? {
         val archive = provider.bytes
         return { entry ->
             ByteArray(entry.uncompressedSize.toInt()) { archive[entry.dataOffset.toInt() + it] }.toCommonByteBuffer()
@@ -42,7 +43,7 @@ class ApkClassesTabTest {
     }
 
     @Test
-    fun classesOfEveryDexAreListedWithTheirEntryAndClassDefIndex() {
+    fun classesOfEveryDexAreListedWithTheirEntryAndClassDefIndex() = runTest {
         val provider = apk("classes.dex" to dex, "classes2.dex" to dex)
         val progress = mutableListOf<String>()
         val classes = collectApkDexClasses(
@@ -69,7 +70,7 @@ class ApkClassesTabTest {
     }
 
     @Test
-    fun revealInDexPassesTheRowsEntryAndClassDefIndex() {
+    fun revealInDexPassesTheRowsEntryAndClassDefIndex() = runTest {
         val provider = apk("classes.dex" to dex, "classes2.dex" to dex)
         val classes = collectApkDexClasses(provider, readEntry = storedReader(provider))
         val revealed = mutableListOf<Pair<String, Int>>()
@@ -83,7 +84,7 @@ class ApkClassesTabTest {
     }
 
     @Test
-    fun unreadableDexEntriesAreReportedAndSkipped() {
+    fun unreadableDexEntriesAreReportedAndSkipped() = runTest {
         val provider = apk("classes.dex" to dex, "classes2.dex" to byteArrayOf(1, 2, 3))
         val reader = storedReader(provider)
         val classes = collectApkDexClasses(provider) { entry ->
@@ -96,7 +97,7 @@ class ApkClassesTabTest {
     }
 
     @Test
-    fun anApkWithoutDexFilesHasAnEmptyTableWithoutActions() {
+    fun anApkWithoutDexFilesHasAnEmptyTableWithoutActions() = runTest {
         val provider = apk("AndroidManifest.xml" to byteArrayOf(0))
         val tab = apkClassesDescriptor(collectApkDexClasses(provider, readEntry = storedReader(provider)))
 

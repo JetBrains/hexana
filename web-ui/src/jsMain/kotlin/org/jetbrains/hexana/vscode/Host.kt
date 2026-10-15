@@ -35,6 +35,27 @@ interface Host {
         compressionMethod: Int,
     )
     fun openTarEntry(name: String, dataOffset: Long, size: Long)
+
+    /**
+     * Whether [revealZipEntryRow] works: the host can open an archive entry and then reach
+     * the editor it opened. False where entries cannot be opened at all — the browser webapp —
+     * and "Reveal in DEX" is then not offered.
+     */
+    val canRevealZipEntryRow: Boolean get() = false
+
+    /**
+     * Opens a ZIP entry like [openZipEntry] — bringing its editor forward instead when it is
+     * already open — and selects top-level row [rowIndex] of that editor's table tab [tabName].
+     */
+    fun revealZipEntryRow(
+        name: String,
+        dataOffset: Long,
+        compressedSize: Long,
+        uncompressedSize: Long,
+        compressionMethod: Int,
+        tabName: String,
+        rowIndex: Int,
+    ) {}
     fun overwriteFile(bytes: ByteArray)
     fun saveCopy(outputName: String, bytes: ByteArray)
     fun openUrl(url: String)
