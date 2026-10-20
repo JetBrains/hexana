@@ -49,6 +49,11 @@ class NativeTableTabsProvider : TableTabsProvider {
     override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> =
         tableTabs(provider, TableTabsContext())
 
+    override fun groupedTabs(provider: BinaryProvider): List<GroupedTableTabDescriptor> = when (provider) {
+        is PeBinaryProvider -> listOfNotNull(clrMetadataGroup(provider))
+        else -> emptyList()
+    }
+
     override fun tableTabs(provider: BinaryProvider, context: TableTabsContext): List<TableTabDescriptor> = when (provider) {
         is ElfBinaryProvider -> elfTabs(provider) + debugTabs(provider, context.nativeDebugData)
         is MachOBinaryProvider -> machOTabs(provider) + debugTabs(provider, context.nativeDebugData)
@@ -167,6 +172,7 @@ private fun coffSymbolsTab(provider: CoffBinaryProvider): TableTabDescriptor? {
 
 private fun peTabs(provider: PeBinaryProvider): List<TableTabDescriptor> = buildList {
     peHeadersTab(provider)?.let { add(it) }
+    addAll(clrTabs(provider))
     peSectionsTab(provider)?.let { add(it) }
     peImportsTab(provider)?.let { add(it) }
     peExportsTab(provider)?.let { add(it) }

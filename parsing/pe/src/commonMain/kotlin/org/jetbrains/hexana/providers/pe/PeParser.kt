@@ -9,6 +9,7 @@ import org.jetbrains.hexana.parsing.common.NativeParserSeverity
 import org.jetbrains.hexana.parsing.common.NativeUnresolvedRecord
 import org.jetbrains.hexana.parsing.common.nativeParseFailure
 import org.jetbrains.hexana.parsing.common.nativeParseSuccess
+import org.jetbrains.hexana.providers.pe.clr.ClrMetadataParser
 
 object PeParser {
     fun parse(bytes: CommonByteBuffer): NativeParseResult<PeFile> {
@@ -89,6 +90,12 @@ object PeParser {
             diagnostics.add(optionalPeDiagnostic("coff.invalid_symbols", "COFF symbol table could not be parsed."))
             emptyList()
         }
+        val clr = ClrMetadataParser.parse(bytes, optionalHeader, sections)
+        if (clr != null) {
+            diagnostics.addAll(clr.diagnostics)
+        } else if (ClrMetadataParser.hasClrHeader(optionalHeader)) {
+            diagnostics.add(optionalPeDiagnostic("pe.invalid_clr_header", "CLR runtime header could not be parsed."))
+        }
 
         val unresolvedRecords = optionalHeader.dataDirectories
             .filter { it.index !in PeDataDirectoryIndex.knownIndices && (it.rva != 0u || it.size != 0u) }
@@ -114,6 +121,7 @@ object PeParser {
             coffSymbols = coffSymbols,
             unresolvedRecords = unresolvedRecords,
             diagnostics = diagnostics,
+            clr = clr,
         )
         return nativeParseSuccess(file, diagnostics)
     }
@@ -782,7 +790,7 @@ object PeParser {
         return null
     }
 
-    private fun rvaToFileOffset(
+    internal fun rvaToFileOffset(
         bytes: CommonByteBuffer,
         rva: UInt,
         optionalHeader: PeOptionalHeader,
@@ -952,7 +960,7 @@ private fun CommonByteBuffer.fixedString(offset: Int, size: Int): String {
 private fun CommonByteBuffer.decimalString(offset: Int, size: Int): String =
     fixedString(offset, size).trim()
 
-private fun CommonByteBuffer.nullTerminatedString(offset: Int, maxSize: Int): String {
+internal fun CommonByteBuffer.nullTerminatedString(offset: Int, maxSize: Int): String {
     if (offset !in 0 until size || maxSize <= 0) return ""
     val endLimit = (offset + maxSize).coerceAtMost(size)
     var end = offset
@@ -981,7 +989,7 @@ private fun dataDirectoryName(index: Int): String = when (index) {
     else -> "Directory $index"
 }
 
-private fun CommonByteBuffer.guidLeString(offset: Int): String? {
+internal fun CommonByteBuffer.guidLeString(offset: Int): String? {
     if (!containsRange(offset, 16)) return null
     val data1 = u32LeOrNull(offset) ?: return null
     val data2 = u16LeOrNull(offset + 4) ?: return null
@@ -1112,13 +1120,13 @@ private data class ArchiveMemberNameAndContent(
     val contentRange: NativeByteRange,
 )
 
-private fun CommonByteBuffer.containsRange(offset: Int, size: Int): Boolean =
+internal fun CommonByteBuffer.containsRange(offset: Int, size: Int): Boolean =
     offset >= 0 && size >= 0 && offset <= this.size && size <= this.size - offset
 
-private fun CommonByteBuffer.byteOrNull(offset: Int): Int? =
+internal fun CommonByteBuffer.byteOrNull(offset: Int): Int? =
     if (offset in 0 until size) get(offset).toInt() and 0xFF else null
 
-private fun CommonByteBuffer.u16LeOrNull(offset: Int): Int? {
+internal fun CommonByteBuffer.u16LeOrNull(offset: Int): Int? {
     val b0 = byteOrNull(offset) ?: return null
     val b1 = byteOrNull(offset + 1) ?: return null
     return b0 or (b1 shl 8)
@@ -1129,7 +1137,7 @@ private fun CommonByteBuffer.i16LeOrNull(offset: Int): Int? {
     return if (unsigned >= 0x8000) unsigned - 0x10000 else unsigned
 }
 
-private fun CommonByteBuffer.u32LeOrNull(offset: Int): UInt? {
+internal fun CommonByteBuffer.u32LeOrNull(offset: Int): UInt? {
     val b0 = byteOrNull(offset) ?: return null
     val b1 = byteOrNull(offset + 1) ?: return null
     val b2 = byteOrNull(offset + 2) ?: return null
@@ -1137,13 +1145,13 @@ private fun CommonByteBuffer.u32LeOrNull(offset: Int): UInt? {
     return b0.toUInt() or (b1.toUInt() shl 8) or (b2.toUInt() shl 16) or (b3.toUInt() shl 24)
 }
 
-private fun CommonByteBuffer.u64LeOrNull(offset: Int): ULong? {
+internal fun CommonByteBuffer.u64LeOrNull(offset: Int): ULong? {
     val low = u32LeOrNull(offset) ?: return null
     val high = u32LeOrNull(offset + 4) ?: return null
     return (high.toULong() shl 32) or low.toULong()
 }
 
-private fun UInt.toBoundedInt(): Int? =
+internal fun UInt.toBoundedInt(): Int? =
     if (this <= Int.MAX_VALUE.toUInt()) toInt() else null
 
 private fun ULong.toUIntOrNull(): UInt? =
@@ -1160,7 +1168,7 @@ private fun checkedAdd(left: UInt, right: UInt): UInt? {
     return if (result <= UInt.MAX_VALUE.toULong()) result.toUInt() else null
 }
 
-private fun checkedAdd(left: Int, right: Int): Int? {
+internal fun checkedAdd(left: Int, right: Int): Int? {
     if (right > 0 && left > Int.MAX_VALUE - right) return null
     if (right < 0 && left < Int.MIN_VALUE - right) return null
     return left + right

@@ -27,6 +27,7 @@ fun fileTypeDescription(
 ): String = when (binaryProvider) {
     is WasmBinaryProvider -> "Core Wasm"
     is WasmComponentBinaryProvider -> "Component Model"
+    is PeBinaryProvider -> binaryProvider.nativeFormat.displayName + if (binaryProvider.isManaged) " (.NET)" else ""
     is NativeBinaryProvider -> binaryProvider.nativeFormat.displayName
     is ZipBinaryProvider -> if (fileName.orEmpty().endsWith(".jar", true)) "Jar File" else "Zip File"
     is TarBinaryProvider -> "Tar Archive"

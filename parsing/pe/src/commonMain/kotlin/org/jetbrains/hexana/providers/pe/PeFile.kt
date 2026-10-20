@@ -3,6 +3,7 @@ package org.jetbrains.hexana.providers.pe
 import org.jetbrains.hexana.parsing.common.NativeParserDiagnostic
 import org.jetbrains.hexana.parsing.common.NativeUnresolvedRecord
 import org.jetbrains.hexana.parsing.common.NativeByteRange
+import org.jetbrains.hexana.providers.pe.clr.ClrMetadata
 
 sealed interface PeFile {
     val unresolvedRecords: List<NativeUnresolvedRecord>
@@ -21,6 +22,8 @@ data class PeImageFile(
     val coffSymbols: List<PeCoffSymbol>,
     override val unresolvedRecords: List<NativeUnresolvedRecord>,
     override val diagnostics: List<NativeParserDiagnostic>,
+    /** Managed (.NET) metadata, present when the image has a CLR runtime header. */
+    val clr: ClrMetadata? = null,
 ) : PeFile
 
 data class CoffObjectFile(

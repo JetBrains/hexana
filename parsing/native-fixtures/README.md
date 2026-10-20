@@ -31,6 +31,7 @@ Expected outputs include:
 - `test-data/pe/sample.lib`
 - `test-data/pe/sample.pdb`
 - `test-data/pe/sample_cpp.coff`
+- `test-data/pe/sample-clr.exe` (see below; not built by the Docker image)
 - `test-data/manifest.txt`
 
 When LLVM inspection tools are available, the build also writes `*.llvm-readobj.txt` reference dumps next to the generated binaries.
@@ -44,3 +45,19 @@ parsing/native-fixtures/build-native-fixtures.sh
 ```
 
 Set `SRC_DIR` and `OUT_DIR` to override source and output directories.
+
+## .NET Fixture
+
+`test-data/pe/sample-clr.exe` is a managed (.NET Framework, IL-only, AnyCPU) assembly built from
+`src/clr/Sample.cs` with an embedded resource from `src/clr/hello.txt`. The Docker image has no C#
+compiler, so build it with Roslyn `csc` (for example from Mono) when it needs refreshing:
+
+```bash
+cd parsing/native-fixtures/src/clr
+csc -nologo -deterministic -optimize+ -debug- \
+  -resource:hello.txt,Hexana.Sample.hello.txt \
+  -out:../../test-data/pe/sample-clr.exe Sample.cs
+```
+
+The parser tests cross-check it against `monodis --typedef`, `--method`, `--memberref` and `--manifest` output;
+update `ClrFixtureParserTest` and `ClrTableTabsTest` together with the fixture.
