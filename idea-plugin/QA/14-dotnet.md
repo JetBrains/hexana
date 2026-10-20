@@ -64,7 +64,17 @@ System.Private.CoreLib** holds most of the native code. **ReadyToRun data** list
 DebugInfo, Unwind and GC info, Import cells, …). **Unattributed** is absent in the sample and small elsewhere.
 The treemap shows the same groups.
 
-### 14.9 Malformed input
+### 14.9 .resources files
+**Steps:** Open `parsing/native-fixtures/test-data/pe/sample.resources`; then a satellite resource file such as
+paint.net's `PaintDotNet.Strings.3.de.resources`. In `sample-clr.exe` open **.NET Metadata → Resources** and expand
+`Hexana.Sample.Strings.resources`.
+**Expected:** The file type reads `.NET Resources`. **Header** shows `System.Resources.ResourceReader…`, format version 2
+and one user type (`Margin, MakeResources, …`). **Resources** lists 19 entries: `Greeting` = `Hello from Hexana`,
+`Price` = `12345.6789`, `Released` = `2026-10-20T13:45:30Z`, `Pixel` = `12 bytes (PNG image)`, `Margin` as a serialized
+value; selecting `Pixel` highlights only its 12 payload bytes. The paint.net file lists its translated strings. The
+embedded set expands to the same 19 entries.
+
+### 14.10 Malformed input
 **Steps:** Copy `sample-clr.exe`, truncate the copy to 3,400 bytes, and open it.
 **Expected:** The file opens; tabs that need missing data are empty or absent, **Top** shows `.text` with only the
 bytes present. No exception in `idea.log`.

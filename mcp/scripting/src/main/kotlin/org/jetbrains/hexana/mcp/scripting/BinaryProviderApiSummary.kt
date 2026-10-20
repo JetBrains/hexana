@@ -300,6 +300,7 @@ object BinaryProviderApiSummary {
                 "org.jetbrains.hexana.providers.ClassFileBinaryProvider",
                 "org.jetbrains.hexana.providers.DexBinaryProvider",
                 "org.jetbrains.hexana.providers.ArscBinaryProvider",
+                "org.jetbrains.hexana.providers.ClrResourcesBinaryProvider",
             )
             for (name in knownImpls) {
                 try {

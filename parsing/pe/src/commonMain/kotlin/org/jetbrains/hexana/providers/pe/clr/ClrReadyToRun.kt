@@ -450,7 +450,7 @@ object ClrReadyToRunParser {
 private class MalformedNativeData : RuntimeException()
 
 /** Smallest element greater than [value] in this ascending array, or null. */
-private fun IntArray.firstAfter(value: Int): Int? {
+internal fun IntArray.firstAfter(value: Int): Int? {
     var low = 0
     var high = size - 1
     var result: Int? = null

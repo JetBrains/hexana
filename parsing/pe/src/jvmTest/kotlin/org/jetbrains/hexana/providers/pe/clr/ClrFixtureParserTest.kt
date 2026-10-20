@@ -119,7 +119,8 @@ class ClrFixtureParserTest {
         assertEquals("System.String", concat.parent)
         assertEquals("string Concat(string, string, string, string)", concat.signature)
 
-        val resource = clr.manifestResources.single()
+        assertEquals(listOf("Hexana.Sample.hello.txt", "Hexana.Sample.Strings.resources"), clr.manifestResources.map { it.name })
+        val resource = clr.manifestResources.first()
         assertEquals("Hexana.Sample.hello.txt", resource.name)
         assertEquals("embedded", resource.implementation)
         assertTrue(resource.isPublic)

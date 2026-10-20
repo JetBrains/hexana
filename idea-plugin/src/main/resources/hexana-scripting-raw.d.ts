@@ -4213,6 +4213,76 @@ interface ArscBinaryProvider extends GenericBinaryProvider {
   }[];
 }
 
+interface ClrResourcesBinaryProvider extends GenericBinaryProvider {
+  parsedResources?: {
+    dataSectionRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    diagnostics: {
+      code: string;
+      message: string;
+      range?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      severity: "Info" | "Warning" | "Error";
+    }[];
+    headerRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    managerHeaderVersion: number;
+    nameSectionRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    readerType: string;
+    resourceSetType: string;
+    resources: {
+      dataRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      kind: "Null" | "String" | "Primitive" | "ByteArray" | "Stream" | "Serialized" | "Unreadable";
+      name: string;
+      nameRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      payloadRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      stringValue?: string;
+      type: string;
+      value: string;
+    }[];
+    types: string[];
+    version: number;
+  };
+  strings: {
+    index: number;
+    offset: number;
+    size: number;
+    tag?: string;
+    value: string;
+  }[];
+  structureRanges: {
+    label: string;
+    offset: number;
+    size: number;
+    tabName?: string;
+  }[];
+}
+
 interface AddressSourceLocation {
   offset: number;
   sourceLocation: {
@@ -7867,6 +7937,214 @@ interface ClrReadyToRunSection {
     rva: number;
     size: number;
     type: number;
+  };
+}
+
+interface ClrResource {
+  dataRange?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  kind: "Null" | "String" | "Primitive" | "ByteArray" | "Stream" | "Serialized" | "Unreadable";
+  name: string;
+  nameRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  payloadRange?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  stringValue?: string;
+  type: string;
+  value: string;
+  copy(name: string, type: string, kind: "Null" | "String" | "Primitive" | "ByteArray" | "Stream" | "Serialized" | "Unreadable", value: string, stringValue: string | null, nameRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }, dataRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null, payloadRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null): {
+    dataRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    kind: "Null" | "String" | "Primitive" | "ByteArray" | "Stream" | "Serialized" | "Unreadable";
+    name: string;
+    nameRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    payloadRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    stringValue?: string;
+    type: string;
+    value: string;
+  };
+}
+
+interface ClrResourcesFile {
+  dataSectionRange?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  diagnostics: {
+    code: string;
+    message: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    severity: "Info" | "Warning" | "Error";
+  }[];
+  headerRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  managerHeaderVersion: number;
+  nameSectionRange?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  readerType: string;
+  resourceSetType: string;
+  resources: {
+    dataRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    kind: "Null" | "String" | "Primitive" | "ByteArray" | "Stream" | "Serialized" | "Unreadable";
+    name: string;
+    nameRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    payloadRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    stringValue?: string;
+    type: string;
+    value: string;
+  }[];
+  types: string[];
+  version: number;
+  copy(managerHeaderVersion: number, readerType: string, resourceSetType: string, version: number, types: string[], resources: {
+    dataRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    kind: "Null" | "String" | "Primitive" | "ByteArray" | "Stream" | "Serialized" | "Unreadable";
+    name: string;
+    nameRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    payloadRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    stringValue?: string;
+    type: string;
+    value: string;
+  }[], headerRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }, nameSectionRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null, dataSectionRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null, diagnostics: {
+    code: string;
+    message: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    severity: "Info" | "Warning" | "Error";
+  }[]): {
+    dataSectionRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    diagnostics: {
+      code: string;
+      message: string;
+      range?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      severity: "Info" | "Warning" | "Error";
+    }[];
+    headerRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    managerHeaderVersion: number;
+    nameSectionRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    readerType: string;
+    resourceSetType: string;
+    resources: {
+      dataRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      kind: "Null" | "String" | "Primitive" | "ByteArray" | "Stream" | "Serialized" | "Unreadable";
+      name: string;
+      nameRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      payloadRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      stringValue?: string;
+      type: string;
+      value: string;
+    }[];
+    types: string[];
+    version: number;
   };
 }
 

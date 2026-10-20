@@ -879,6 +879,7 @@ fun nativeOrGenericBinaryProvider(
         ClassFileBinaryProvider.isClassFile(sharedBytes) -> ClassFileBinaryProvider(sharedBytes.duplicate().position(0))
         DexBinaryProvider.isDexFile(sharedBytes) -> DexBinaryProvider(sharedBytes.duplicate().position(0))
         ArscBinaryProvider.isArscFile(sharedBytes) -> ArscBinaryProvider(sharedBytes.duplicate().position(0))
+        ClrResourcesBinaryProvider.isResourcesFile(sharedBytes) -> ClrResourcesBinaryProvider(sharedBytes.duplicate().position(0))
         PcapBinaryProvider.isPcapFile(sharedBytes) ->
             PcapBinaryProvider(sharedBytes.duplicate().position(0), sourcePath)
         ProtobufBinaryProvider.isFileDescriptorSet(sharedBytes) -> ProtobufBinaryProvider(sharedBytes.duplicate().position(0))

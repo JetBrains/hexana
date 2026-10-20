@@ -481,6 +481,7 @@ object TableTabsProviderRegistry {
             ProtobufMessageTableTabsProvider(),
             DexTableTabsProvider(),
             ArscTableTabsProvider(),
+            ClrResourcesTableTabsProvider(),
             PcapTableTabsProvider(),
             StringsTabProvider(),
             SizeTableTabsProvider(),

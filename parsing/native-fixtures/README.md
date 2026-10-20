@@ -49,20 +49,38 @@ Set `SRC_DIR` and `OUT_DIR` to override source and output directories.
 ## .NET Fixture
 
 `test-data/pe/sample-clr.exe` is a managed (.NET Framework, IL-only, AnyCPU) assembly built from
-`src/clr/Sample.cs` with an embedded resource from `src/clr/hello.txt`. The Docker image has no C#
-compiler, so build it with Roslyn `csc` (for example from Mono) when it needs refreshing:
+`src/clr/Sample.cs`, embedding `src/clr/hello.txt` and the `.resources` fixture below. The Docker image
+has no C# compiler, so build it with Roslyn `csc` (for example from Mono) when it needs refreshing:
 
 ```bash
 cd parsing/native-fixtures/src/clr
+cp ../../test-data/pe/sample.resources strings.resources
 csc -nologo -deterministic -optimize+ -debug- \
   -resource:hello.txt,Hexana.Sample.hello.txt \
+  -resource:strings.resources,Hexana.Sample.Strings.resources \
   -out:../../test-data/pe/sample-clr.exe Sample.cs
+rm strings.resources
 ```
 
 The parser tests cross-check it against `monodis --typedef`, `--method`, `--memberref` and `--manifest` output,
 and the IL tests against `ikdasm sample-clr.exe`. Update `ClrFixtureParserTest`, `ClrIlDecoderTest`,
 `ClrTableTabsTest` and `ClrIlTextTest` together with the fixture, and regenerate the base64 copy in
 `parsing/pe/src/commonTest/.../clr/ClrSampleFixture.kt` that the JS and Wasm tests use.
+
+### .resources fixture
+
+`test-data/pe/sample.resources` is a resource set with one value of every `ResourceTypeCode` plus a
+serialized user type, written by `src/clr/resources/MakeResources.cs` through `ResourceWriter`. Mono is
+used because .NET 8+ refuses to serialize user types. `sample.resources.dump.txt` is what the runtime's
+own `ResourceReader` reports for it (`DumpResources.cs`), and is what `ClrResourcesParserTest` checks:
+
+```bash
+cd parsing/native-fixtures/src/clr/resources
+csc -nologo -out:/tmp/MakeResources.exe MakeResources.cs
+csc -nologo -r:/tmp/MakeResources.exe -out:/tmp/DumpResources.exe DumpResources.cs
+mono /tmp/MakeResources.exe ../../../test-data/pe/sample.resources
+mono /tmp/DumpResources.exe ../../../test-data/pe/sample.resources | sort > ../../../test-data/pe/sample.resources.dump.txt
+```
 
 ### ReadyToRun fixtures
 

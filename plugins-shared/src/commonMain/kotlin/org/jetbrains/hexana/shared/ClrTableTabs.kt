@@ -8,6 +8,7 @@ import org.jetbrains.hexana.providers.pe.clr.ClrHeaderFlags
 import org.jetbrains.hexana.providers.pe.clr.ClrMetadata
 import org.jetbrains.hexana.providers.pe.clr.ClrMethodDef
 import org.jetbrains.hexana.providers.pe.clr.ClrReadyToRunParser
+import org.jetbrains.hexana.providers.pe.clr.ClrResourcesParser
 import org.jetbrains.hexana.providers.pe.clr.ClrTypeDef
 import org.jetbrains.hexana.providers.pe.clr.ClrTypeKind
 
@@ -38,7 +39,7 @@ internal fun clrMetadataGroup(provider: PeBinaryProvider): GroupedTableTabDescri
         clrTypeRefsTab(metadata),
         clrMemberRefsTab(metadata),
         clrUserStringsTab(metadata),
-        clrResourcesTab(metadata),
+        clrResourcesTab(provider, metadata),
     )
     if (innerTabs.isEmpty()) return null
     return GroupedTableTabDescriptor(name = CLR_METADATA_GROUP_NAME, innerTabs = innerTabs)
@@ -259,8 +260,15 @@ private fun clrUserStringsTab(metadata: ClrMetadata): TableTabDescriptor? {
     )
 }
 
-private fun clrResourcesTab(metadata: ClrMetadata): TableTabDescriptor? {
+private fun clrResourcesTab(provider: PeBinaryProvider, metadata: ClrMetadata): TableTabDescriptor? {
     val resources = metadata.manifestResources.takeIf { it.isNotEmpty() } ?: return null
+    // Embedded `.resources` sets expand to their entries; decoded on first expansion only.
+    val decoded = HashMap<Int, TableTabChildRows?>()
+    fun entries(index: Int): TableTabChildRows? = decoded.getOrPut(index) {
+        val resource = resources[index]
+        val data = resource.dataRange?.takeIf { resource.name.endsWith(".resources", ignoreCase = true) } ?: return@getOrPut null
+        ClrResourcesParser.parse(provider.bytes, data)?.let(::clrResourceChildRows)
+    }
     return TableTabDescriptor(
         name = "Resources",
         columns = listOf(
@@ -271,6 +279,7 @@ private fun clrResourcesTab(metadata: ClrMetadata): TableTabDescriptor? {
         ),
         rowCount = resources.size,
         rowSelectionProvider = { resources.getOrNull(it)?.let { resource -> selection(resource.dataRange ?: resource.recordRange) } },
+        childrenProvider = { index -> if (index in resources.indices) entries(index) else null },
     )
 }
 
@@ -288,7 +297,7 @@ private fun ByteArray.toHexString(): String =
     joinToString("") { (it.toInt() and 0xFF).toString(16).uppercase().padStart(2, '0') }
 
 /** Escapes control characters so multi-line user strings stay on one table row. */
-private fun String.toDisplayLiteral(): String = buildString {
+internal fun String.toDisplayLiteral(): String = buildString {
     for (char in this@toDisplayLiteral) {
         when (char) {
             '\n' -> append("\\n")

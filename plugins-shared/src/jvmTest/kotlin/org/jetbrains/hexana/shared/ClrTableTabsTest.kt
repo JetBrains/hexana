@@ -144,6 +144,9 @@ class ClrTableTabsTest {
         val text = assertNotNull(managed.sizeAnalysis).children.single { it.name == ".text" }
         val metadata = text.children.single { it.name == "CLR metadata" }
         assertTrue(metadata.children.map { it.name }.containsAll(listOf("#~", "#Strings", "#US", "#GUID", "#Blob", "Metadata root", "Stream headers")))
-        assertEquals(listOf("Hexana.Sample.hello.txt"), text.children.single { it.name == "Managed resources" }.children.map { it.name })
+        assertEquals(
+            setOf("Hexana.Sample.hello.txt", "Hexana.Sample.Strings.resources"),
+            text.children.single { it.name == "Managed resources" }.children.map { it.name }.toSet(),
+        )
     }
 }

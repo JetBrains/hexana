@@ -12,6 +12,7 @@ import org.jetbrains.hexana.javabytecode.JavaMethodAccess
 import org.jetbrains.hexana.providers.ArchiveBinaryProvider
 import org.jetbrains.hexana.providers.ArrowBinaryProvider
 import org.jetbrains.hexana.providers.ArscBinaryProvider
+import org.jetbrains.hexana.providers.ClrResourcesBinaryProvider
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.providers.CoffBinaryProvider
@@ -551,6 +552,7 @@ private fun nonWasmFormat(provider: BinaryProvider): String = when (provider) {
     is ClassFileBinaryProvider -> "class"
     is DexBinaryProvider -> "dex"
     is ArscBinaryProvider -> "arsc"
+    is ClrResourcesBinaryProvider -> "dotnet-resources"
     is PcapBinaryProvider -> "pcap"
     is ProtobufBinaryProvider -> "protobuf"
     is ElfBinaryProvider -> "elf"

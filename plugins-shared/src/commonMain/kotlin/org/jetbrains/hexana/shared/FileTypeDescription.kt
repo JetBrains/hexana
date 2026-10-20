@@ -5,6 +5,7 @@ import org.jetbrains.hexana.providers.ArrowBinaryProvider
 import org.jetbrains.hexana.providers.ArscBinaryProvider
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
+import org.jetbrains.hexana.providers.ClrResourcesBinaryProvider
 import org.jetbrains.hexana.providers.CoffBinaryProvider
 import org.jetbrains.hexana.providers.DexBinaryProvider
 import org.jetbrains.hexana.providers.ElfBinaryProvider
@@ -34,6 +35,7 @@ fun fileTypeDescription(
     is ClassFileBinaryProvider -> "Class File"
     is DexBinaryProvider -> "Android DEX File"
     is ArscBinaryProvider -> "Android Resource Table"
+    is ClrResourcesBinaryProvider -> ".NET Resources"
     is PcapBinaryProvider -> if (binaryProvider.isPcapNg) "PCAP-NG Capture" else "PCAP Capture"
     is ParquetBinaryProvider -> "Apache Parquet"
     is ArrowBinaryProvider -> "Apache Arrow IPC"
@@ -63,6 +65,7 @@ fun binaryFormatId(binaryProvider: BinaryProvider): String = when (binaryProvide
     is ClassFileBinaryProvider -> "class"
     is DexBinaryProvider -> "dex"
     is ArscBinaryProvider -> "arsc"
+    is ClrResourcesBinaryProvider -> "dotnet-resources"
     is PcapBinaryProvider -> if (binaryProvider.isPcapNg) "pcapng" else "pcap"
     is ParquetBinaryProvider -> "parquet"
     is ArrowBinaryProvider -> "arrow"

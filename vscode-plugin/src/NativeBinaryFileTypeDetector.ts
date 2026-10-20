@@ -36,7 +36,7 @@ const COFF_MACHINE_TYPES = new Set([0x014C, 0x01C0, 0x01C4, 0x0200, 0x8664, 0xAA
  */
 const KNOWN_EXTENSIONS = new Set([
     ".wasm", ".bin", ".elf", ".exe", ".so", ".o", ".a", ".dll", ".dylib",
-    ".jar", ".zip", ".war", ".apk", ".class", ".dex", ".arsc", ".desc", ".protoset",
+    ".jar", ".zip", ".war", ".apk", ".class", ".dex", ".arsc", ".resources", ".desc", ".protoset",
     ".pcap", ".cap", ".pcapng", ".parquet", ".arrow", ".arrows", ".pb",
     ".tar", ".tgz", ".gz",
 ]);
@@ -44,7 +44,7 @@ const KNOWN_EXTENSIONS = new Set([
 /**
  * Detects whether the given byte prefix matches a binary format Hexana can open.
  * Returns true for ELF, Mach-O (thin and fat/universal), PE, static-library
- * archive, COFF object files, WebAssembly, pcap/pcapng, Parquet and Arrow IPC files.
+ * archive, COFF object files, WebAssembly, .NET resource sets, pcap/pcapng, Parquet and Arrow IPC files.
  */
 export function isNativeBinary(bytes: Uint8Array): boolean {
     const len = bytes.length;
@@ -117,6 +117,11 @@ export function isNativeBinary(bytes: Uint8Array): boolean {
 
     // WebAssembly: 00 61 73 6D ("\0asm")
     if (b0 === 0x00 && b1 === 0x61 && b2 === 0x73 && b3 === 0x6D) {
+        return true;
+    }
+
+    // .NET resource set (.resources): ResourceManager magic 0xBEEFCACE, little-endian
+    if (b0 === 0xCE && b1 === 0xCA && b2 === 0xEF && b3 === 0xBE) {
         return true;
     }
 

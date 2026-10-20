@@ -137,6 +137,27 @@ reflection-based API summary; `binary.format` stays `"pe"`.
   web-host-wide change, not a CLR one.
 - Manual QA: `idea-plugin/QA/14-dotnet.md`.
 
+## .resources files
+
+- `ClrResources.kt`: `ClrResourcesParser.parse(bytes, range)` — standalone files (range = whole file)
+  or blobs embedded in an assembly (a ManifestResource `dataRange`). Format per
+  `System.Resources.ResourceReader`: ResourceManager header (`0xBEEFCACE`, version, skip size; v1
+  holds reader + resource set type names), reader header (version, counts, type table, `PAD`
+  alignment to 8 *relative to the blob start*, hashes, name offsets, absolute data section offset),
+  UTF-16 names each followed by a data offset, then type-coded values (`ResourceTypeCode`; user
+  types from 0x40 index the type table). Serialized values have no length, so they run to the next
+  value. Version 1 values are not decoded.
+- `ClrResourcesBinaryProvider` extends `GenericBinaryProvider` (like ARSC), detected by magic in
+  `nativeOrGenericBinaryProvider`; format id `dotnet-resources`. Tabs: `ClrResourcesTableTabs.kt`
+  (Header, Resources; cheap names + `singleTab`). Embedded `*.resources` rows in the assembly's
+  `.NET Metadata → Resources` tab expand via `clrResourceChildRows` (decoded on first expansion).
+- Hosts: IntelliJ `HexanaFileEditorProvider` extension; VS Code `package.json` pattern,
+  `KNOWN_EXTENSIONS`, `isNativeBinary` magic, `HEXANA_DIFF_EXTENSIONS`, `OPENABLE_ENTRY_EXTENSIONS`;
+  webapp worker format id; scripting `.d.ts` regenerated.
+- Verified against the runtime's own `ResourceReader` dump of the fixture, and on real embedded sets:
+  CoreLib (1,405 strings), WinForms dialogs written by `DeserializingResourceReader` (user types).
+  Fixture written with Mono's `ResourceWriter` — .NET 8+ refuses to serialize user types.
+
 ## Fixture and measurements
 
 - `parsing/native-fixtures/test-data/pe/sample-clr.exe` from `src/clr/Sample.cs` (Roslyn `csc`,
