@@ -1394,6 +1394,319 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     targetRva: number;
     type: number;
   }[];
+  clrMetadata?: {
+    assembly?: {
+      culture: string;
+      flags: number;
+      hashAlgorithm: number;
+      name: string;
+      publicKey: number[];
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      version: {
+        build: number;
+        major: number;
+        minor: number;
+        revision: number;
+      };
+    };
+    assemblyRefs: {
+      culture: string;
+      flags: number;
+      name: string;
+      publicKeyOrToken: number[];
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      token: number;
+      version: {
+        build: number;
+        major: number;
+        minor: number;
+        revision: number;
+      };
+    }[];
+    diagnostics: {
+      code: string;
+      message: string;
+      range?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      severity: "Info" | "Warning" | "Error";
+    }[];
+    entryPoint?: string;
+    fields: {
+      declaringTypeRow: number;
+      flags: number;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      token: number;
+      type: string;
+    }[];
+    fieldsByType: Record<number, {
+      declaringTypeRow: number;
+      flags: number;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      token: number;
+      type: string;
+    }[]>;
+    header: {
+      entryPointToken: number;
+      flags: number;
+      hasNativeEntryPoint: boolean;
+      headerRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      isIlOnly: boolean;
+      isStrongNameSigned: boolean;
+      majorRuntimeVersion: number;
+      managedNativeHeaderRva: number;
+      managedNativeHeaderSize: number;
+      metadataRva: number;
+      metadataSize: number;
+      minorRuntimeVersion: number;
+      prefers32Bit: boolean;
+      requires32Bit: boolean;
+      resourcesRva: number;
+      resourcesSize: number;
+      size: number;
+      strongNameSignatureRva: number;
+      strongNameSignatureSize: number;
+      vTableFixupsRva: number;
+      vTableFixupsSize: number;
+    };
+    manifestResources: {
+      dataRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      flags: number;
+      implementation: string;
+      isPublic: boolean;
+      name: string;
+      offset: number;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      size?: number;
+    }[];
+    memberRefs: {
+      isField: boolean;
+      name: string;
+      parent: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      signature: string;
+      token: number;
+    }[];
+    methods: {
+      body?: {
+        codeRange: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        codeSize: number;
+        hasExceptionSections: boolean;
+        isFat: boolean;
+        localVarSigToken: number;
+        maxStack: number;
+        range: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+      };
+      declaringTypeRow: number;
+      flags: number;
+      implFlags: number;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      rva: number;
+      signature: string;
+      token: number;
+    }[];
+    methodsByType: Record<number, {
+      body?: {
+        codeRange: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        codeSize: number;
+        hasExceptionSections: boolean;
+        isFat: boolean;
+        localVarSigToken: number;
+        maxStack: number;
+        range: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+      };
+      declaringTypeRow: number;
+      flags: number;
+      implFlags: number;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      rva: number;
+      signature: string;
+      token: number;
+    }[]>;
+    module?: {
+      generation: number;
+      mvid?: string;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+    };
+    moduleRefs: {
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+    }[];
+    readyToRun: boolean;
+    root?: {
+      flags: number;
+      majorVersion: number;
+      minorVersion: number;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      streamCount: number;
+      version: string;
+    };
+    streams: {
+      contentRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      headerRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      index: number;
+      name: string;
+      offset: number;
+      size: number;
+    }[];
+    tables: {
+      id: number;
+      name: string;
+      range?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      rowCount: number;
+      rowSize: number;
+      sorted: boolean;
+    }[];
+    tablesHeader?: {
+      heapSizes: number;
+      majorVersion: number;
+      minorVersion: number;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      sortedMask: number;
+      streamName: string;
+      validMask: number;
+    };
+    targetFramework?: string;
+    typeDefs: {
+      enclosingTypeRow?: number;
+      extends?: string;
+      flags: number;
+      fullName: string;
+      genericParameters: string[];
+      kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module";
+      name: string;
+      namespace: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      token: number;
+    }[];
+    typeRefs: {
+      fullName: string;
+      name: string;
+      namespace: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      scope: string;
+      token: number;
+    }[];
+    userStrings: {
+      heapOffset: number;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      token: number;
+      value: string;
+    }[];
+  };
   coffHeader?: {
     characteristics: number;
     headerRange: {
@@ -1530,6 +1843,7 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       size: number;
     };
   }[];
+  isManaged: boolean;
   nativeFormat: {
     displayName: string;
     machine?: number;
@@ -5564,6 +5878,1555 @@ interface CallGraphResult {
       id: number;
       name: string;
     }>;
+  };
+}
+
+interface ClrAssembly {
+  culture: string;
+  flags: number;
+  hashAlgorithm: number;
+  name: string;
+  publicKey: number[];
+  recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  version: {
+    build: number;
+    major: number;
+    minor: number;
+    revision: number;
+  };
+  copy(name: string, version: {
+    build: number;
+    major: number;
+    minor: number;
+    revision: number;
+  }, culture: string, flags: number, hashAlgorithm: number, publicKey: number[], recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    culture: string;
+    flags: number;
+    hashAlgorithm: number;
+    name: string;
+    publicKey: number[];
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    version: {
+      build: number;
+      major: number;
+      minor: number;
+      revision: number;
+    };
+  };
+}
+
+interface ClrAssemblyRef {
+  culture: string;
+  flags: number;
+  name: string;
+  publicKeyOrToken: number[];
+  recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  row: number;
+  token: number;
+  version: {
+    build: number;
+    major: number;
+    minor: number;
+    revision: number;
+  };
+  copy(row: number, name: string, version: {
+    build: number;
+    major: number;
+    minor: number;
+    revision: number;
+  }, culture: string, flags: number, publicKeyOrToken: number[], recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    culture: string;
+    flags: number;
+    name: string;
+    publicKeyOrToken: number[];
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    token: number;
+    version: {
+      build: number;
+      major: number;
+      minor: number;
+      revision: number;
+    };
+  };
+}
+
+interface ClrCliHeader {
+  entryPointToken: number;
+  flags: number;
+  hasNativeEntryPoint: boolean;
+  headerRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  isIlOnly: boolean;
+  isStrongNameSigned: boolean;
+  majorRuntimeVersion: number;
+  managedNativeHeaderRva: number;
+  managedNativeHeaderSize: number;
+  metadataRva: number;
+  metadataSize: number;
+  minorRuntimeVersion: number;
+  prefers32Bit: boolean;
+  requires32Bit: boolean;
+  resourcesRva: number;
+  resourcesSize: number;
+  size: number;
+  strongNameSignatureRva: number;
+  strongNameSignatureSize: number;
+  vTableFixupsRva: number;
+  vTableFixupsSize: number;
+  copy(size: number, majorRuntimeVersion: number, minorRuntimeVersion: number, metadataRva: number, metadataSize: number, flags: number, entryPointToken: number, resourcesRva: number, resourcesSize: number, strongNameSignatureRva: number, strongNameSignatureSize: number, vTableFixupsRva: number, vTableFixupsSize: number, managedNativeHeaderRva: number, managedNativeHeaderSize: number, headerRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    entryPointToken: number;
+    flags: number;
+    hasNativeEntryPoint: boolean;
+    headerRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    isIlOnly: boolean;
+    isStrongNameSigned: boolean;
+    majorRuntimeVersion: number;
+    managedNativeHeaderRva: number;
+    managedNativeHeaderSize: number;
+    metadataRva: number;
+    metadataSize: number;
+    minorRuntimeVersion: number;
+    prefers32Bit: boolean;
+    requires32Bit: boolean;
+    resourcesRva: number;
+    resourcesSize: number;
+    size: number;
+    strongNameSignatureRva: number;
+    strongNameSignatureSize: number;
+    vTableFixupsRva: number;
+    vTableFixupsSize: number;
+  };
+}
+
+interface ClrField {
+  declaringTypeRow: number;
+  flags: number;
+  name: string;
+  recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  row: number;
+  token: number;
+  type: string;
+  copy(row: number, name: string, flags: number, type: string, declaringTypeRow: number, recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    declaringTypeRow: number;
+    flags: number;
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    token: number;
+    type: string;
+  };
+}
+
+interface ClrManifestResource {
+  dataRange?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  flags: number;
+  implementation: string;
+  isPublic: boolean;
+  name: string;
+  offset: number;
+  recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  row: number;
+  size?: number;
+  copy(row: number, name: string, offset: number, flags: number, implementation: string, size: number | null, dataRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null, recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    dataRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    flags: number;
+    implementation: string;
+    isPublic: boolean;
+    name: string;
+    offset: number;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    size?: number;
+  };
+}
+
+interface ClrMemberRef {
+  isField: boolean;
+  name: string;
+  parent: string;
+  recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  row: number;
+  signature: string;
+  token: number;
+  copy(row: number, parent: string, name: string, signature: string, isField: boolean, recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    isField: boolean;
+    name: string;
+    parent: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    signature: string;
+    token: number;
+  };
+}
+
+interface ClrMetadata {
+  assembly?: {
+    culture: string;
+    flags: number;
+    hashAlgorithm: number;
+    name: string;
+    publicKey: number[];
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    version: {
+      build: number;
+      major: number;
+      minor: number;
+      revision: number;
+    };
+  };
+  assemblyRefs: {
+    culture: string;
+    flags: number;
+    name: string;
+    publicKeyOrToken: number[];
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    token: number;
+    version: {
+      build: number;
+      major: number;
+      minor: number;
+      revision: number;
+    };
+  }[];
+  diagnostics: {
+    code: string;
+    message: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    severity: "Info" | "Warning" | "Error";
+  }[];
+  entryPoint?: string;
+  fields: {
+    declaringTypeRow: number;
+    flags: number;
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    token: number;
+    type: string;
+  }[];
+  fieldsByType: Record<number, {
+    declaringTypeRow: number;
+    flags: number;
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    token: number;
+    type: string;
+  }[]>;
+  header: {
+    entryPointToken: number;
+    flags: number;
+    hasNativeEntryPoint: boolean;
+    headerRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    isIlOnly: boolean;
+    isStrongNameSigned: boolean;
+    majorRuntimeVersion: number;
+    managedNativeHeaderRva: number;
+    managedNativeHeaderSize: number;
+    metadataRva: number;
+    metadataSize: number;
+    minorRuntimeVersion: number;
+    prefers32Bit: boolean;
+    requires32Bit: boolean;
+    resourcesRva: number;
+    resourcesSize: number;
+    size: number;
+    strongNameSignatureRva: number;
+    strongNameSignatureSize: number;
+    vTableFixupsRva: number;
+    vTableFixupsSize: number;
+  };
+  manifestResources: {
+    dataRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    flags: number;
+    implementation: string;
+    isPublic: boolean;
+    name: string;
+    offset: number;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    size?: number;
+  }[];
+  memberRefs: {
+    isField: boolean;
+    name: string;
+    parent: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    signature: string;
+    token: number;
+  }[];
+  methods: {
+    body?: {
+      codeRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      codeSize: number;
+      hasExceptionSections: boolean;
+      isFat: boolean;
+      localVarSigToken: number;
+      maxStack: number;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+    };
+    declaringTypeRow: number;
+    flags: number;
+    implFlags: number;
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    rva: number;
+    signature: string;
+    token: number;
+  }[];
+  methodsByType: Record<number, {
+    body?: {
+      codeRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      codeSize: number;
+      hasExceptionSections: boolean;
+      isFat: boolean;
+      localVarSigToken: number;
+      maxStack: number;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+    };
+    declaringTypeRow: number;
+    flags: number;
+    implFlags: number;
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    rva: number;
+    signature: string;
+    token: number;
+  }[]>;
+  module?: {
+    generation: number;
+    mvid?: string;
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+  };
+  moduleRefs: {
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+  }[];
+  readyToRun: boolean;
+  root?: {
+    flags: number;
+    majorVersion: number;
+    minorVersion: number;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    streamCount: number;
+    version: string;
+  };
+  streams: {
+    contentRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    headerRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    index: number;
+    name: string;
+    offset: number;
+    size: number;
+  }[];
+  tables: {
+    id: number;
+    name: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    rowCount: number;
+    rowSize: number;
+    sorted: boolean;
+  }[];
+  tablesHeader?: {
+    heapSizes: number;
+    majorVersion: number;
+    minorVersion: number;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    sortedMask: number;
+    streamName: string;
+    validMask: number;
+  };
+  targetFramework?: string;
+  typeDefs: {
+    enclosingTypeRow?: number;
+    extends?: string;
+    flags: number;
+    fullName: string;
+    genericParameters: string[];
+    kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module";
+    name: string;
+    namespace: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    token: number;
+  }[];
+  typeRefs: {
+    fullName: string;
+    name: string;
+    namespace: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    scope: string;
+    token: number;
+  }[];
+  userStrings: {
+    heapOffset: number;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    token: number;
+    value: string;
+  }[];
+  copy(header: {
+    entryPointToken: number;
+    flags: number;
+    hasNativeEntryPoint: boolean;
+    headerRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    isIlOnly: boolean;
+    isStrongNameSigned: boolean;
+    majorRuntimeVersion: number;
+    managedNativeHeaderRva: number;
+    managedNativeHeaderSize: number;
+    metadataRva: number;
+    metadataSize: number;
+    minorRuntimeVersion: number;
+    prefers32Bit: boolean;
+    requires32Bit: boolean;
+    resourcesRva: number;
+    resourcesSize: number;
+    size: number;
+    strongNameSignatureRva: number;
+    strongNameSignatureSize: number;
+    vTableFixupsRva: number;
+    vTableFixupsSize: number;
+  }, root: {
+    flags: number;
+    majorVersion: number;
+    minorVersion: number;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    streamCount: number;
+    version: string;
+  } | null, streams: {
+    contentRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    headerRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    index: number;
+    name: string;
+    offset: number;
+    size: number;
+  }[], tablesHeader: {
+    heapSizes: number;
+    majorVersion: number;
+    minorVersion: number;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    sortedMask: number;
+    streamName: string;
+    validMask: number;
+  } | null, tables: {
+    id: number;
+    name: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    rowCount: number;
+    rowSize: number;
+    sorted: boolean;
+  }[], module: {
+    generation: number;
+    mvid?: string;
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+  } | null, assembly: {
+    culture: string;
+    flags: number;
+    hashAlgorithm: number;
+    name: string;
+    publicKey: number[];
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    version: {
+      build: number;
+      major: number;
+      minor: number;
+      revision: number;
+    };
+  } | null, targetFramework: string | null, entryPoint: string | null, readyToRun: boolean, typeRefs: {
+    fullName: string;
+    name: string;
+    namespace: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    scope: string;
+    token: number;
+  }[], typeDefs: {
+    enclosingTypeRow?: number;
+    extends?: string;
+    flags: number;
+    fullName: string;
+    genericParameters: string[];
+    kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module";
+    name: string;
+    namespace: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    token: number;
+  }[], fields: {
+    declaringTypeRow: number;
+    flags: number;
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    token: number;
+    type: string;
+  }[], methods: {
+    body?: {
+      codeRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      codeSize: number;
+      hasExceptionSections: boolean;
+      isFat: boolean;
+      localVarSigToken: number;
+      maxStack: number;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+    };
+    declaringTypeRow: number;
+    flags: number;
+    implFlags: number;
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    rva: number;
+    signature: string;
+    token: number;
+  }[], memberRefs: {
+    isField: boolean;
+    name: string;
+    parent: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    signature: string;
+    token: number;
+  }[], moduleRefs: {
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+  }[], assemblyRefs: {
+    culture: string;
+    flags: number;
+    name: string;
+    publicKeyOrToken: number[];
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    token: number;
+    version: {
+      build: number;
+      major: number;
+      minor: number;
+      revision: number;
+    };
+  }[], manifestResources: {
+    dataRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    flags: number;
+    implementation: string;
+    isPublic: boolean;
+    name: string;
+    offset: number;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    size?: number;
+  }[], userStrings: {
+    heapOffset: number;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    token: number;
+    value: string;
+  }[], diagnostics: {
+    code: string;
+    message: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    severity: "Info" | "Warning" | "Error";
+  }[]): {
+    assembly?: {
+      culture: string;
+      flags: number;
+      hashAlgorithm: number;
+      name: string;
+      publicKey: number[];
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      version: {
+        build: number;
+        major: number;
+        minor: number;
+        revision: number;
+      };
+    };
+    assemblyRefs: {
+      culture: string;
+      flags: number;
+      name: string;
+      publicKeyOrToken: number[];
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      token: number;
+      version: {
+        build: number;
+        major: number;
+        minor: number;
+        revision: number;
+      };
+    }[];
+    diagnostics: {
+      code: string;
+      message: string;
+      range?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      severity: "Info" | "Warning" | "Error";
+    }[];
+    entryPoint?: string;
+    fields: {
+      declaringTypeRow: number;
+      flags: number;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      token: number;
+      type: string;
+    }[];
+    fieldsByType: Record<number, {
+      declaringTypeRow: number;
+      flags: number;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      token: number;
+      type: string;
+    }[]>;
+    header: {
+      entryPointToken: number;
+      flags: number;
+      hasNativeEntryPoint: boolean;
+      headerRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      isIlOnly: boolean;
+      isStrongNameSigned: boolean;
+      majorRuntimeVersion: number;
+      managedNativeHeaderRva: number;
+      managedNativeHeaderSize: number;
+      metadataRva: number;
+      metadataSize: number;
+      minorRuntimeVersion: number;
+      prefers32Bit: boolean;
+      requires32Bit: boolean;
+      resourcesRva: number;
+      resourcesSize: number;
+      size: number;
+      strongNameSignatureRva: number;
+      strongNameSignatureSize: number;
+      vTableFixupsRva: number;
+      vTableFixupsSize: number;
+    };
+    manifestResources: {
+      dataRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      flags: number;
+      implementation: string;
+      isPublic: boolean;
+      name: string;
+      offset: number;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      size?: number;
+    }[];
+    memberRefs: {
+      isField: boolean;
+      name: string;
+      parent: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      signature: string;
+      token: number;
+    }[];
+    methods: {
+      body?: {
+        codeRange: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        codeSize: number;
+        hasExceptionSections: boolean;
+        isFat: boolean;
+        localVarSigToken: number;
+        maxStack: number;
+        range: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+      };
+      declaringTypeRow: number;
+      flags: number;
+      implFlags: number;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      rva: number;
+      signature: string;
+      token: number;
+    }[];
+    methodsByType: Record<number, {
+      body?: {
+        codeRange: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        codeSize: number;
+        hasExceptionSections: boolean;
+        isFat: boolean;
+        localVarSigToken: number;
+        maxStack: number;
+        range: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+      };
+      declaringTypeRow: number;
+      flags: number;
+      implFlags: number;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      rva: number;
+      signature: string;
+      token: number;
+    }[]>;
+    module?: {
+      generation: number;
+      mvid?: string;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+    };
+    moduleRefs: {
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+    }[];
+    readyToRun: boolean;
+    root?: {
+      flags: number;
+      majorVersion: number;
+      minorVersion: number;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      streamCount: number;
+      version: string;
+    };
+    streams: {
+      contentRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      headerRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      index: number;
+      name: string;
+      offset: number;
+      size: number;
+    }[];
+    tables: {
+      id: number;
+      name: string;
+      range?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      rowCount: number;
+      rowSize: number;
+      sorted: boolean;
+    }[];
+    tablesHeader?: {
+      heapSizes: number;
+      majorVersion: number;
+      minorVersion: number;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      sortedMask: number;
+      streamName: string;
+      validMask: number;
+    };
+    targetFramework?: string;
+    typeDefs: {
+      enclosingTypeRow?: number;
+      extends?: string;
+      flags: number;
+      fullName: string;
+      genericParameters: string[];
+      kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module";
+      name: string;
+      namespace: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      token: number;
+    }[];
+    typeRefs: {
+      fullName: string;
+      name: string;
+      namespace: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      scope: string;
+      token: number;
+    }[];
+    userStrings: {
+      heapOffset: number;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      token: number;
+      value: string;
+    }[];
+  };
+}
+
+interface ClrMetadataRoot {
+  flags: number;
+  majorVersion: number;
+  minorVersion: number;
+  range: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  streamCount: number;
+  version: string;
+  copy(majorVersion: number, minorVersion: number, version: string, flags: number, streamCount: number, range: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    flags: number;
+    majorVersion: number;
+    minorVersion: number;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    streamCount: number;
+    version: string;
+  };
+}
+
+interface ClrMethodBody {
+  codeRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  codeSize: number;
+  hasExceptionSections: boolean;
+  isFat: boolean;
+  localVarSigToken: number;
+  maxStack: number;
+  range: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  copy(isFat: boolean, maxStack: number, codeSize: number, localVarSigToken: number, hasExceptionSections: boolean, range: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }, codeRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    codeRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    codeSize: number;
+    hasExceptionSections: boolean;
+    isFat: boolean;
+    localVarSigToken: number;
+    maxStack: number;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+  };
+}
+
+interface ClrMethodDef {
+  body?: {
+    codeRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    codeSize: number;
+    hasExceptionSections: boolean;
+    isFat: boolean;
+    localVarSigToken: number;
+    maxStack: number;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+  };
+  declaringTypeRow: number;
+  flags: number;
+  implFlags: number;
+  name: string;
+  recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  row: number;
+  rva: number;
+  signature: string;
+  token: number;
+  copy(row: number, name: string, rva: number, flags: number, implFlags: number, signature: string, declaringTypeRow: number, body: {
+    codeRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    codeSize: number;
+    hasExceptionSections: boolean;
+    isFat: boolean;
+    localVarSigToken: number;
+    maxStack: number;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+  } | null, recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    body?: {
+      codeRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      codeSize: number;
+      hasExceptionSections: boolean;
+      isFat: boolean;
+      localVarSigToken: number;
+      maxStack: number;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+    };
+    declaringTypeRow: number;
+    flags: number;
+    implFlags: number;
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    rva: number;
+    signature: string;
+    token: number;
+  };
+}
+
+interface ClrModule {
+  generation: number;
+  mvid?: string;
+  name: string;
+  recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  copy(generation: number, name: string, mvid: string | null, recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    generation: number;
+    mvid?: string;
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+  };
+}
+
+interface ClrModuleRef {
+  name: string;
+  recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  row: number;
+  copy(row: number, name: string, recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+  };
+}
+
+interface ClrStream {
+  contentRange?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  headerRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  index: number;
+  name: string;
+  offset: number;
+  size: number;
+  copy(index: number, name: string, offset: number, size: number, headerRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }, contentRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null): {
+    contentRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    headerRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    index: number;
+    name: string;
+    offset: number;
+    size: number;
+  };
+}
+
+interface ClrTableInfo {
+  id: number;
+  name: string;
+  range?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  rowCount: number;
+  rowSize: number;
+  sorted: boolean;
+  copy(id: number, name: string, rowCount: number, rowSize: number, sorted: boolean, range: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null): {
+    id: number;
+    name: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    rowCount: number;
+    rowSize: number;
+    sorted: boolean;
+  };
+}
+
+interface ClrTablesHeader {
+  heapSizes: number;
+  majorVersion: number;
+  minorVersion: number;
+  range: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  sortedMask: number;
+  streamName: string;
+  validMask: number;
+  copy(streamName: string, majorVersion: number, minorVersion: number, heapSizes: number, validMask: number, sortedMask: number, range: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    heapSizes: number;
+    majorVersion: number;
+    minorVersion: number;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    sortedMask: number;
+    streamName: string;
+    validMask: number;
+  };
+}
+
+interface ClrTypeDef {
+  enclosingTypeRow?: number;
+  extends?: string;
+  flags: number;
+  fullName: string;
+  genericParameters: string[];
+  kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module";
+  name: string;
+  namespace: string;
+  recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  row: number;
+  token: number;
+  copy(row: number, namespace: string, name: string, fullName: string, flags: number, kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module", extends: string | null, enclosingTypeRow: number | null, genericParameters: string[], recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    enclosingTypeRow?: number;
+    extends?: string;
+    flags: number;
+    fullName: string;
+    genericParameters: string[];
+    kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module";
+    name: string;
+    namespace: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    token: number;
+  };
+}
+
+interface ClrTypeRef {
+  fullName: string;
+  name: string;
+  namespace: string;
+  recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  row: number;
+  scope: string;
+  token: number;
+  copy(row: number, namespace: string, name: string, fullName: string, scope: string, recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    fullName: string;
+    name: string;
+    namespace: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    scope: string;
+    token: number;
+  };
+}
+
+interface ClrUserString {
+  heapOffset: number;
+  range: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  token: number;
+  value: string;
+  copy(heapOffset: number, value: string, range: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    heapOffset: number;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    token: number;
+    value: string;
+  };
+}
+
+interface ClrVersion {
+  build: number;
+  major: number;
+  minor: number;
+  revision: number;
+  copy(major: number, minor: number, build: number, revision: number): {
+    build: number;
+    major: number;
+    minor: number;
+    revision: number;
   };
 }
 
