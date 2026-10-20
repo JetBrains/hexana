@@ -673,15 +673,19 @@ class PeBinaryProvider(
     val isManaged: Boolean by lazy { optionalHeader?.let(ClrMetadataParser::hasClrHeader) == true }
 
     /**
-     * True for a managed image with no native code worth disassembling: IL-only, and not
-     * ReadyToRun-compiled. Reads only the CLI header, so it is cheap enough for tab discovery.
-     * Mixed-mode (C++/CLI) and ReadyToRun images report false.
+     * True for a managed image whose code all belongs to managed methods: either IL-only, or
+     * ReadyToRun, whose native code is precompiled from that IL. Native disassembly of such an
+     * image has no symbols to anchor on and sweeps metadata and IL as if they were code. Only
+     * mixed-mode (C++/CLI) images, with hand-written or C++ native code, report false.
+     *
+     * Reads only the CLI header and the ReadyToRun signature, so it is cheap enough for tab discovery.
      */
-    val isPureIl: Boolean by lazy {
+    val hasOnlyManagedCode: Boolean by lazy {
         val o = optionalHeader ?: return@lazy false
         val s = sections ?: return@lazy false
         val header = ClrMetadataParser.parseCliHeader(bytes, o, s) ?: return@lazy false
-        header.isIlOnly && !header.hasNativeEntryPoint && !ClrMetadataParser.isReadyToRun(bytes, header, o, s)
+        // ReadyToRun clears the IL-only flag, so it has to be recognized by its own header.
+        !header.hasNativeEntryPoint && (header.isIlOnly || ClrMetadataParser.isReadyToRun(bytes, header, o, s))
     }
 
     override val nativeImageInfo: NativeImageInfo? by lazy {

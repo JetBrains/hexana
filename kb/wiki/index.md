@@ -34,7 +34,7 @@ consult-first / write-back rules.
 - [[entities/apk-classes-tab]] — APK Classes tab + "Reveal in DEX" in IntelliJ and VS Code:
 - [[entities/clr-metadata]] — .NET assemblies: ECMA-335 metadata decoding in `parsing/pe/clr`, the hardening
   the mutation test forced, the `.NET` / Types / Methods / `.NET Metadata` tabs, the virtualized IL
-  view, and when native Disassembly tabs are hidden.
+  view, and when native Disassembly tabs are hidden (IL-only and ReadyToRun).
   shared async collection, lazy tabs, entry-editor reuse, and the cross-host "select table row" request.
 
 ## Sources

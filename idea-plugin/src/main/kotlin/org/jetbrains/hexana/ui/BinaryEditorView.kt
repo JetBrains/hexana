@@ -1128,7 +1128,7 @@ private fun NativeBinaryProvider.commonNativePanels(
     executionOffsetFlow: StateFlow<Long?>? = null,
     onToggleNativeBreakpoint: ((va: Long) -> Unit)? = null,
     onDeleteBreakpoint: ((id: String) -> Unit)? = null,
-    /** False for images without native code (pure IL assemblies), where both disassembly views would be empty. */
+    /** False for managed images whose code all comes from IL (see [PeBinaryProvider.hasOnlyManagedCode]), where both views would show nothing useful. */
     includeDisassembly: Boolean = true,
 ): List<Panel> {
     val sbom = Panel("SBOM") { CycloneDxSbomPanel(this, state) }.takeIf { this.nativeImageInfo?.sbom != null }
@@ -1261,7 +1261,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
         val ilPanels = if (isManaged) clrIlPanels(this, state) else emptyList()
         ilPanels + commonNativePanels(
             state, gutterMarksModelFlow, executionOffsetFlow, onToggleNativeBreakpoint, onDeleteBreakpoint,
-            includeDisassembly = !isPureIl,
+            includeDisassembly = !hasOnlyManagedCode,
         )
     }
     is NativeBinaryProvider -> commonNativePanels(
@@ -1967,7 +1967,7 @@ private fun BinaryProvider.discoverHardcodedPanelNames(fileName: String): List<S
     is PeBinaryProvider -> buildList {
         // Both checks read only the CLI header; the IL panel decodes metadata when it is opened.
         if (isManaged) add(CLR_IL_TAB_NAME)
-        if (!isPureIl) addAll(listOf("Disassembly", "Disassembly (virtualized)"))
+        if (!hasOnlyManagedCode) addAll(listOf("Disassembly", "Disassembly (virtualized)"))
     }
     is NativeBinaryProvider -> {
         // SBOM depends on nativeImageInfo which is lazy/expensive — skip it in discovery.

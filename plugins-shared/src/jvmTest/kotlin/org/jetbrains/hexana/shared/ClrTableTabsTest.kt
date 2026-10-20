@@ -36,18 +36,32 @@ class ClrTableTabsTest {
             tabsProvider.groupedTabs(managed).single { it.name == ".NET Metadata" }.innerTabs.map { it.name },
         )
         assertEquals("PE32 (.NET)", fileTypeDescription(managed))
-        // IL-only and not ReadyToRun: hosts drop the native disassembly views for it.
-        assertTrue(managed.isPureIl)
+        // IL-only: hosts drop the native disassembly views for it.
+        assertTrue(managed.hasOnlyManagedCode)
     }
 
     @Test
     fun `native PE gets no CLR tabs`() {
         val native = provider("pe/sample.exe")
         assertFalse(native.isManaged)
-        assertFalse(native.isPureIl)
+        assertFalse(native.hasOnlyManagedCode)
         assertTrue(tabsProvider.tableTabs(native).none { it.name == ".NET" || it.name == "Types" })
         assertEquals(emptyList(), tabsProvider.groupedTabs(native))
         assertEquals("PE32+", fileTypeDescription(native))
+    }
+
+    @Test
+    fun `ReadyToRun assembly counts as managed-only code and names its target`() {
+        // Crossgen output for macOS ARM64: IL-only is cleared and the machine is XORed with the OS constant.
+        val r2r = provider("pe/sample-r2r.dll")
+        assertEquals(0xEC20, r2r.coffHeader?.machine)
+        assertFalse(r2r.clrMetadata!!.header.isIlOnly)
+        assertTrue(r2r.clrMetadata!!.readyToRun)
+        assertTrue(r2r.hasOnlyManagedCode)
+
+        val overview = tabsProvider.tableTabs(r2r).single { it.name == ".NET" }
+        assertEquals("ARM64 (ReadyToRun, macOS)", overview.cell(overview.rowWhere("Field", "Platform"), "Value"))
+        assertEquals("yes", overview.cell(overview.rowWhere("Field", "ReadyToRun"), "Value"))
     }
 
     @Test

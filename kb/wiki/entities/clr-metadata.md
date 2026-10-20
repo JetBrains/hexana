@@ -64,9 +64,18 @@ reflection-based API summary; `binary.format` stays `"pe"`.
   the row's bytes), web `web-ui/.../ClrIlContent.kt` via `computeExtraTabs` for a managed
   `PeBinaryProvider`. Both are near-copies of the Smali hosts; a shared "foldable class listing"
   host component would remove that duplication.
-- Native **Disassembly** tabs (IntelliJ only) are hidden when `PeBinaryProvider.isPureIl`: CLI
-  header says IL-only, no native entry point, and no ReadyToRun header — read from the CLI header
-  alone so `discoverHardcodedPanelNames` stays cheap. The UI-test probe mirrors this list.
+- Native **Disassembly** tabs (IntelliJ only) are hidden when `PeBinaryProvider.hasOnlyManagedCode`:
+  no native entry point and (IL-only **or** ReadyToRun). ReadyToRun images *do* contain native code
+  (precompiled from IL), but no symbols, imports or exports, so the disassembly panels can only sweep
+  `.text` — metadata and IL included — and show nothing useful; mapping R2R code to methods
+  (RuntimeFunctions + MethodDefEntryPoints sections) would be what makes it worth showing again.
+  Only mixed-mode C++/CLI keeps the tabs. Reads the CLI header + RTR signature only, so tab
+  discovery stays cheap. The UI-test probe mirrors this. Sample: paint.net 5.1 arm64 — 183 R2R +
+  89 IL-only assemblies → IL only; no mixed-mode file there to check the other branch.
+- ReadyToRun gotchas: crossgen **clears the IL-only flag** (looks like mixed-mode unless the RTR
+  header is checked), and non-Windows targets XOR the COFF machine with an OS constant (macOS
+  0x4644, Linux 0x7B79, FreeBSD 0xADC4, NetBSD 0x1993, SunOS 0x1992; e.g. macOS ARM64 = 0xEC20).
+  `clrPlatform` decodes both. Fixture: `test-data/pe/sample-r2r.dll` (`src/clr/r2r`, `dotnet publish`).
 - Measured (JVM): rendering every type of CoreLib = 845k rows in ~0.5 s, worst type
   (`System.Array`) 12 ms, zero unresolved tokens/undefined opcodes; FSharp.Core 268k rows, 0 bad.
 

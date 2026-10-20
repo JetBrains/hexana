@@ -44,7 +44,7 @@ private fun clrOverviewTab(provider: PeBinaryProvider, metadata: ClrMetadata): T
     val rows = buildList {
         add(HeaderRow("Runtime Header Version", "${header.majorRuntimeVersion}.${header.minorRuntimeVersion}", header.headerRange))
         add(HeaderRow("Flags", clrHeaderFlagsLabel(header.flags), header.headerRange))
-        add(HeaderRow("Platform", clrPlatform(provider.coffHeader?.machine, header), header.headerRange))
+        add(HeaderRow("Platform", clrPlatform(provider.coffHeader?.machine, header, metadata.readyToRun), header.headerRange))
         add(HeaderRow("Entry Point", metadata.entryPoint ?: "none (library)", header.headerRange))
         add(HeaderRow("Strong Name Signed", yesNo(header.isStrongNameSigned), header.headerRange))
         add(HeaderRow("ReadyToRun", yesNo(metadata.readyToRun), header.headerRange))
@@ -313,10 +313,18 @@ internal fun clrHeaderFlagsLabel(flags: UInt): String {
     return if (names.isEmpty()) hex(flags) else "${names.joinToString(", ")} (${hex(flags)})"
 }
 
-/** The platform target as the C# compiler names it (`/platform:`), derived from the COFF machine and CLI flags. */
-internal fun clrPlatform(machine: Int?, header: ClrCliHeader): String {
-    return when (machine) {
+/**
+ * The platform target as the C# compiler names it (`/platform:`), derived from the COFF machine and
+ * CLI flags. ReadyToRun images for non-Windows targets XOR the machine with an OS constant
+ * (`IMAGE_FILE_MACHINE_*` overrides in the runtime), and clear the IL-only flag like mixed-mode
+ * images do, so both are decoded before the flags are read.
+ */
+internal fun clrPlatform(machine: Int?, header: ClrCliHeader, readyToRun: Boolean): String {
+    if (machine == null) return "unknown"
+    val (os, nativeMachine) = if (readyToRun) readyToRunTarget(machine) else ("Windows" to machine)
+    val architecture = when (nativeMachine) {
         0x014C -> when {
+            readyToRun -> "x86"
             !header.isIlOnly -> "x86 (mixed mode)"
             header.requires32Bit && header.prefers32Bit -> "AnyCPU (32-bit preferred)"
             header.requires32Bit -> "x86"
@@ -325,10 +333,32 @@ internal fun clrPlatform(machine: Int?, header: ClrCliHeader): String {
         0x8664 -> "x64"
         0xAA64 -> "ARM64"
         0x01C4 -> "ARM"
-        null -> "unknown"
-        else -> machineName(machine)
+        0x6264 -> "LoongArch64"
+        0x5064 -> "RISC-V 64"
+        else -> machineName(nativeMachine)
     }
+    return if (readyToRun) "$architecture (ReadyToRun, $os)" else architecture
 }
+
+/** Splits a ReadyToRun COFF machine into the target OS and the plain machine it was XORed from. */
+private fun readyToRunTarget(machine: Int): Pair<String, Int> {
+    if (machine in KNOWN_CLR_MACHINES) return "Windows" to machine
+    for ((os, override) in READY_TO_RUN_OS_OVERRIDES) {
+        val candidate = machine xor override
+        if (candidate in KNOWN_CLR_MACHINES) return os to candidate
+    }
+    return "unknown OS" to machine
+}
+
+private val KNOWN_CLR_MACHINES = setOf(0x014C, 0x8664, 0xAA64, 0x01C4, 0x6264, 0x5064)
+
+private val READY_TO_RUN_OS_OVERRIDES = listOf(
+    "macOS" to 0x4644,
+    "Linux" to 0x7B79,
+    "FreeBSD" to 0xADC4,
+    "NetBSD" to 0x1993,
+    "SunOS" to 0x1992,
+)
 
 private fun clrHashAlgorithm(algorithm: UInt): String = when (algorithm) {
     0u -> "none"

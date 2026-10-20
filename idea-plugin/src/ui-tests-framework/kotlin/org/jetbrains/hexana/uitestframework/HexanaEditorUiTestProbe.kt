@@ -1329,7 +1329,7 @@ object HexanaEditorUiTestProbe {
             is PeBinaryProvider -> buildList {
                 add("Top")
                 if (provider.isManaged) add(CLR_IL_TAB_NAME)
-                if (!provider.isPureIl) addAll(listOf("Disassembly", "Disassembly (virtualized)"))
+                if (!provider.hasOnlyManagedCode) addAll(listOf("Disassembly", "Disassembly (virtualized)"))
             }
             is NativeBinaryProvider -> listOf("Top", "Disassembly", "Disassembly (virtualized)")
             else -> emptyList()

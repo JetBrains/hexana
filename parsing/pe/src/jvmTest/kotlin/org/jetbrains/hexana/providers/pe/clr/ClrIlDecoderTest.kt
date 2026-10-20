@@ -92,6 +92,20 @@ class ClrIlDecoderTest {
     }
 
     @Test
+    fun `ReadyToRun images keep their IL bodies`() {
+        val r2rBytes = Path.of(System.getProperty("user.dir"))
+            .resolve("../native-fixtures/test-data/pe/sample-r2r.dll").normalize().readBytes().toCommonByteBuffer()
+        val r2r = assertNotNull(assertIs<PeImageFile>(assertIs<NativeParseSuccess<PeFile>>(PeParser.parse(r2rBytes)).value).clr)
+        assertEquals(true, r2r.readyToRun)
+        val fib = r2r.methods.single { it.name == "Fib" }
+        assertEquals("int Fib(int n)", fib.signature)
+        val listing = ClrIlDecoder.decode(r2rBytes, fib.body!!.codeRange)
+        assertNull(listing.truncatedAt)
+        val call = listing.instructions.first { it.opcode?.mnemonic == "call" }
+        assertEquals("int Hexana.R2rSample.Calculator::Fib(int)", r2r.tokens.describe((call.operand as ClrIlOperand.Token).token, fib))
+    }
+
+    @Test
     fun `stops at a truncated operand instead of reading past the code`() {
         val body = method("Main").body!!
         // Cut the code inside the first instruction's 4-byte method token.
