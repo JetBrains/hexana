@@ -41,6 +41,25 @@ class ClrTableTabsTest {
     }
 
     @Test
+    fun `cheap tab discovery agrees with the full tab list`() {
+        // Hosts list placeholders from availableTabNames during composition, so it must not need
+        // the metadata, and every tab the full computation produces must be among its names.
+        for (name in listOf("pe/sample-clr.exe", "pe/sample-r2r-win-x64.dll", "pe/sample.exe")) {
+            val pe = provider(name)
+            val context = TableTabsContext()
+            val (ordinary, grouped) = assertNotNull(tabsProvider.availableTabNames(pe, context))
+            val full = tabsProvider.tableTabs(pe, context)
+            assertEquals(full.map { it.name }, ordinary.filter { advertised -> full.any { it.name == advertised } }, name)
+            for (tab in full) {
+                assertEquals(tab.priority, tabsProvider.tabPriority(tab.name, pe), "${tab.name} in $name")
+                assertEquals(tab.rowCount, assertNotNull(tabsProvider.singleTab(tab.name, pe, context), tab.name).rowCount, tab.name)
+            }
+            assertEquals(tabsProvider.groupedTabs(pe, context).map { it.name }, grouped, name)
+            assertEquals(listOf("Top"), SizeTableTabsProvider().availableTabNames(pe, context)?.first, name)
+        }
+    }
+
+    @Test
     fun `native PE gets no CLR tabs`() {
         val native = provider("pe/sample.exe")
         assertFalse(native.isManaged)

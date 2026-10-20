@@ -2,6 +2,7 @@ package org.jetbrains.hexana.shared
 
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.wasm.WasmParseSuccess
 import org.jetbrains.hexana.wasm.WasmParser
@@ -24,6 +25,9 @@ class SizeTableTabsProvider : TableTabsProvider {
         // For other providers we can't tell cheaply, so return null to fall back to full computation.
         return when (provider) {
             is WasmBinaryProvider -> Pair(if (provider.canProvideWasmModule()) listOf("Top") else emptyList(), emptyList())
+            // For a .NET assembly the size tree decodes metadata and ReadyToRun tables; a PE with
+            // sections always has one, and the section table is read with the headers.
+            is PeBinaryProvider -> Pair(if (provider.sections?.isNotEmpty() == true) listOf("Top") else emptyList(), emptyList())
             else -> null
         }
     }

@@ -498,12 +498,13 @@ object ClrMetadataParser {
                 val row = index + 1
                 val owner = methodOwners[row]
                 val rva = t.cell(T.METHOD_DEF, row, 0).toUInt()
+                val implFlags = t.cell(T.METHOD_DEF, row, 1)
                 val name = heaps.string(t.cell(T.METHOD_DEF, row, 3))
                 ClrMethodDef(
                     row = row,
                     name = name,
                     rva = rva,
-                    implFlags = t.cell(T.METHOD_DEF, row, 1),
+                    implFlags = implFlags,
                     flags = t.cell(T.METHOD_DEF, row, 2),
                     signature = signatures.methodSignature(
                         blob = heaps.blob(t.cell(T.METHOD_DEF, row, 4)),
@@ -512,7 +513,9 @@ object ClrMetadataParser {
                         context = ClrGenericContext(typeGenerics[owner].orEmpty(), methodGenerics[row].orEmpty()),
                     ),
                     declaringTypeRow = owner,
-                    body = if (rva != 0u) resolve(rva)?.let(::parseMethodBody) else null,
+                    // ImplFlags code type (II.23.1.11): only IL methods have an IL body at their RVA;
+                    // native (C++/CLI), OPTIL and runtime methods point at something else.
+                    body = if (rva != 0u && implFlags and CODE_TYPE_MASK == CODE_TYPE_IL) resolve(rva)?.let(::parseMethodBody) else null,
                     recordRange = t.rowRange(T.METHOD_DEF, row),
                 )
             }
@@ -527,13 +530,9 @@ object ClrMetadataParser {
         private fun memberOwners(t: Tables, column: Int, pointerTable: Int, memberTable: Int): IntArray {
             val memberCount = t.rowCount(memberTable)
             val owners = IntArray(memberCount + 1)
-            val typeCount = t.rowCount(T.TYPE_DEF)
             val usesPointers = t.rowCount(pointerTable) > 0
-            val listLength = if (usesPointers) t.rowCount(pointerTable) else memberCount
-            for (typeRow in 1..typeCount) {
-                val start = t.cell(T.TYPE_DEF, typeRow, column)
-                val end = if (typeRow < typeCount) t.cell(T.TYPE_DEF, typeRow + 1, column) else listLength + 1
-                for (listIndex in start.coerceAtLeast(1) until end.coerceAtMost(listLength + 1)) {
+            forEachMemberList(t, T.TYPE_DEF, column, if (usesPointers) t.rowCount(pointerTable) else memberCount) { typeRow, list ->
+                for (listIndex in list) {
                     val member = if (usesPointers) t.cell(pointerTable, listIndex, 0) else listIndex
                     if (member in 1..memberCount) owners[member] = typeRow
                 }
@@ -543,29 +542,57 @@ object ClrMetadataParser {
 
         /** Parameter names per MethodDef row, indexed by parameter position (sequence 1 is index 0). */
         private fun parameterNames(t: Tables): Map<Int, List<String?>> {
-            val methodCount = t.rowCount(T.METHOD_DEF)
             val paramCount = t.rowCount(T.PARAM)
             if (paramCount == 0) return emptyMap()
             val usesPointers = t.rowCount(T.PARAM_PTR) > 0
-            val listLength = if (usesPointers) t.rowCount(T.PARAM_PTR) else paramCount
             val result = HashMap<Int, List<String?>>()
-            for (methodRow in 1..methodCount) {
-                val start = t.cell(T.METHOD_DEF, methodRow, 5)
-                val end = if (methodRow < methodCount) t.cell(T.METHOD_DEF, methodRow + 1, 5) else listLength + 1
-                if (end <= start) continue
-                val names = arrayOfNulls<String>(MAX_PARAMETERS)
+            forEachMemberList(t, T.METHOD_DEF, 5, if (usesPointers) t.rowCount(T.PARAM_PTR) else paramCount) { methodRow, list ->
+                if (list.isEmpty()) return@forEachMemberList
+                fun param(listIndex: Int) = if (usesPointers) t.cell(T.PARAM_PTR, listIndex, 0) else listIndex
+                // Sequence 0 is the return value; positions can be sparse, so size by the largest one.
                 var maxSequence = 0
-                for (listIndex in start.coerceAtLeast(1) until end.coerceAtMost(listLength + 1)) {
-                    val param = if (usesPointers) t.cell(T.PARAM_PTR, listIndex, 0) else listIndex
-                    if (param !in 1..paramCount) continue
-                    val sequence = t.cell(T.PARAM, param, 1)
-                    if (sequence !in 1..MAX_PARAMETERS) continue
-                    names[sequence - 1] = heaps.string(t.cell(T.PARAM, param, 2))
-                    maxSequence = maxOf(maxSequence, sequence)
+                for (listIndex in list) {
+                    val param = param(listIndex).takeIf { it in 1..paramCount } ?: continue
+                    t.cell(T.PARAM, param, 1).takeIf { it in 1..MAX_PARAMETERS }?.let { maxSequence = maxOf(maxSequence, it) }
                 }
-                if (maxSequence > 0) result[methodRow] = names.take(maxSequence)
+                if (maxSequence == 0) return@forEachMemberList
+                val names = arrayOfNulls<String>(maxSequence)
+                for (listIndex in list) {
+                    val param = param(listIndex).takeIf { it in 1..paramCount } ?: continue
+                    val sequence = t.cell(T.PARAM, param, 1).takeIf { it in 1..maxSequence } ?: continue
+                    names[sequence - 1] = heaps.string(t.cell(T.PARAM, param, 2))
+                }
+                result[methodRow] = names.asList()
             }
             return result
+        }
+
+        /**
+         * Calls [action] with each [ownerTable] row and the run of list indices it owns: from its
+         * [column] value up to the next row's (II.22: these lists are ascending and contiguous).
+         * Malformed metadata may repeat or reorder starts; runs are clamped so they never overlap,
+         * which keeps the work linear in the list length instead of rows × list length.
+         */
+        private inline fun forEachMemberList(t: Tables, ownerTable: Int, column: Int, listLength: Int, action: (row: Int, list: IntRange) -> Unit) {
+            val ownerCount = t.rowCount(ownerTable)
+            var claimedUntil = 1
+            var unordered = false
+            for (row in 1..ownerCount) {
+                val declaredStart = t.cell(ownerTable, row, column)
+                if (declaredStart < claimedUntil) unordered = true
+                val start = declaredStart.coerceIn(claimedUntil, listLength + 1)
+                val nextStart = if (row < ownerCount) t.cell(ownerTable, row + 1, column) else listLength + 1
+                val end = nextStart.coerceIn(start, listLength + 1)
+                action(row, start until end)
+                claimedUntil = end
+            }
+            if (unordered) {
+                warn(
+                    "clr.unordered_member_lists",
+                    "${clrTableName(ownerTable)} member lists are not ascending; overlapping runs were ignored.",
+                    t.infos.firstOrNull { it.id == ownerTable }?.range,
+                )
+            }
         }
 
         private fun decodeMemberRefs(t: Tables): List<ClrMemberRef> = List(t.rowCount(T.MEMBER_REF)) { index ->
@@ -1068,6 +1095,8 @@ private const val FAT_FORMAT = 0x3
 private const val FAT_HEADER_SIZE = 12
 private const val MORE_SECTIONS = 0x8
 private const val INIT_LOCALS = 0x10
+private const val CODE_TYPE_MASK = 0x3
+private const val CODE_TYPE_IL = 0x0
 private const val SECTION_EH_TABLE = 0x01
 private const val SECTION_FAT_FORMAT = 0x40
 private const val SECTION_MORE_SECTIONS = 0x80

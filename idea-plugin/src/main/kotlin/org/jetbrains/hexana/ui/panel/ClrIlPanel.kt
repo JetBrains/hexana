@@ -62,6 +62,14 @@ import org.jetbrains.jewel.ui.component.Text
 internal fun clrIlPanels(provider: PeBinaryProvider, state: HexViewStateHolder): List<Panel> =
     listOf(Panel(CLR_IL_TAB_NAME) { ClrIlTab(provider, state) })
 
+/**
+ * Token resolution shares the metadata parser's caches, which are not thread-safe, so all IL is
+ * rendered on this one single-threaded view of the IO pool. It must outlive any one panel: a type
+ * being rendered cannot be interrupted, so it keeps running after its tab is switched away, and a
+ * panel created on return — or a second editor of the same file — would otherwise render beside it.
+ */
+private val clrIlRenderDispatcher: CoroutineDispatcher = Dispatchers.IO.limitedParallelism(1)
+
 /** Everything the view needs, built once off the EDT. */
 private class ClrIlModel(
     val metadata: ClrMetadata,
@@ -70,12 +78,6 @@ private class ClrIlModel(
     val tree: ChunkTree,
     val searchIndex: List<ClrIlSearchEntry>,
 ) {
-    /**
-     * Token resolution shares the metadata parser's caches, which are not thread-safe, so every
-     * type of one assembly is rendered on this single-threaded view of the IO pool.
-     */
-    val renderDispatcher: CoroutineDispatcher = Dispatchers.IO.limitedParallelism(1)
-
     /** Bytes covered by each rendered row with a file offset, so a click selects the whole instruction. */
     val rowSizes = HashMap<Long, Int>()
 }
@@ -239,7 +241,7 @@ private fun ClrTypePlaceholderRow(
             rowCache[chunk.id] = emptyList()
             return@LaunchedEffect
         }
-        rowCache[chunk.id] = withContext(model.renderDispatcher) {
+        rowCache[chunk.id] = withContext(clrIlRenderDispatcher) {
             try {
                 clrIlTypeRows(model.metadata, model.bytes, type).also { rows ->
                     synchronized(model.rowSizes) {

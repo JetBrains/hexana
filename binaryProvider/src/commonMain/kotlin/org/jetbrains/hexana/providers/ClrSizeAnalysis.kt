@@ -50,13 +50,14 @@ internal fun clrSizeAnalysis(
 ): BinarySizeNode {
     val claims = clrSizeClaims(bytes, sections, optionalHeader, debugEntries, metadata, readyToRun)
     val children = sections.map { section ->
-        val start = section.rawDataPointer.toLong()
-        val end = start + section.rawDataSize.toLong()
+        // A malformed header can declare raw data past the end of the file; only bytes that exist count.
+        val start = section.rawDataPointer.toLong().coerceAtMost(bytes.size.toLong())
+        val end = (section.rawDataPointer.toLong() + section.rawDataSize.toLong()).coerceAtMost(bytes.size.toLong())
         val root = TreeNode(section.name.ifBlank { "<unnamed>" })
         val inside = claims.filter { it.start >= start && it.end <= end }.sortedBy { it.start }
         for (claim in inside) root.add(claim.path, claim.start, claim.end - claim.start)
         if (inside.isNotEmpty()) addGaps(bytes, root, inside, start, end)
-        root.toSizeNode(sizeOverride = section.rawDataSize.toInt(), offsetOverride = start.toInt())
+        root.toSizeNode(sizeOverride = (end - start).toInt(), offsetOverride = start.toInt())
     }
     return BinarySizeNode(name = "PE", size = bytes.size, offset = 0, children = children)
 }

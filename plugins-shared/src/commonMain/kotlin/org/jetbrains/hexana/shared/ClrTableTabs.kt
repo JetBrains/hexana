@@ -14,14 +14,18 @@ import org.jetbrains.hexana.providers.pe.clr.ClrTypeKind
 internal const val CLR_OVERVIEW_TAB_NAME = ".NET"
 internal const val CLR_METADATA_GROUP_NAME = ".NET Metadata"
 
-/** Top-level tabs for a managed PE image: overview, type tree, methods and assembly references. */
-internal fun clrTabs(provider: PeBinaryProvider): List<TableTabDescriptor> {
-    val metadata = provider.clrMetadata ?: return emptyList()
-    return buildList {
-        add(clrOverviewTab(provider, metadata))
-        clrTypesTab(metadata)?.let { add(it) }
-        clrMethodsTab(metadata)?.let { add(it) }
-        clrAssemblyRefsTab(metadata)?.let { add(it) }
+/** Top-level tabs of a managed PE image, in display order: overview, type tree, methods, assembly references. */
+internal val CLR_TAB_NAMES: List<String> = listOf(CLR_OVERVIEW_TAB_NAME, "Types", "Methods", "Assembly Refs")
+
+/** The top-level CLR tab called [name], or null when the image has no metadata or nothing to show there. */
+internal fun clrTab(name: String, provider: PeBinaryProvider): TableTabDescriptor? {
+    val metadata = provider.clrMetadata ?: return null
+    return when (name) {
+        CLR_OVERVIEW_TAB_NAME -> clrOverviewTab(provider, metadata)
+        "Types" -> clrTypesTab(metadata)
+        "Methods" -> clrMethodsTab(metadata)
+        "Assembly Refs" -> clrAssemblyRefsTab(metadata)
+        else -> null
     }
 }
 

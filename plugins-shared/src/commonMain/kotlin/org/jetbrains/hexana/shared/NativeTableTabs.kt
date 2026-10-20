@@ -54,6 +54,26 @@ class NativeTableTabsProvider : TableTabsProvider {
         else -> emptyList()
     }
 
+    /**
+     * PE only: building its tabs parses imports, exports and, for .NET assemblies, the whole CLR
+     * metadata, which hosts must not do while discovering tab names. The other formats keep the
+     * full-computation fallback.
+     */
+    override fun availableTabNames(provider: BinaryProvider, context: TableTabsContext): Pair<List<String>, List<String>>? {
+        if (provider !is PeBinaryProvider) return null
+        val grouped = if (provider.isManaged) listOf(CLR_METADATA_GROUP_NAME) else emptyList()
+        return (peTabBuilders(provider).map { it.first } + DEBUG_CONTEXT_TAB_NAME) to grouped
+    }
+
+    override fun tabPriority(name: String, provider: BinaryProvider): TabPriority =
+        if (name == DEBUG_CONTEXT_TAB_NAME) TabPriority.Low else TabPriority.High
+
+    override fun singleTab(name: String, provider: BinaryProvider, context: TableTabsContext): TableTabDescriptor? {
+        if (provider !is PeBinaryProvider) return super.singleTab(name, provider, context)
+        if (name == DEBUG_CONTEXT_TAB_NAME) return debugContextTab(provider, context.nativeDebugData)
+        return peTabBuilders(provider).firstOrNull { it.first == name }?.second?.invoke()
+    }
+
     override fun tableTabs(provider: BinaryProvider, context: TableTabsContext): List<TableTabDescriptor> = when (provider) {
         is ElfBinaryProvider -> elfTabs(provider) + debugTabs(provider, context.nativeDebugData)
         is MachOBinaryProvider -> machOTabs(provider) + debugTabs(provider, context.nativeDebugData)
@@ -93,7 +113,7 @@ class NativeTableTabsProvider : TableTabsProvider {
     private fun debugContextTab(data: NativeDebugTabData): TableTabDescriptor {
         val rows = data.debugContext.companions
         return TableTabDescriptor(
-            name = "Debug Context",
+            name = DEBUG_CONTEXT_TAB_NAME,
             columns = listOf(
                 col("Kind", ColumnWidth.Fill(0.22f)) { CellValue(rows[it].kind.label) },
                 col("Status", ColumnWidth.Fill(0.16f)) { CellValue(rows[it].status.label) },
@@ -170,15 +190,27 @@ private fun coffSymbolsTab(provider: CoffBinaryProvider): TableTabDescriptor? {
     )
 }
 
-private fun peTabs(provider: PeBinaryProvider): List<TableTabDescriptor> = buildList {
-    peHeadersTab(provider)?.let { add(it) }
-    addAll(clrTabs(provider))
-    peSectionsTab(provider)?.let { add(it) }
-    peImportsTab(provider)?.let { add(it) }
-    peExportsTab(provider)?.let { add(it) }
-    peRelocationsTab(provider)?.let { add(it) }
-    peDebugTab(provider)?.let { add(it) }
-    peSymbolsTab(provider)?.let { add(it) }
+private const val DEBUG_CONTEXT_TAB_NAME = "Debug Context"
+
+private fun peTabs(provider: PeBinaryProvider): List<TableTabDescriptor> =
+    peTabBuilders(provider).mapNotNull { (_, build) -> build() }
+
+/**
+ * PE tab names in display order, each with the builder that makes it (or null when the file has
+ * nothing to show there). Listing the names parses nothing beyond the headers, so the same table
+ * serves [NativeTableTabsProvider.tableTabs], cheap name discovery and single-tab resolution.
+ */
+private fun peTabBuilders(provider: PeBinaryProvider): List<Pair<String, () -> TableTabDescriptor?>> = buildList {
+    add("Headers" to { peHeadersTab(provider) })
+    if (provider.isManaged) {
+        for (name in CLR_TAB_NAMES) add(name to { clrTab(name, provider) })
+    }
+    add("Sections" to { peSectionsTab(provider) })
+    add("Imports" to { peImportsTab(provider) })
+    add("Exports" to { peExportsTab(provider) })
+    add("Relocations" to { peRelocationsTab(provider) })
+    add("Debug" to { peDebugTab(provider) })
+    add("Symbols" to { peSymbolsTab(provider) })
 }
 
 private fun peHeadersTab(provider: PeBinaryProvider): TableTabDescriptor? {

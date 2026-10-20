@@ -388,6 +388,13 @@ interface TableTabsProvider {
     ): Pair<List<String>, List<String>>? = null
 
     /**
+     * Priority of a tab advertised by [availableTabNames], which carries names only. Hosts order
+     * cheap placeholders with it, so a provider whose tabs are not all [TabPriority.High] keeps the
+     * order its full [tableTabs] result would have had.
+     */
+    fun tabPriority(name: String, provider: BinaryProvider): TabPriority = TabPriority.High
+
+    /**
      * Resolves a single ordinary tab by [name]. Returns `null` if the tab
      * doesn't exist or the provider doesn't support per-tab resolution.
      *

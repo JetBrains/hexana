@@ -115,6 +115,28 @@ reflection-based API summary; `binary.format` stays `"pe"`.
 - Fixtures `sample-r2r{,-win-x64,-win-x86,-linux-arm}.dll` + perfmaps from
   `src/clr/r2r/build-r2r-fixtures.sh` (crossgen2 from the NuGet cache; deterministic).
 
+## Review fixes (2026-10-20)
+
+- IL bodies are parsed only when ImplFlags code type is IL (`implFlags & 3 == 0`); C++/CLI native,
+  OPTIL and runtime methods have RVAs that are not IL.
+- Member lists (TypeDef FieldList/MethodList, MethodDef ParamList) go through `forEachMemberList`:
+  runs are clamped to never overlap, so malformed starts cannot make ownership O(rows × list length);
+  a non-ascending list emits `clr.unordered_member_lists`. A row's run still ends at the next row's
+  *declared* start (II.22), so a bogus start empties the preceding row's list.
+- IntelliJ lists tab placeholders in a `remember` initializer (EDT, `discoverPanelNames`); providers
+  without `availableTabNames` fall back to building every tab there. PE now advertises names cheaply
+  (`NativeTableTabsProvider.peTabBuilders` is the one ordered name→builder table; `singleTab` resolves
+  each in the background) and `SizeTableTabsProvider` advertises `Top` for PE — otherwise opening a
+  managed PE decoded metadata *and* the whole R2R size tree on the EDT. `TableTabsProvider.tabPriority`
+  lets cheap names keep Low priority (Debug Context stays last). ELF/Mach-O still use the fallback.
+- IL rendering in IntelliJ uses one app-wide `limitedParallelism(1)` dispatcher, not one per panel:
+  an un-cancellable `clrIlTypeRows` outlives a tab switch, and the resolver is shared per provider.
+- Web host: every table tab (any format) and `computeExtraTabs` are built synchronously in
+  composition, and IL types render inside `remember` on expand (same as the Smali view). Left as is:
+  the lazy metadata parse is shared and paid once whichever caller runs first; making it async is a
+  web-host-wide change, not a CLR one.
+- Manual QA: `idea-plugin/QA/14-dotnet.md`.
+
 ## Fixture and measurements
 
 - `parsing/native-fixtures/test-data/pe/sample-clr.exe` from `src/clr/Sample.cs` (Roslyn `csc`,

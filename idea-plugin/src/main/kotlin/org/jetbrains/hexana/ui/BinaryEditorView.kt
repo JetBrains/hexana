@@ -1925,8 +1925,8 @@ private fun BinaryProvider.discoverPanelNames(fileName: String): List<String> {
         val available = p.availableTabNames(this, context)
         if (available != null) {
             val (ordinary, grouped) = available
-            ordinary.forEach { nameEntries.add(NameEntry(it, TabPriority.High, index)) }
-            grouped.forEach { nameEntries.add(NameEntry(it, TabPriority.High, index)) }
+            ordinary.forEach { nameEntries.add(NameEntry(it, p.tabPriority(it, this), index)) }
+            grouped.forEach { nameEntries.add(NameEntry(it, p.tabPriority(it, this), index)) }
         } else {
             // Fall back to full computation for cheap providers
             val tabs = p.tableTabs(this, context)

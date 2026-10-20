@@ -73,6 +73,18 @@ class ClrSizeAnalysisTest {
     }
 
     @Test
+    fun `sections declaring raw data past the end of the file are clamped`() {
+        val bytes = File("../parsing/native-fixtures/test-data/pe/sample-clr.exe").readBytes()
+        val metadata = assertNotNull(provider("sample-clr.exe").clrMetadata)
+        // Cut the file just after the metadata, so .text (and every later section) runs past its end.
+        val cut = metadata.streams.maxOf { it.contentRange!!.offset + it.contentRange!!.size } + 8
+        val truncated = assertIs<PeBinaryProvider>(createBinaryProvider(bytes.copyOf(cut).toCommonByteBuffer(), "truncated.exe"))
+        val text = assertNotNull(truncated.sizeAnalysis).child(".text")
+        assertEquals(cut - 512, text.size)
+        text.assertChildrenAddUp()
+    }
+
+    @Test
     fun `survives corrupted ReadyToRun images`() {
         val original = File("../parsing/native-fixtures/test-data/pe/sample-r2r-win-x64.dll").readBytes()
         val random = kotlin.random.Random(2026)

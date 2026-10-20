@@ -143,6 +143,52 @@ class ClrFixtureParserTest {
 }
 
 class ClrMalformedInputTest {
+    private val sample = Path.of(System.getProperty("user.dir"))
+        .resolve("../native-fixtures/test-data/pe/sample-clr.exe")
+        .normalize()
+        .readBytes()
+
+    private fun parse(bytes: ByteArray): ClrMetadata =
+        assertNotNull(assertIs<PeImageFile>(assertIs<NativeParseSuccess<PeFile>>(PeParser.parse(bytes.toCommonByteBuffer())).value).clr)
+
+    private fun ByteArray.putU16(offset: Int, value: Int) {
+        this[offset] = value.toByte()
+        this[offset + 1] = (value shr 8).toByte()
+    }
+
+    @Test
+    fun `methods whose ImplFlags are not IL get no IL body`() {
+        val original = parse(sample)
+        val main = original.methods.single { it.name == "Main" }
+        assertNotNull(main.body)
+        // MethodDef row: RVA (4 bytes), then ImplFlags; code type 1 is native (C++/CLI), whose RVA is machine code.
+        val patched = sample.copyOf().apply { putU16(main.recordRange.offset + 4, 0x0001) }
+        val clr = parse(patched)
+        assertNull(clr.methods.single { it.name == "Main" }.body)
+        assertEquals(original.methods.count { it.body != null } - 1, clr.methods.count { it.body != null })
+    }
+
+    @Test
+    fun `unordered member lists cannot take members from earlier types`() {
+        val original = parse(sample)
+        val color = original.typeDefs.single { it.name == "Color" }
+        // TypeDef row with 2-byte indexes: Flags (4), Name (2), Namespace (2), Extends (2), FieldList (2), MethodList (2).
+        assertEquals(14, original.tables.single { it.name == "TypeDef" }.rowSize)
+        val patched = sample.copyOf().apply { putU16(color.recordRange.offset + 10, 1) }
+        val clr = parse(patched)
+        fun fieldsOf(name: String, metadata: ClrMetadata) =
+            metadata.fieldsByType[metadata.typeDefs.single { it.name == name }.row].orEmpty().map { it.name }
+        // Color now claims to start at field 1. Its run is clamped to what no earlier type owns, so
+        // Greeter keeps its fields. Box's run ends where Color's list declares to start (II.22.37),
+        // which is now before Box's own start, so Box ends up with none, as the format defines.
+        assertEquals(fieldsOf("Greeter", original), fieldsOf("Greeter", clr))
+        assertTrue(fieldsOf("Greeter", original).none { it in fieldsOf("Color", clr) })
+        assertEquals(emptyList(), fieldsOf("Box`1", clr))
+        assertEquals(fieldsOf("Box`1", original) + fieldsOf("Color", original), fieldsOf("Color", clr))
+        assertTrue(clr.diagnostics.any { it.code == "clr.unordered_member_lists" })
+        assertTrue(original.diagnostics.none { it.code == "clr.unordered_member_lists" })
+    }
+
     @Test
     fun `survives random corruption of ReadyToRun images`() {
         for (name in listOf("sample-r2r-win-x64", "sample-r2r", "sample-r2r-win-x86", "sample-r2r-linux-arm")) {
