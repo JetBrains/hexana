@@ -1,7 +1,10 @@
 package org.jetbrains.hexana.ui.framework
 
 import com.intellij.driver.client.Driver
-import com.intellij.driver.sdk.getRunContentManager
+import com.intellij.driver.client.Remote
+import com.intellij.driver.client.service
+import com.intellij.driver.model.RdTarget
+import com.intellij.driver.sdk.Project
 import com.intellij.driver.sdk.singleProject
 import com.intellij.driver.sdk.ui.components.common.JEditorUiComponent
 import com.intellij.driver.sdk.ui.components.common.ideFrame
@@ -13,6 +16,7 @@ import kotlin.time.Duration.Companion.seconds
 private val defaultRunConfigurationTerminationTimeout = 2.minutes
 private val consoleOutputFlushTimeout = 10.seconds
 private const val runConfigurationTerminationPollIntervalSeconds = 1
+private const val HEXANA_PLUGIN_ID = "org.jetbrains.hexana"
 
 internal data class HexanaRunConfigurationConsoleResult(
     val consoleOutput: String,
@@ -29,7 +33,7 @@ internal data class HexanaSelectedRunContent(
 
 internal fun Driver.selectedRunConfigurationContent(): HexanaSelectedRunContent {
     val project = singleProject()
-    val content = getRunContentManager(project).getSelectedContent()
+    val content = hexanaRunContentManager(project).getSelectedContent()
     val processHandler = content?.getProcessHandler()
     return HexanaSelectedRunContent(
         displayName = content?.getDisplayName(),
@@ -63,7 +67,7 @@ private fun Driver.waitForRunConfigurationProcessTermination(
     previousSelectedContent: HexanaSelectedRunContent?,
 ): String {
     val project = singleProject()
-    val runContentManager = getRunContentManager(project)
+    val runContentManager = hexanaRunContentManager(project)
     var lastState = "no selected process content"
 
     try {
@@ -140,4 +144,31 @@ private fun Driver.readRunConfigurationConsoleOutput(): String {
             t,
         )
     }
+}
+
+/**
+ * Resolves `RunContentManager` through the Hexana plugin classloader.
+ *
+ * The driver-sdk `getRunContentManager` refs carry no plugin id, so the IDE-side invoker loads them through the
+ * performanceTesting plugin classloader. Newer IDE builds no longer expose `intellij.platform.execution` there and
+ * every lookup fails with "No such class 'com.intellij.execution.ui.RunContentManager' in plugin null"; the Hexana
+ * plugin depends on the execution module, so its classloader always sees these classes.
+ */
+private fun Driver.hexanaRunContentManager(project: Project): HexanaRunContentManagerRef =
+    service<HexanaRunContentManagerRef>(project, RdTarget.BACKEND)
+
+@Remote("com.intellij.execution.ui.RunContentManager", plugin = HEXANA_PLUGIN_ID)
+internal interface HexanaRunContentManagerRef {
+    fun getSelectedContent(): HexanaRunContentDescriptorRef?
+}
+
+@Remote("com.intellij.execution.ui.RunContentDescriptor", plugin = HEXANA_PLUGIN_ID)
+internal interface HexanaRunContentDescriptorRef {
+    fun getDisplayName(): String
+    fun getProcessHandler(): HexanaProcessHandlerRef?
+}
+
+@Remote("com.intellij.execution.process.ProcessHandler", plugin = HEXANA_PLUGIN_ID)
+internal interface HexanaProcessHandlerRef {
+    fun isProcessTerminated(): Boolean
 }

@@ -5,6 +5,8 @@ consult-first / write-back rules.
 
 ## Entities
 
+- [[entities/ui-driver-remote-classloaders]] — how the IDE-side Driver picks a classloader for
+  `@Remote` refs, and why run/debug UI tests resolve `RunContentManager` through the Hexana plugin.
 - [[entities/hexana-scripting-api]] — the custom script tab surface (`binary`, `print`,
   `table`, `row`) and how each host binds it.
 - [[entities/wasm-runtime-compatibility]] — the Wasm runtime compatibility table: proposal
