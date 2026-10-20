@@ -1536,7 +1536,22 @@ interface PeBinaryProvider extends NativeBinaryProvider {
           size: number;
         };
         codeSize: number;
+        exceptionClauses: {
+          catchType?: string;
+          filterOffset?: number;
+          handlerLength: number;
+          handlerOffset: number;
+          kind: "Catch" | "Filter" | "Finally" | "Fault";
+          tryLength: number;
+          tryOffset: number;
+        }[];
+        exceptionSectionsRange?: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
         hasExceptionSections: boolean;
+        initLocals: boolean;
         isFat: boolean;
         localVarSigToken: number;
         maxStack: number;
@@ -1568,7 +1583,22 @@ interface PeBinaryProvider extends NativeBinaryProvider {
           size: number;
         };
         codeSize: number;
+        exceptionClauses: {
+          catchType?: string;
+          filterOffset?: number;
+          handlerLength: number;
+          handlerOffset: number;
+          kind: "Catch" | "Filter" | "Finally" | "Fault";
+          tryLength: number;
+          tryOffset: number;
+        }[];
+        exceptionSectionsRange?: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
         hasExceptionSections: boolean;
+        initLocals: boolean;
         isFat: boolean;
         localVarSigToken: number;
         maxStack: number;
@@ -1666,12 +1696,14 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       validMask: number;
     };
     targetFramework?: string;
+    tokens: ClrTokenResolver;
     typeDefs: {
       enclosingTypeRow?: number;
       extends?: string;
       flags: number;
       fullName: string;
       genericParameters: string[];
+      interfaces: string[];
       kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module";
       name: string;
       namespace: string;
@@ -1810,6 +1842,7 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     };
     ordinalBase: number;
   };
+  hasOnlyManagedCode: boolean;
   imports?: {
     descriptorRange: {
       endExclusive: number;
@@ -1901,6 +1934,90 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     };
     severity: "Info" | "Warning" | "Error";
   }[];
+  readyToRunImage?: {
+    codeSizesApproximate: boolean;
+    diagnostics: {
+      code: string;
+      message: string;
+      range?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      severity: "Info" | "Warning" | "Error";
+    }[];
+    exceptionInfo: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    }[];
+    flags: number;
+    headerRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    importSections: {
+      auxiliaryDataOffset?: number;
+      cells?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      entrySize: number;
+      flags: number;
+      signatureOffsets: number[];
+      signatureTable?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      type: number;
+    }[];
+    isComponent: boolean;
+    majorVersion: number;
+    methods: {
+      codeRanges: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      }[];
+      codeSize: number;
+      firstRuntimeFunction: number;
+      foreignAssembly?: string;
+      foreignToken?: number;
+      isInstantiation: boolean;
+      memberRefRow?: number;
+      methodDefRow?: number;
+      methodTypeArguments: string[];
+      ownerType?: string;
+      runtimeFunctionCount: number;
+    }[];
+    minorVersion: number;
+    runtimeFunctions: {
+      beginRva: number;
+      codeRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      index: number;
+      unwindRva: number;
+    }[];
+    sections: {
+      name: string;
+      range?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      rva: number;
+      size: number;
+      type: number;
+    }[];
+    targetMachine: number;
+    targetOs: string;
+  };
   sections?: {
     characteristics: number;
     contentRange?: {
@@ -6034,6 +6151,25 @@ interface ClrCliHeader {
   };
 }
 
+interface ClrExceptionClause {
+  catchType?: string;
+  filterOffset?: number;
+  handlerLength: number;
+  handlerOffset: number;
+  kind: "Catch" | "Filter" | "Finally" | "Fault";
+  tryLength: number;
+  tryOffset: number;
+  copy(kind: "Catch" | "Filter" | "Finally" | "Fault", tryOffset: number, tryLength: number, handlerOffset: number, handlerLength: number, catchType: string | null, filterOffset: number | null): {
+    catchType?: string;
+    filterOffset?: number;
+    handlerLength: number;
+    handlerOffset: number;
+    kind: "Catch" | "Filter" | "Finally" | "Fault";
+    tryLength: number;
+    tryOffset: number;
+  };
+}
+
 interface ClrField {
   declaringTypeRow: number;
   flags: number;
@@ -6285,7 +6421,22 @@ interface ClrMetadata {
         size: number;
       };
       codeSize: number;
+      exceptionClauses: {
+        catchType?: string;
+        filterOffset?: number;
+        handlerLength: number;
+        handlerOffset: number;
+        kind: "Catch" | "Filter" | "Finally" | "Fault";
+        tryLength: number;
+        tryOffset: number;
+      }[];
+      exceptionSectionsRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
       hasExceptionSections: boolean;
+      initLocals: boolean;
       isFat: boolean;
       localVarSigToken: number;
       maxStack: number;
@@ -6317,7 +6468,22 @@ interface ClrMetadata {
         size: number;
       };
       codeSize: number;
+      exceptionClauses: {
+        catchType?: string;
+        filterOffset?: number;
+        handlerLength: number;
+        handlerOffset: number;
+        kind: "Catch" | "Filter" | "Finally" | "Fault";
+        tryLength: number;
+        tryOffset: number;
+      }[];
+      exceptionSectionsRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
       hasExceptionSections: boolean;
+      initLocals: boolean;
       isFat: boolean;
       localVarSigToken: number;
       maxStack: number;
@@ -6415,12 +6581,14 @@ interface ClrMetadata {
     validMask: number;
   };
   targetFramework?: string;
+  tokens: ClrTokenResolver;
   typeDefs: {
     enclosingTypeRow?: number;
     extends?: string;
     flags: number;
     fullName: string;
     genericParameters: string[];
+    interfaces: string[];
     kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module";
     name: string;
     namespace: string;
@@ -6574,6 +6742,7 @@ interface ClrMetadata {
     flags: number;
     fullName: string;
     genericParameters: string[];
+    interfaces: string[];
     kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module";
     name: string;
     namespace: string;
@@ -6604,7 +6773,22 @@ interface ClrMetadata {
         size: number;
       };
       codeSize: number;
+      exceptionClauses: {
+        catchType?: string;
+        filterOffset?: number;
+        handlerLength: number;
+        handlerOffset: number;
+        kind: "Catch" | "Filter" | "Finally" | "Fault";
+        tryLength: number;
+        tryOffset: number;
+      }[];
+      exceptionSectionsRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
       hasExceptionSections: boolean;
+      initLocals: boolean;
       isFat: boolean;
       localVarSigToken: number;
       maxStack: number;
@@ -6701,7 +6885,7 @@ interface ClrMetadata {
       size: number;
     };
     severity: "Info" | "Warning" | "Error";
-  }[]): {
+  }[], tokens: ClrTokenResolver): {
     assembly?: {
       culture: string;
       flags: number;
@@ -6843,7 +7027,22 @@ interface ClrMetadata {
           size: number;
         };
         codeSize: number;
+        exceptionClauses: {
+          catchType?: string;
+          filterOffset?: number;
+          handlerLength: number;
+          handlerOffset: number;
+          kind: "Catch" | "Filter" | "Finally" | "Fault";
+          tryLength: number;
+          tryOffset: number;
+        }[];
+        exceptionSectionsRange?: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
         hasExceptionSections: boolean;
+        initLocals: boolean;
         isFat: boolean;
         localVarSigToken: number;
         maxStack: number;
@@ -6875,7 +7074,22 @@ interface ClrMetadata {
           size: number;
         };
         codeSize: number;
+        exceptionClauses: {
+          catchType?: string;
+          filterOffset?: number;
+          handlerLength: number;
+          handlerOffset: number;
+          kind: "Catch" | "Filter" | "Finally" | "Fault";
+          tryLength: number;
+          tryOffset: number;
+        }[];
+        exceptionSectionsRange?: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
         hasExceptionSections: boolean;
+        initLocals: boolean;
         isFat: boolean;
         localVarSigToken: number;
         maxStack: number;
@@ -6973,12 +7187,14 @@ interface ClrMetadata {
       validMask: number;
     };
     targetFramework?: string;
+    tokens: ClrTokenResolver;
     typeDefs: {
       enclosingTypeRow?: number;
       extends?: string;
       flags: number;
       fullName: string;
       genericParameters: string[];
+      interfaces: string[];
       kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module";
       name: string;
       namespace: string;
@@ -7052,7 +7268,22 @@ interface ClrMethodBody {
     size: number;
   };
   codeSize: number;
+  exceptionClauses: {
+    catchType?: string;
+    filterOffset?: number;
+    handlerLength: number;
+    handlerOffset: number;
+    kind: "Catch" | "Filter" | "Finally" | "Fault";
+    tryLength: number;
+    tryOffset: number;
+  }[];
+  exceptionSectionsRange?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
   hasExceptionSections: boolean;
+  initLocals: boolean;
   isFat: boolean;
   localVarSigToken: number;
   maxStack: number;
@@ -7069,14 +7300,41 @@ interface ClrMethodBody {
     endExclusive: number;
     offset: number;
     size: number;
-  }): {
+  }, exceptionClauses: {
+    catchType?: string;
+    filterOffset?: number;
+    handlerLength: number;
+    handlerOffset: number;
+    kind: "Catch" | "Filter" | "Finally" | "Fault";
+    tryLength: number;
+    tryOffset: number;
+  }[], initLocals: boolean, exceptionSectionsRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null): {
     codeRange: {
       endExclusive: number;
       offset: number;
       size: number;
     };
     codeSize: number;
+    exceptionClauses: {
+      catchType?: string;
+      filterOffset?: number;
+      handlerLength: number;
+      handlerOffset: number;
+      kind: "Catch" | "Filter" | "Finally" | "Fault";
+      tryLength: number;
+      tryOffset: number;
+    }[];
+    exceptionSectionsRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
     hasExceptionSections: boolean;
+    initLocals: boolean;
     isFat: boolean;
     localVarSigToken: number;
     maxStack: number;
@@ -7096,7 +7354,22 @@ interface ClrMethodDef {
       size: number;
     };
     codeSize: number;
+    exceptionClauses: {
+      catchType?: string;
+      filterOffset?: number;
+      handlerLength: number;
+      handlerOffset: number;
+      kind: "Catch" | "Filter" | "Finally" | "Fault";
+      tryLength: number;
+      tryOffset: number;
+    }[];
+    exceptionSectionsRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
     hasExceptionSections: boolean;
+    initLocals: boolean;
     isFat: boolean;
     localVarSigToken: number;
     maxStack: number;
@@ -7126,7 +7399,22 @@ interface ClrMethodDef {
       size: number;
     };
     codeSize: number;
+    exceptionClauses: {
+      catchType?: string;
+      filterOffset?: number;
+      handlerLength: number;
+      handlerOffset: number;
+      kind: "Catch" | "Filter" | "Finally" | "Fault";
+      tryLength: number;
+      tryOffset: number;
+    }[];
+    exceptionSectionsRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
     hasExceptionSections: boolean;
+    initLocals: boolean;
     isFat: boolean;
     localVarSigToken: number;
     maxStack: number;
@@ -7147,7 +7435,22 @@ interface ClrMethodDef {
         size: number;
       };
       codeSize: number;
+      exceptionClauses: {
+        catchType?: string;
+        filterOffset?: number;
+        handlerLength: number;
+        handlerOffset: number;
+        kind: "Catch" | "Filter" | "Finally" | "Fault";
+        tryLength: number;
+        tryOffset: number;
+      }[];
+      exceptionSectionsRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
       hasExceptionSections: boolean;
+      initLocals: boolean;
       isFat: boolean;
       localVarSigToken: number;
       maxStack: number;
@@ -7218,6 +7521,377 @@ interface ClrModuleRef {
       size: number;
     };
     row: number;
+  };
+}
+
+interface ClrReadyToRunImage {
+  codeSizesApproximate: boolean;
+  diagnostics: {
+    code: string;
+    message: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    severity: "Info" | "Warning" | "Error";
+  }[];
+  exceptionInfo: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }[];
+  flags: number;
+  headerRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  importSections: {
+    auxiliaryDataOffset?: number;
+    cells?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    entrySize: number;
+    flags: number;
+    signatureOffsets: number[];
+    signatureTable?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    type: number;
+  }[];
+  isComponent: boolean;
+  majorVersion: number;
+  methods: {
+    codeRanges: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    }[];
+    codeSize: number;
+    firstRuntimeFunction: number;
+    foreignAssembly?: string;
+    foreignToken?: number;
+    isInstantiation: boolean;
+    memberRefRow?: number;
+    methodDefRow?: number;
+    methodTypeArguments: string[];
+    ownerType?: string;
+    runtimeFunctionCount: number;
+  }[];
+  minorVersion: number;
+  runtimeFunctions: {
+    beginRva: number;
+    codeRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    index: number;
+    unwindRva: number;
+  }[];
+  sections: {
+    name: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    rva: number;
+    size: number;
+    type: number;
+  }[];
+  targetMachine: number;
+  targetOs: string;
+  copy(majorVersion: number, minorVersion: number, flags: number, targetOs: string, targetMachine: number, headerRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }, sections: {
+    name: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    rva: number;
+    size: number;
+    type: number;
+  }[], runtimeFunctions: {
+    beginRva: number;
+    codeRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    index: number;
+    unwindRva: number;
+  }[], methods: {
+    codeRanges: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    }[];
+    codeSize: number;
+    firstRuntimeFunction: number;
+    foreignAssembly?: string;
+    foreignToken?: number;
+    isInstantiation: boolean;
+    memberRefRow?: number;
+    methodDefRow?: number;
+    methodTypeArguments: string[];
+    ownerType?: string;
+    runtimeFunctionCount: number;
+  }[], importSections: {
+    auxiliaryDataOffset?: number;
+    cells?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    entrySize: number;
+    flags: number;
+    signatureOffsets: number[];
+    signatureTable?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    type: number;
+  }[], exceptionInfo: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }[], codeSizesApproximate: boolean, diagnostics: {
+    code: string;
+    message: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    severity: "Info" | "Warning" | "Error";
+  }[]): {
+    codeSizesApproximate: boolean;
+    diagnostics: {
+      code: string;
+      message: string;
+      range?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      severity: "Info" | "Warning" | "Error";
+    }[];
+    exceptionInfo: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    }[];
+    flags: number;
+    headerRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    importSections: {
+      auxiliaryDataOffset?: number;
+      cells?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      entrySize: number;
+      flags: number;
+      signatureOffsets: number[];
+      signatureTable?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      type: number;
+    }[];
+    isComponent: boolean;
+    majorVersion: number;
+    methods: {
+      codeRanges: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      }[];
+      codeSize: number;
+      firstRuntimeFunction: number;
+      foreignAssembly?: string;
+      foreignToken?: number;
+      isInstantiation: boolean;
+      memberRefRow?: number;
+      methodDefRow?: number;
+      methodTypeArguments: string[];
+      ownerType?: string;
+      runtimeFunctionCount: number;
+    }[];
+    minorVersion: number;
+    runtimeFunctions: {
+      beginRva: number;
+      codeRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      index: number;
+      unwindRva: number;
+    }[];
+    sections: {
+      name: string;
+      range?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      rva: number;
+      size: number;
+      type: number;
+    }[];
+    targetMachine: number;
+    targetOs: string;
+  };
+}
+
+interface ClrReadyToRunImportSection {
+  auxiliaryDataOffset?: number;
+  cells?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  entrySize: number;
+  flags: number;
+  signatureOffsets: number[];
+  signatureTable?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  type: number;
+  copy(type: number, flags: number, entrySize: number, cells: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null, signatureTable: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null, signatureOffsets: number[], auxiliaryDataOffset: number | null): {
+    auxiliaryDataOffset?: number;
+    cells?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    entrySize: number;
+    flags: number;
+    signatureOffsets: number[];
+    signatureTable?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    type: number;
+  };
+}
+
+interface ClrReadyToRunMethod {
+  codeRanges: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }[];
+  codeSize: number;
+  firstRuntimeFunction: number;
+  foreignAssembly?: string;
+  foreignToken?: number;
+  isInstantiation: boolean;
+  memberRefRow?: number;
+  methodDefRow?: number;
+  methodTypeArguments: string[];
+  ownerType?: string;
+  runtimeFunctionCount: number;
+  copy(methodDefRow: number | null, memberRefRow: number | null, foreignAssembly: string | null, foreignToken: number | null, isInstantiation: boolean, ownerType: string | null, methodTypeArguments: string[], firstRuntimeFunction: number, runtimeFunctionCount: number, codeRanges: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }[]): {
+    codeRanges: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    }[];
+    codeSize: number;
+    firstRuntimeFunction: number;
+    foreignAssembly?: string;
+    foreignToken?: number;
+    isInstantiation: boolean;
+    memberRefRow?: number;
+    methodDefRow?: number;
+    methodTypeArguments: string[];
+    ownerType?: string;
+    runtimeFunctionCount: number;
+  };
+}
+
+interface ClrReadyToRunSection {
+  name: string;
+  range?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  rva: number;
+  size: number;
+  type: number;
+  copy(type: number, name: string, rva: number, size: number, range: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null): {
+    name: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    rva: number;
+    size: number;
+    type: number;
+  };
+}
+
+interface ClrRuntimeFunction {
+  beginRva: number;
+  codeRange?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  index: number;
+  unwindRva: number;
+  copy(index: number, beginRva: number, codeRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null, unwindRva: number): {
+    beginRva: number;
+    codeRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    index: number;
+    unwindRva: number;
   };
 }
 
@@ -7322,12 +7996,110 @@ interface ClrTablesHeader {
   };
 }
 
+interface ClrTokenResolver {
+  describe(token: number, method: {
+    body?: {
+      codeRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      codeSize: number;
+      exceptionClauses: {
+        catchType?: string;
+        filterOffset?: number;
+        handlerLength: number;
+        handlerOffset: number;
+        kind: "Catch" | "Filter" | "Finally" | "Fault";
+        tryLength: number;
+        tryOffset: number;
+      }[];
+      exceptionSectionsRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      hasExceptionSections: boolean;
+      initLocals: boolean;
+      isFat: boolean;
+      localVarSigToken: number;
+      maxStack: number;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+    };
+    declaringTypeRow: number;
+    flags: number;
+    implFlags: number;
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    rva: number;
+    signature: string;
+    token: number;
+  } | null): string | null;
+  localVariableTypes(method: {
+    body?: {
+      codeRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      codeSize: number;
+      exceptionClauses: {
+        catchType?: string;
+        filterOffset?: number;
+        handlerLength: number;
+        handlerOffset: number;
+        kind: "Catch" | "Filter" | "Finally" | "Fault";
+        tryLength: number;
+        tryOffset: number;
+      }[];
+      exceptionSectionsRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      hasExceptionSections: boolean;
+      initLocals: boolean;
+      isFat: boolean;
+      localVarSigToken: number;
+      maxStack: number;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+    };
+    declaringTypeRow: number;
+    flags: number;
+    implFlags: number;
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+    rva: number;
+    signature: string;
+    token: number;
+  }): string[];
+}
+
 interface ClrTypeDef {
   enclosingTypeRow?: number;
   extends?: string;
   flags: number;
   fullName: string;
   genericParameters: string[];
+  interfaces: string[];
   kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module";
   name: string;
   namespace: string;
@@ -7338,7 +8110,7 @@ interface ClrTypeDef {
   };
   row: number;
   token: number;
-  copy(row: number, namespace: string, name: string, fullName: string, flags: number, kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module", extends: string | null, enclosingTypeRow: number | null, genericParameters: string[], recordRange: {
+  copy(row: number, namespace: string, name: string, fullName: string, flags: number, kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module", interfaces: string[], extends: string | null, enclosingTypeRow: number | null, genericParameters: string[], recordRange: {
     endExclusive: number;
     offset: number;
     size: number;
@@ -7348,6 +8120,7 @@ interface ClrTypeDef {
     flags: number;
     fullName: string;
     genericParameters: string[];
+    interfaces: string[];
     kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module";
     name: string;
     namespace: string;

@@ -60,12 +60,24 @@ csc -nologo -deterministic -optimize+ -debug- \
 ```
 
 The parser tests cross-check it against `monodis --typedef`, `--method`, `--memberref` and `--manifest` output,
-and the IL tests against `ikdasm sample-clr.exe`.
-
-`test-data/pe/sample-r2r.dll` is a ReadyToRun (crossgen) image for macOS ARM64, built from
-`src/clr/r2r/` with `dotnet publish -c Release` (needs the `microsoft.netcore.app.crossgen2.osx-arm64`
-package) and copied from `bin/Release/net9.0/osx-arm64/publish/`.
-
- Update `ClrFixtureParserTest`, `ClrIlDecoderTest`,
+and the IL tests against `ikdasm sample-clr.exe`. Update `ClrFixtureParserTest`, `ClrIlDecoderTest`,
 `ClrTableTabsTest` and `ClrIlTextTest` together with the fixture, and regenerate the base64 copy in
 `parsing/pe/src/commonTest/.../clr/ClrSampleFixture.kt` that the JS and Wasm tests use.
+
+### ReadyToRun fixtures
+
+`test-data/pe/sample-r2r*.dll` are ReadyToRun (crossgen2) images of `src/clr/r2r/Sample.cs` for four
+targets, each next to the perfmap crossgen2 wrote for it (`*.perfmap.txt`: RVA, length and name of every
+compiled method), which `ClrReadyToRunTest` compares against:
+
+| Fixture | Target | Function lengths come from |
+|---|---|---|
+| `sample-r2r.dll` | macOS ARM64 | `.xdata` unwind records |
+| `sample-r2r-win-x64.dll` | Windows x64 | the RuntimeFunctions table |
+| `sample-r2r-win-x86.dll` | Windows x86 | the GC info header |
+| `sample-r2r-linux-arm.dll` | Linux ARM (Thumb) | `.xdata` unwind records |
+
+Rebuild them with `src/clr/r2r/build-r2r-fixtures.sh` (needs the .NET SDK and the 8.0.1
+`microsoft.netcore.app.crossgen2.osx-arm64` / `microsoft.netcore.app.runtime.osx-arm64` packages in the
+NuGet cache). The output is deterministic. To see what crossgen2 placed where, add `--map --mapcsv` to its
+command line; `ClrSizeAnalysisTest` quotes sizes from that map.

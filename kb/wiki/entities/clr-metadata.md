@@ -79,6 +79,42 @@ reflection-based API summary; `binary.format` stays `"pe"`.
 - Measured (JVM): rendering every type of CoreLib = 845k rows in ~0.5 s, worst type
   (`System.Array`) 12 ms, zero unresolved tokens/undefined opcodes; FSharp.Core 268k rows, 0 bad.
 
+## ReadyToRun code → methods, and the Top tab
+
+- `ClrReadyToRun.kt`: `ClrReadyToRunParser.parse(bytes, metadata, machine, …)` →
+  `ClrReadyToRunImage` (R2R header + sections, RuntimeFunctions, methods, import sections, EH info);
+  `PeBinaryProvider.readyToRunImage` is the lazy entry point. Format refs: dotnet/runtime
+  `docs/design/coreclr/botr/readytorun-format.md` and `src/coreclr/tools/Common/Internal/NativeFormat`.
+- Function lengths per arch: x64 RUNTIME_FUNCTION has an explicit end (12-byte entries); ARM64 /
+  ARM read FunctionLength from packed unwind data or the `.xdata` header (×4 / ×2, Thumb bit masked);
+  x86 has no OS unwind data — UnwindData points at GC info whose header starts with the method size
+  as a big-endian 7-bit varint. All four verified exactly against crossgen2 perfmaps.
+- Methods: MethodDefEntryPoints is a NativeArray (16-element blocks, tree-coded), InstanceMethodEntryPoints
+  a NativeHashtable whose entries are R2R method signatures (`READYTORUN_METHOD_SIG_*`) followed by the
+  entry id (`id&1` → fixups, `>>2`; else `>>1`). A method owns its runtime function up to the next
+  method's (funclets). **Gotcha:** a `MODULE_ZAPSIG` wrapping the *owner type* also moves the method
+  token into that module (no `UpdateContext` flag is emitted) — reading it as a local MethodDef gives
+  out-of-range rows. Module index `i`: `1..n` = own AssemblyRef `i`; `n+1+k` = ManifestMetadata
+  AssemblyRef `k` (empirical, consistent across images referencing 1/5/30 assemblies).
+  `ClrMetadataParser.parseStandalone` decodes the manifest blob.
+- Version-bubble images (`flags & 0x40`) are mostly *other assemblies'* generics: paint.net's
+  `ComputeSharp.Core.dll` has 34 KiB of its own code and 181 KiB of CoreLib instantiations.
+  Those can't be named without the other assembly; they show as `[Assembly]0x06xxxxxx` under
+  "Compiled from other assemblies". Resolving them from sibling files would be a host feature.
+- Size tree: `binaryProvider/ClrSizeAnalysis.kt` (`clrSizeClaims` + `clrSizeAnalysis`), used by
+  `PeBinaryProvider.sizeAnalysis` for managed images (native PE unchanged). Claims are made per
+  category in priority order and clipped linearly against earlier coverage (Windows exception dir ==
+  RuntimeFunctions). Implicit-size blobs (unwind+GC info, fixup signatures, GC ref maps) run to the
+  next blob / next claimed byte in a second pass. Gaps between two code claims → "Alignment and
+  read-only data" (jump tables/literal pools live there); other gaps: trailing 0x00/0xCC fill →
+  Padding (crossgen pads x86/x64 `.text` with int3), rest → Unattributed. RuntimeFunctions has a
+  4-byte 0xFFFFFFFF terminator outside its section size.
+- Validated against crossgen2 `--map --mapcsv` for all four fixture targets: every node lands in the
+  right group, x64 `.text` fully attributed. Real images: Unattributed in `.text` = 0 (ComputeSharp),
+  6 KiB / 10.4 MiB (PaintDotNet.Core), 75 KiB / 11.8 MiB (CoreLib); CoreLib tree in ~160 ms (JVM).
+- Fixtures `sample-r2r{,-win-x64,-win-x86,-linux-arm}.dll` + perfmaps from
+  `src/clr/r2r/build-r2r-fixtures.sh` (crossgen2 from the NuGet cache; deterministic).
+
 ## Fixture and measurements
 
 - `parsing/native-fixtures/test-data/pe/sample-clr.exe` from `src/clr/Sample.cs` (Roslyn `csc`,

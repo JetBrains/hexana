@@ -257,6 +257,8 @@ data class ClrMethodBody(
     val exceptionClauses: List<ClrExceptionClause> = emptyList(),
     /** Fat-header `InitLocals` flag: locals are zero-initialized (`.locals init`). */
     val initLocals: Boolean = false,
+    /** Exception handling sections after the code (4-byte aligned), when there are any. */
+    val exceptionSectionsRange: NativeByteRange? = null,
 )
 
 enum class ClrExceptionClauseKind(val label: String) {

@@ -790,6 +790,20 @@ object PeParser {
         return null
     }
 
+    /** File range of [size] bytes at [rva], or null when the RVA is unmapped or the range leaves the file. */
+    fun rvaRange(
+        bytes: CommonByteBuffer,
+        rva: UInt,
+        size: UInt,
+        optionalHeader: PeOptionalHeader,
+        sections: List<PeSection>,
+    ): NativeByteRange? {
+        if (rva == 0u || size == 0u) return null
+        val offset = rvaToFileOffset(bytes, rva, optionalHeader, sections) ?: return null
+        val length = size.toBoundedInt() ?: return null
+        return if (bytes.containsRange(offset, length)) NativeByteRange(offset, length) else null
+    }
+
     internal fun rvaToFileOffset(
         bytes: CommonByteBuffer,
         rva: UInt,

@@ -35,6 +35,33 @@ object ClrMetadataParser {
         return Decoder(bytes, header, readyToRun) { rva -> PeParser.rvaToFileOffset(bytes, rva, optionalHeader, sections) }.decode()
     }
 
+    /**
+     * Decodes a metadata blob that is not the image's own metadata — the ReadyToRun manifest
+     * metadata, for example. It has no CLI header, so method bodies and resources do not resolve.
+     */
+    fun parseStandalone(bytes: CommonByteBuffer, range: NativeByteRange): ClrMetadata {
+        val header = ClrCliHeader(
+            size = CLI_HEADER_SIZE.toUInt(),
+            majorRuntimeVersion = 0,
+            minorRuntimeVersion = 0,
+            metadataRva = 0u,
+            metadataSize = range.size.toUInt(),
+            flags = 0u,
+            entryPointToken = 0u,
+            resourcesRva = 0u,
+            resourcesSize = 0u,
+            strongNameSignatureRva = 0u,
+            strongNameSignatureSize = 0u,
+            vTableFixupsRva = 0u,
+            vTableFixupsSize = 0u,
+            managedNativeHeaderRva = 0u,
+            managedNativeHeaderSize = 0u,
+            headerRange = NativeByteRange(range.offset, 0),
+        )
+        // The only "RVA" the decoder asks for here is the metadata itself (RVA 0); method RVAs stay unresolved.
+        return Decoder(bytes, header, readyToRun = false) { rva -> if (rva == 0u) range.offset else null }.decode()
+    }
+
     /** Reads only the CLI header, without touching the metadata; null for native images. */
     fun parseCliHeader(bytes: CommonByteBuffer, optionalHeader: PeOptionalHeader, sections: List<PeSection>): ClrCliHeader? {
         val directory = optionalHeader.dataDirectories.getOrNull(PeDataDirectoryIndex.ClrRuntimeHeader) ?: return null
@@ -672,6 +699,7 @@ object ClrMetadataParser {
                     val codeSize = bytes.u32LeOrNull(offset + 4)?.toBoundedInt() ?: return null
                     val codeOffset = offset + headerSize
                     if (!bytes.containsRange(codeOffset, codeSize)) return null
+                    val exceptionSections = if (flags and MORE_SECTIONS != 0) parseExceptionSections(codeOffset + codeSize) else null
                     ClrMethodBody(
                         isFat = true,
                         maxStack = bytes.u16LeOrNull(offset + 2) ?: return null,
@@ -680,36 +708,44 @@ object ClrMetadataParser {
                         hasExceptionSections = flags and MORE_SECTIONS != 0,
                         range = NativeByteRange(offset, headerSize + codeSize),
                         codeRange = NativeByteRange(codeOffset, codeSize),
-                        exceptionClauses = if (flags and MORE_SECTIONS != 0) parseExceptionClauses(codeOffset + codeSize) else emptyList(),
+                        exceptionClauses = exceptionSections?.first.orEmpty(),
                         initLocals = flags and INIT_LOCALS != 0,
+                        exceptionSectionsRange = exceptionSections?.second,
                     )
                 }
                 else -> null
             }
         }
 
-        /** Exception handling sections (II.25.4.5) that follow a fat body's code, 4-byte aligned. */
-        private fun parseExceptionClauses(codeEnd: Int): List<ClrExceptionClause> {
+        /**
+         * Exception handling sections (II.25.4.5) that follow a fat body's code, 4-byte aligned:
+         * their clauses, and the bytes from the first section to the end of the last.
+         */
+        private fun parseExceptionSections(codeEnd: Int): Pair<List<ClrExceptionClause>, NativeByteRange?> {
             val clauses = ArrayList<ClrExceptionClause>()
-            var position = align4(codeEnd)
+            val first = align4(codeEnd)
+            var position = first
+            fun result() = clauses to NativeByteRange(first, position - first).takeIf { it.size > 0 }
             repeat(MAX_EXCEPTION_SECTIONS) {
-                val kind = bytes.byteOrNull(position) ?: return clauses
-                if (kind and SECTION_EH_TABLE == 0) return clauses
+                val kind = bytes.byteOrNull(position) ?: return result()
+                if (kind and SECTION_EH_TABLE == 0) return result()
                 val fat = kind and SECTION_FAT_FORMAT != 0
                 val dataSize = if (fat) {
-                    (bytes.u32LeOrNull(position) ?: return clauses).toInt() ushr 8
+                    (bytes.u32LeOrNull(position) ?: return result()).toInt() ushr 8
                 } else {
-                    bytes.byteOrNull(position + 1) ?: return clauses
+                    bytes.byteOrNull(position + 1) ?: return result()
                 }
-                if (dataSize < 4 || !bytes.containsRange(position, dataSize)) return clauses
+                if (dataSize < 4 || !bytes.containsRange(position, dataSize)) return result()
                 val clauseSize = if (fat) 24 else 12
                 for (index in 0 until (dataSize - 4) / clauseSize) {
                     parseExceptionClause(position + 4 + index * clauseSize, fat)?.let(clauses::add)
                 }
-                if (kind and SECTION_MORE_SECTIONS == 0) return clauses
-                position = align4(position + dataSize)
+                val more = kind and SECTION_MORE_SECTIONS != 0
+                position += dataSize
+                if (!more) return result()
+                position = align4(position)
             }
-            return clauses
+            return result()
         }
 
         private fun parseExceptionClause(offset: Int, fat: Boolean): ClrExceptionClause? {

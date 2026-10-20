@@ -43,6 +43,8 @@ import org.jetbrains.hexana.providers.pe.PeParser
 import org.jetbrains.hexana.providers.pe.PeSection
 import org.jetbrains.hexana.providers.pe.clr.ClrMetadata
 import org.jetbrains.hexana.providers.pe.clr.ClrMetadataParser
+import org.jetbrains.hexana.providers.pe.clr.ClrReadyToRunImage
+import org.jetbrains.hexana.providers.pe.clr.ClrReadyToRunParser
 import org.jetbrains.hexana.tar.TarEntry
 import org.jetbrains.hexana.tar.TarParser
 import org.jetbrains.hexana.zip.ZipEntry
@@ -693,21 +695,33 @@ class PeBinaryProvider(
         NativeImageDetector.fromPe(strings, sec, exports, bytes).takeIf { it !== NativeImageInfo.NONE }
     }
 
+    /**
+     * Native code of a ReadyToRun image mapped back to the methods it was compiled from; null for
+     * IL-only and native images. Decodes the ReadyToRun entry point tables on first use.
+     */
+    val readyToRunImage: ClrReadyToRunImage? by lazy {
+        val metadata = clrMetadata?.takeIf { it.readyToRun } ?: return@lazy null
+        val o = optionalHeader ?: return@lazy null
+        val s = sections ?: return@lazy null
+        val machine = coffHeader?.machine ?: return@lazy null
+        ClrReadyToRunParser.parse(bytes, metadata, machine, o, s)
+    }
+
     override val sizeAnalysis: BinarySizeNode? by lazy {
         val secs = sections?.takeIf { it.isNotEmpty() } ?: return@lazy null
-        val totalSize = bytes.size
-        val clrNodes = clrMetadata?.let(::clrSizeNodes).orEmpty()
+        val metadata = clrMetadata
+        val o = optionalHeader
+        if (metadata != null && o != null) {
+            return@lazy clrSizeAnalysis(bytes, secs, o, debugEntries.orEmpty(), metadata, readyToRunImage)
+        }
         val children = secs.map { sec ->
-            val start = sec.rawDataPointer.toLong()
-            val end = start + sec.rawDataSize.toLong()
             BinarySizeNode(
                 name = sec.name.ifBlank { "<unnamed>" },
                 size = sec.rawDataSize.toInt(),
                 offset = sec.rawDataPointer.toInt(),
-                children = clrNodes.filter { it.offset >= start && it.offset + it.size.toLong() <= end },
             )
         }
-        BinarySizeNode(name = "PE", size = totalSize, offset = 0, children = children)
+        BinarySizeNode(name = "PE", size = bytes.size, offset = 0, children = children)
     }
 
     override val structureRanges: List<StructureRange> by lazy {
@@ -719,30 +733,6 @@ class PeBinaryProvider(
                 label = sec.name.ifBlank { "<unnamed>" },
             )
         }
-    }
-}
-
-/**
- * Size-analysis nodes for the managed parts of a PE image, placed under the section that
- * contains them: the CLI metadata (with one child per stream) and embedded managed resources.
- */
-private fun clrSizeNodes(metadata: ClrMetadata): List<BinarySizeNode> = buildList {
-    val root = metadata.root
-    val streams = metadata.streams.mapNotNull { stream ->
-        stream.contentRange?.takeIf { it.size > 0 }?.let { BinarySizeNode(name = stream.name, size = it.size, offset = it.offset) }
-    }
-    if (root != null && streams.isNotEmpty()) {
-        val start = minOf(root.range.offset, streams.minOf { it.offset })
-        val end = streams.maxOf { it.offset + it.size }
-        add(BinarySizeNode(name = "CLR metadata", size = end - start, offset = start, children = streams))
-    }
-    val resources = metadata.manifestResources.mapNotNull { resource ->
-        resource.dataRange?.takeIf { it.size > 0 }?.let { BinarySizeNode(name = resource.name, size = it.size, offset = it.offset) }
-    }
-    if (resources.isNotEmpty()) {
-        val start = resources.minOf { it.offset }
-        val end = resources.maxOf { it.offset + it.size }
-        add(BinarySizeNode(name = "Managed resources", size = end - start, offset = start, children = resources))
     }
 }
 

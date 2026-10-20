@@ -124,7 +124,7 @@ class ClrTableTabsTest {
     fun `size analysis nests CLR metadata under its section`() {
         val text = assertNotNull(managed.sizeAnalysis).children.single { it.name == ".text" }
         val metadata = text.children.single { it.name == "CLR metadata" }
-        assertEquals(listOf("#~", "#Strings", "#US", "#GUID", "#Blob"), metadata.children.map { it.name })
+        assertTrue(metadata.children.map { it.name }.containsAll(listOf("#~", "#Strings", "#US", "#GUID", "#Blob", "Metadata root", "Stream headers")))
         assertEquals(listOf("Hexana.Sample.hello.txt"), text.children.single { it.name == "Managed resources" }.children.map { it.name })
     }
 }

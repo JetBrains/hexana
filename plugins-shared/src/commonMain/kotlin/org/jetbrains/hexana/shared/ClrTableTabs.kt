@@ -7,6 +7,7 @@ import org.jetbrains.hexana.providers.pe.clr.ClrField
 import org.jetbrains.hexana.providers.pe.clr.ClrHeaderFlags
 import org.jetbrains.hexana.providers.pe.clr.ClrMetadata
 import org.jetbrains.hexana.providers.pe.clr.ClrMethodDef
+import org.jetbrains.hexana.providers.pe.clr.ClrReadyToRunParser
 import org.jetbrains.hexana.providers.pe.clr.ClrTypeDef
 import org.jetbrains.hexana.providers.pe.clr.ClrTypeKind
 
@@ -321,7 +322,7 @@ internal fun clrHeaderFlagsLabel(flags: UInt): String {
  */
 internal fun clrPlatform(machine: Int?, header: ClrCliHeader, readyToRun: Boolean): String {
     if (machine == null) return "unknown"
-    val (os, nativeMachine) = if (readyToRun) readyToRunTarget(machine) else ("Windows" to machine)
+    val (os, nativeMachine) = if (readyToRun) ClrReadyToRunParser.target(machine) else ("Windows" to machine)
     val architecture = when (nativeMachine) {
         0x014C -> when {
             readyToRun -> "x86"
@@ -339,26 +340,6 @@ internal fun clrPlatform(machine: Int?, header: ClrCliHeader, readyToRun: Boolea
     }
     return if (readyToRun) "$architecture (ReadyToRun, $os)" else architecture
 }
-
-/** Splits a ReadyToRun COFF machine into the target OS and the plain machine it was XORed from. */
-private fun readyToRunTarget(machine: Int): Pair<String, Int> {
-    if (machine in KNOWN_CLR_MACHINES) return "Windows" to machine
-    for ((os, override) in READY_TO_RUN_OS_OVERRIDES) {
-        val candidate = machine xor override
-        if (candidate in KNOWN_CLR_MACHINES) return os to candidate
-    }
-    return "unknown OS" to machine
-}
-
-private val KNOWN_CLR_MACHINES = setOf(0x014C, 0x8664, 0xAA64, 0x01C4, 0x6264, 0x5064)
-
-private val READY_TO_RUN_OS_OVERRIDES = listOf(
-    "macOS" to 0x4644,
-    "Linux" to 0x7B79,
-    "FreeBSD" to 0xADC4,
-    "NetBSD" to 0x1993,
-    "SunOS" to 0x1992,
-)
 
 private fun clrHashAlgorithm(algorithm: UInt): String = when (algorithm) {
     0u -> "none"

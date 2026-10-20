@@ -143,6 +143,23 @@ class ClrFixtureParserTest {
 }
 
 class ClrMalformedInputTest {
+    @Test
+    fun `survives random corruption of ReadyToRun images`() {
+        for (name in listOf("sample-r2r-win-x64", "sample-r2r", "sample-r2r-win-x86", "sample-r2r-linux-arm")) {
+            val original = Path.of(System.getProperty("user.dir"))
+                .resolve("../native-fixtures/test-data/pe/$name.dll").normalize().readBytes()
+            val random = kotlin.random.Random(name.hashCode())
+            repeat(1_500) {
+                val corrupted = original.copyOf()
+                repeat(1 + random.nextInt(12)) { corrupted[random.nextInt(0x200, corrupted.size)] = random.nextInt(256).toByte() }
+                val buffer = corrupted.toCommonByteBuffer()
+                val pe = (PeParser.parse(buffer) as? NativeParseSuccess<PeFile>)?.value as? PeImageFile ?: return@repeat
+                val clr = pe.clr ?: return@repeat
+                ClrReadyToRunParser.parse(buffer, clr, pe.coffHeader.machine, pe.optionalHeader, pe.sections)
+            }
+        }
+    }
+
     private val bytes = Path.of(System.getProperty("user.dir"))
         .resolve("../native-fixtures/test-data/pe/sample-clr.exe")
         .normalize()
