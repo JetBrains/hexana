@@ -95,13 +95,29 @@ object ClrResourcesParser {
             // The writer pads with "PAD" bytes to align the hash table on 8 bytes from the start.
             while ((position - start) and 7 != 0) position++
             position += 4 * count // name hashes
-            val namePositions = IntArray(count) { u32().toInt() }
+            // Decode at most MAX_RESOURCES entries, but read past the whole table to its end.
+            val decoded = count.coerceAtMost(MAX_RESOURCES)
+            val namePositions = IntArray(decoded) { u32().toInt() }
+            position += 4 * (count - decoded)
             val dataSectionOffset = u32().toInt()
             val nameSection = position
             val dataSection = start + dataSectionOffset
             if (dataSection < nameSection || dataSection > end) throw Malformed()
 
-            val entries = (0 until count).map { index -> readName(index, nameSection, dataSection, namePositions[index]) }
+            if (decoded < count) {
+                warn("clr.resources.truncated", "The file declares $count resources; only the first $decoded are shown.")
+            }
+            // ResourceWriter gives every resource its own name entry. Several entries sharing one is
+            // malformed, and decoding the shared name again for each would let a small file declare
+            // a huge number of resources; each name offset is decoded once.
+            val seenNames = HashSet<Int>()
+            val entries = (0 until decoded).map { index ->
+                if (!seenNames.add(namePositions[index])) return@map null
+                readName(index, nameSection, dataSection, namePositions[index])
+            }
+            if (seenNames.size < decoded) {
+                warn("clr.resources.shared_names", "${decoded - seenNames.size} resources reuse another resource's name entry and were skipped.")
+            }
             // A value's extent is only implicit for serialized data: it runs to the next value.
             val valueStarts = entries.mapNotNull { it?.dataOffset }.filter { it in dataSection until end }.distinct().sorted().toIntArray()
             val resources = entries.mapNotNull { entry ->
@@ -242,8 +258,12 @@ object ClrResourcesParser {
         }
 
         private fun invalid(message: String): NameEntry? {
-            diagnostics += NativeParserDiagnostic("clr.resources.invalid_name", message, severity = NativeParserSeverity.Warning)
+            warn("clr.resources.invalid_name", message)
             return null
+        }
+
+        private fun warn(code: String, message: String) {
+            diagnostics += NativeParserDiagnostic(code, message, severity = NativeParserSeverity.Warning)
         }
 
         private fun byte(): Int = (if (position < end) bytes.byteOrNull(position) else null)?.also { position++ } ?: throw Malformed()
@@ -276,15 +296,31 @@ object ClrResourcesParser {
     }
 }
 
-/** `DateTime.ToBinary()`: ticks since 0001-01-01 in the low 62 bits, the kind in the top two. */
+/**
+ * `DateTime.ToBinary()`: ticks since 0001-01-01 in the low 62 bits, the kind in the top two.
+ *
+ * A `Kind=Local` value does not store its wall-clock time: `ToBinary` converts it to the UTC
+ * instant (wrapping instants before year 1 by `TicksCeiling`), and `FromBinary` converts back to
+ * whatever zone the reader is in. The writer's offset is gone, so local values are shown as the
+ * UTC instant they hold.
+ */
 internal fun formatDateTime(binary: Long): String {
     val kind = (binary ushr 62).toInt()
-    val ticks = binary and 0x3FFFFFFFFFFFFFFFL
-    val days = ticks / TICKS_PER_DAY
-    val timeOfDay = ticks % TICKS_PER_DAY
+    var ticks = binary and TICKS_MASK
+    if (kind >= KIND_LOCAL) {
+        if (ticks > TICKS_CEILING - TICKS_PER_DAY) ticks -= TICKS_CEILING
+        return civilDateTime(ticks) + "Z, Kind=Local"
+    }
+    return civilDateTime(ticks) + if (kind == KIND_UTC) "Z" else ""
+}
+
+/** `yyyy-MM-ddTHH:mm:ss[.fffffff]` for [ticks] since 0001-01-01 (negative: before it, as year 0). */
+private fun civilDateTime(ticks: Long): String {
+    val days = ticks.floorDiv(TICKS_PER_DAY)
+    val timeOfDay = ticks.mod(TICKS_PER_DAY)
     // Civil date from a day count (H. Hinnant's algorithm), shifted from 0001-01-01 to 0000-03-01.
     val z = days + 306
-    val era = z / 146097
+    val era = z.floorDiv(146097L)
     val dayOfEra = z - era * 146097
     val yearOfEra = (dayOfEra - dayOfEra / 1460 + dayOfEra / 36524 - dayOfEra / 146096) / 365
     val dayOfYear = dayOfEra - (365 * yearOfEra + yearOfEra / 4 - yearOfEra / 100)
@@ -292,13 +328,7 @@ internal fun formatDateTime(binary: Long): String {
     val day = dayOfYear - (153 * monthIndex + 2) / 5 + 1
     val month = if (monthIndex < 10) monthIndex + 3 else monthIndex - 9
     val year = yearOfEra + era * 400 + if (month <= 2) 1 else 0
-    val date = "${year.toString().padStart(4, '0')}-${two(month)}-${two(day)}"
-    val suffix = when (kind) {
-        1 -> "Z"
-        2, 3 -> " (local)"
-        else -> ""
-    }
-    return date + "T" + clock(timeOfDay) + suffix
+    return "${year.toString().padStart(4, '0')}-${two(month)}-${two(day)}T${clock(timeOfDay)}"
 }
 
 /** `TimeSpan` in its constant ("c") format: `[-][d.]hh:mm:ss[.fffffff]`. */
@@ -318,8 +348,14 @@ private fun clock(ticksOfDay: Long): String {
 
 private fun two(value: Long): String = value.toString().padStart(2, '0')
 
+/** Same cap as the `#US` heap's user strings: far above any real resource set. */
+private const val MAX_RESOURCES = 200_000
 private const val TICKS_PER_SECOND = 10_000_000L
 private const val TICKS_PER_DAY = 86_400L * TICKS_PER_SECOND
+private const val TICKS_MASK = 0x3FFFFFFFFFFFFFFFL
+private const val TICKS_CEILING = 0x4000000000000000L
+private const val KIND_UTC = 1
+private const val KIND_LOCAL = 2 // 3 is local in a DST-ambiguous hour
 
 // `ResourceTypeCode`.
 private const val TYPE_NULL = 0x00

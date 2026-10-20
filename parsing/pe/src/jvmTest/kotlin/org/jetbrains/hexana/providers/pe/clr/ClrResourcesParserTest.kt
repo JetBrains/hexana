@@ -80,8 +80,48 @@ class ClrResourcesParserTest {
     fun `formats dates and time spans like the runtime`() {
         assertEquals("0001-01-01T00:00:00", formatDateTime(0))
         assertEquals("2000-02-29T12:00:00Z", formatDateTime((1L shl 62) or 630_874_224_000_000_000L))
+        // Kind=Local stores the UTC instant: 2026-10-20 13:45:30 in Europe/Berlin (UTC+2), as Mono's
+        // DateTime.ToBinary() wrote it, holds 11:45:30Z.
+        assertEquals("2026-10-20T11:45:30Z, Kind=Local", formatDateTime(0x88DF2E9FA43C6900uL.toLong()))
+        // 0001-01-01 00:30 local in Berlin (LMT, +0:54) is before year 1 in UTC; ToBinary wraps it.
+        assertEquals("0000-12-31T23:36:00Z, Kind=Local", formatDateTime(0xBFFFFFFCA5B17000uL.toLong()))
         assertEquals("-00:00:01.5000000", formatTimeSpan(-15_000_000))
         assertEquals("00:00:00", formatTimeSpan(0))
+    }
+
+    /**
+     * A resource set declaring [count] string resources. With [uniqueNames] each has its own empty
+     * name entry (5 bytes: length 0 plus the value offset); otherwise all point at one shared name.
+     */
+    private fun crafted(count: Int, uniqueNames: Boolean): ByteArray {
+        val out = java.io.ByteArrayOutputStream()
+        fun u32(value: Int) = repeat(4) { out.write(value ushr (8 * it)) }
+        u32(ClrResourcesParser.MAGIC.toInt()); u32(1); u32(2); out.write(0); out.write(0)
+        u32(2); u32(count); u32(0)
+        while (out.size() % 8 != 0) out.write('P'.code)
+        repeat(count) { u32(0) } // name hashes
+        repeat(count) { u32(if (uniqueNames) it * 5 else 0) }
+        val nameSectionSize = if (uniqueNames) count * 5 else 5
+        u32(out.size() + 4 + nameSectionSize)
+        repeat(if (uniqueNames) count else 1) { out.write(0); u32(0) }
+        out.write(1); out.write(1); out.write('v'.code) // the shared value: string "v"
+        return out.toByteArray()
+    }
+
+    @Test
+    fun `resources sharing one name entry are decoded once`() {
+        // 500k entries in ~4 MB pointing at one name used to retain ~100 MB of duplicate records.
+        val file = assertNotNull(ClrResourcesParser.parse(crafted(500_000, uniqueNames = false).toCommonByteBuffer()))
+        assertEquals(1, file.resources.size)
+        assertTrue(file.diagnostics.any { it.code == "clr.resources.shared_names" })
+    }
+
+    @Test
+    fun `resource count is capped`() {
+        val file = assertNotNull(ClrResourcesParser.parse(crafted(250_000, uniqueNames = true).toCommonByteBuffer()))
+        assertEquals(200_000, file.resources.size)
+        assertTrue(file.diagnostics.any { it.code == "clr.resources.truncated" })
+        assertTrue(file.resources.all { it.value == "v" })
     }
 
     @Test

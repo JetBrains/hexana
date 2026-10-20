@@ -151,6 +151,13 @@ reflection-based API summary; `binary.format` stays `"pe"`.
   `nativeOrGenericBinaryProvider`; format id `dotnet-resources`. Tabs: `ClrResourcesTableTabs.kt`
   (Header, Resources; cheap names + `singleTab`). Embedded `*.resources` rows in the assembly's
   `.NET Metadata → Resources` tab expand via `clrResourceChildRows` (decoded on first expansion).
+- Review fixes: name offsets are decoded once (several entries sharing one name entry let a 4 MB file
+  retain ~100 MB) and at most 200,000 resources (`clr.resources.shared_names` / `.truncated`).
+  `Kind=Local` DateTimes hold the UTC instant (`ToBinary`), wrapped by `TicksCeiling` before year 1, and
+  are shown as `…Z, Kind=Local`. Embedded sets are decoded when the Resources descriptor is built (a
+  background job in IntelliJ), because tree tables call `childrenProvider` for every root row while composing.
+- Webapp: the parser-worker protocol (`ParserWorkerPresentationProtocol.supportedFormats`) must list every
+  id `nonWasmFormat` emits, or the worker posts PARSE_FAILED; `arsc`, `parquet`, `arrow` were missing too.
 - Hosts: IntelliJ `HexanaFileEditorProvider` extension; VS Code `package.json` pattern,
   `KNOWN_EXTENSIONS`, `isNativeBinary` magic, `HEXANA_DIFF_EXTENSIONS`, `OPENABLE_ENTRY_EXTENSIONS`;
   webapp worker format id; scripting `.d.ts` regenerated.

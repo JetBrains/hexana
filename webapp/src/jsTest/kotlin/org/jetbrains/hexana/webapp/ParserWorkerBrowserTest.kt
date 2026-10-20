@@ -271,6 +271,38 @@ class ParserWorkerBrowserTest {
         }
 
     @Test
+    fun realWorkerParsesDotNetResourcesWithWorkerDerivedLabelAndTables(): Promise<Unit> =
+        assertRealWorkerPresentation(minimalResourcesBuffer(), ".resources", fileName = "Strings.resources") { presentation ->
+            assertEquals("dotnet-resources", presentation.format)
+            assertEquals(".NET Resources", presentation.displayLabel)
+            assertEquals(listOf("Header", "Resources"), presentation.tables.map { it.id }.filter { it == "Header" || it == "Resources" })
+        }
+
+    @Test
+    fun workerScriptsSeeFormatSpecificRawMembers(): Promise<Unit> = Promise { resolve, reject ->
+        // `binary.raw` used to stop at bytes/sizeAnalysis/strings for every non-Wasm provider,
+        // though the raw .d.ts declares each provider's own members too.
+        val lines = mutableListOf<String>()
+        WorkerScriptExecution(minimalResourcesBytes(), "Strings.resources").start(
+            scriptContent = """
+                print(binary.raw.parsedResources.resources.length);
+                print(binary.raw.parsedResources.resources[0].name + "=" + binary.raw.parsedResources.resources[0].value);
+                print(binary.raw.strings.length);
+            """.trimIndent(),
+            onLine = { lines += it },
+            onComplete = { error ->
+                try {
+                    assertEquals(null, error)
+                    assertEquals(listOf("1", "Greeting=Hi", "1"), lines)
+                    resolve(Unit)
+                } catch (failure: Throwable) {
+                    reject(failure)
+                }
+            },
+        )
+    }
+
+    @Test
     fun realWorkerParsesDexWithWorkerDerivedLabelAndTables(): Promise<Unit> =
         assertRealWorkerPresentation(minimalDexBuffer(), "DEX") { presentation ->
             assertEquals("dex", presentation.format)
@@ -645,6 +677,37 @@ private fun minimalClassFileBuffer(): ArrayBuffer = binaryBuffer(
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     ),
 )
+
+/**
+ * A `.resources` file holding one string, `Greeting` = `Hi`, laid out as `ResourceWriter` writes it:
+ * ResourceManager header, reader header padded to 8 bytes, one hash and name offset, the data
+ * section offset, the UTF-16 name with its value offset, then the type-coded value.
+ */
+private fun minimalResourcesBuffer(): ArrayBuffer = binaryBuffer(minimalResourcesBytes())
+
+private fun minimalResourcesBytes(): ByteArray {
+    val out = ArrayList<Byte>()
+    fun u32(value: Int) = repeat(4) { out += (value ushr (8 * it)).toByte() }
+    fun string(value: String) = value.encodeToByteArray().let { out += it.size.toByte(); out += it.toList() }
+    u32(0xBEEFCACE.toInt()); u32(1)
+    val readerType = "System.Resources.ResourceReader, mscorlib"
+    val setType = "System.Resources.RuntimeResourceSet"
+    u32(2 + readerType.length + setType.length)
+    string(readerType); string(setType)
+    u32(2); u32(1); u32(0) // version, one resource, no user types
+    while (out.size % 8 != 0) out += 'P'.code.toByte()
+    u32(0x12345678) // name hash
+    u32(0) // name offset in the name section
+    val name = "Greeting"
+    val nameEntrySize = 1 + name.length * 2 + 4
+    u32(out.size + 4 + nameEntrySize) // data section offset, absolute
+    out += (name.length * 2).toByte()
+    name.forEach { out += it.code.toByte(); out += 0 }
+    u32(0) // value offset in the data section
+    out += 1 // ResourceTypeCode.String
+    string("Hi")
+    return out.toByteArray()
+}
 
 private fun minimalDexBuffer(): ArrayBuffer {
     val bytes = ByteArray(112)

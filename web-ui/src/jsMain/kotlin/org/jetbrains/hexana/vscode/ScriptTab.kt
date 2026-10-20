@@ -7,6 +7,7 @@ import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.shared.scripting.ScriptApiReference
+import org.jetbrains.hexana.shared.scripting.clrResourcesScriptValue
 import org.jetbrains.hexana.shared.scripting.ScriptOutput
 import org.jetbrains.hexana.shared.scripting.SCRIPT_OPEN_REQUEST_MEMBER
 import org.jetbrains.hexana.shared.scripting.ScriptOpenRequestBlocked
@@ -90,10 +91,22 @@ private fun wrapForJs(value: Any?): dynamic {
         is TarBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapTarBinaryProvider(obj, value) }
         is ClassFileBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapClassFileBinaryProvider(obj, value) }
         is DexBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapDexBinaryProvider(obj, value) }
+        // Both extend GenericBinaryProvider, so they must come before it or their own members vanish.
+        is ArscBinaryProvider -> wrapBinaryProvider(obj, value).also {
+            wrapGenericBinaryProvider(obj, value)
+            defineLazyProp(obj, "parsedArscFile") { value.parsedArscFile }
+        }
+        is ClrResourcesBinaryProvider -> wrapBinaryProvider(obj, value).also {
+            wrapGenericBinaryProvider(obj, value)
+            // A plain value rather than the parsed object: production builds minimize member
+            // names, so the reflective fallback below cannot see into Kotlin objects there.
+            defineLazyProp(obj, "parsedResources") { value.parsedResources?.let(::clrResourcesScriptValue) }
+        }
         is GenericBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapGenericBinaryProvider(obj, value) }
         is BinaryProvider -> wrapBinaryProvider(obj, value)
         is BinaryStringRecord -> wrapBinaryStringRecord(obj, value)
         is BinarySizeNode -> wrapBinarySizeNode(obj, value)
+        is Map<*, *> -> for ((key, entry) in value) defineLazyProp(obj, key.toString()) { entry }
         else -> return wrapUnknownObject(value)
     }
     return obj
@@ -227,6 +240,10 @@ private fun wrapPeBinaryProvider(obj: dynamic, p: PeBinaryProvider) {
     defineLazyProp(obj, "baseRelocations") { p.baseRelocations }
     defineLazyProp(obj, "debugEntries") { p.debugEntries }
     defineLazyProp(obj, "coffSymbols") { p.coffSymbols }
+    defineLazyProp(obj, "isManaged") { p.isManaged }
+    defineLazyProp(obj, "hasOnlyManagedCode") { p.hasOnlyManagedCode }
+    defineLazyProp(obj, "clrMetadata") { p.clrMetadata }
+    defineLazyProp(obj, "readyToRunImage") { p.readyToRunImage }
 }
 
 private fun wrapCoffBinaryProvider(obj: dynamic, p: CoffBinaryProvider) {
@@ -305,7 +322,7 @@ private fun wrapUnknownObject(value: Any?): dynamic {
             var wrapper = {};
             var foundAny = false;
             var seen = {};
-            var getterPattern = /^get_(.+?)_[a-z0-9]+$/;
+            var getterPattern = /^get_(.+?)_[a-z0-9]+(?:_k\$)?$/;
             // Walk prototype chain for Kotlin/JS IR mangled getters
             var p = Object.getPrototypeOf(v);
             while (p && p !== Object.prototype) {

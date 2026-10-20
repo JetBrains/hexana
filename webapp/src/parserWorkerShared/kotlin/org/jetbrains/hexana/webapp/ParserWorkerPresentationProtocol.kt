@@ -51,9 +51,10 @@ private const val MAX_TOOLBAR_PROPOSAL_ID_CHARS = 64
 private const val MAX_TOOLBAR_RUNNABLE_EXPORT_CHARS = 64
 private const val MAX_NATIVE_IMAGE_TEXT_CHARS = 1_024
 
+/** Every id the worker's `nonWasmFormat` can emit; one missing here turns that format into PARSE_FAILED. */
 private val supportedFormats = setOf(
-    "core_wasm", "wasm_component", "zip", "class", "dex", "pcap", "protobuf",
-    "elf", "macho", "fat_macho", "pe", "coff", "archive", "generic",
+    "core_wasm", "wasm_component", "zip", "class", "dex", "arsc", "dotnet-resources", "pcap", "protobuf",
+    "elf", "macho", "fat_macho", "pe", "coff", "archive", "parquet", "arrow", "generic",
 )
 private val supportedCapabilities = setOf("summary", "structural_ranges", "tables", "diagnostics", "component_dependency_graph")
 private val supportedGraphNodeKinds = setOf("import", "module", "nested_component", "core_instance", "instance", "export")
@@ -72,6 +73,8 @@ private val supportedLegacyTabsByFormat = mapOf(
     "zip" to emptySet(),
     "class" to emptySet(),
     "dex" to emptySet(),
+    "arsc" to emptySet(),
+    "dotnet-resources" to emptySet(),
     "pcap" to emptySet(),
     "protobuf" to emptySet(),
     "elf" to emptySet(),
@@ -80,6 +83,8 @@ private val supportedLegacyTabsByFormat = mapOf(
     "pe" to emptySet(),
     "coff" to emptySet(),
     "archive" to emptySet(),
+    "parquet" to emptySet(),
+    "arrow" to emptySet(),
     "generic" to emptySet(),
 )
 private const val RECORD_LIMIT_REASON = "record_limit"

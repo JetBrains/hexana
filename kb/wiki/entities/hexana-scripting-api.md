@@ -185,3 +185,21 @@ already accepts an arbitrary `path` as its binary source under the same policy, 
 `open` reads the same set of files by a different route. Restating this in the tool
 guidance (which claimed "no file IO") is what moved `EXPECTED_SEMANTIC` in
 `HexanaToolCompatibilityTest`.
+
+## Browser hosts and `binary.raw` (2026-10-20)
+
+- Both browser hosts build `binary.raw` from explicit per-provider wrappers (`web-ui` `ScriptTab.wrapForJs`,
+  webapp worker `ParserWorkerMain.scriptValue`) and fall back to reflection over Kotlin/JS getters.
+- **The reflective fallback does not work in production bundles**: member names are minimized there
+  (a production `parser-worker.js` / webview `hexana-plugins-shared.js` contains no `get_…_k$` names).
+  So nested Kotlin objects under `binary.raw` (a PE's `sections[0].name`, …) are unreadable in the shipped
+  VS Code webview and webapp, though the generated raw `.d.ts` declares them. It only works in
+  development/test bundles. Fixing it generally needs a reflection-free serializer (or `@JsExport`).
+- The getter regex also missed Kotlin 2's `_k$` suffix (`get_<name>_<hash>_k$`); fixed in both hosts,
+  which matters only where names survive.
+- What must work in production is mapped explicitly. `.resources`: `binary.raw.parsedResources` is a plain
+  map/list tree from `plugins-shared` `clrResourcesScriptValue` (keys = the data classes' fields, checked by
+  `ClrResourcesScriptValueTest`); both hosts turn a Kotlin `Map` into a JS object.
+- The webapp worker exposes only `bytes`/`sizeAnalysis`/`strings` (+ Wasm members, `nativeFormat`,
+  `parsedResources`) for non-Wasm providers: once those are defined the reflective pass is skipped.
+

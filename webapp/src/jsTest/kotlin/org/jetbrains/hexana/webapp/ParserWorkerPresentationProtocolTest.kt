@@ -10,6 +10,28 @@ import kotlin.test.assertTrue
 
 class ParserWorkerPresentationProtocolTest {
     @Test
+    fun everyFormatTheWorkerEmitsIsAcceptedByTheProtocol() {
+        // The ids `nonWasmFormat` in ParserWorkerMain can return. One the protocol does not know
+        // fails the producer's own validation, so the whole file opens as "Failed to parse".
+        val emitted = listOf(
+            "zip", "class", "dex", "arsc", "dotnet-resources", "pcap", "protobuf", "elf", "macho",
+            "fat_macho", "pe", "coff", "archive", "parquet", "arrow", "generic",
+        )
+        for (format in emitted) {
+            val presentation = representativePresentation(8).copy(
+                format = format,
+                capabilities = listOf("summary", "structural_ranges", "tables"),
+                diagnostics = emptyList(),
+                legacyTabs = emptyList(),
+                toolbar = ParserWorkerToolbar(),
+                tables = listOf(ParserWorkerTable("Header", emptyList())),
+            )
+            val decoded = assertNotNull(decodeParserWorkerSuccess(encodeBoundedParserWorkerSuccess("request", presentation), "request"), format)
+            assertEquals(format, decoded.presentation.format)
+        }
+    }
+
+    @Test
     fun componentFunctionSortNeverCreatesAnInstanceEdgeFromTheSameIndex() {
         assertNull(componentGraphSourceId(ComponentSort.Func, 0))
         assertEquals("instance:0", componentGraphSourceId(ComponentSort.Instance, 0))

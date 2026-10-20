@@ -13,6 +13,7 @@ import org.jetbrains.hexana.providers.ArchiveBinaryProvider
 import org.jetbrains.hexana.providers.ArrowBinaryProvider
 import org.jetbrains.hexana.providers.ArscBinaryProvider
 import org.jetbrains.hexana.providers.ClrResourcesBinaryProvider
+import org.jetbrains.hexana.shared.scripting.clrResourcesScriptValue
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.providers.CoffBinaryProvider
@@ -287,6 +288,12 @@ private fun scriptValue(value: Any?): dynamic {
         value.forEach { result.push(scriptValue(it)) }
         return result
     }
+    // Plain values built for scripts (see clrResourcesScriptValue): one property per entry.
+    if (value is Map<*, *>) {
+        val result = js("({})")
+        for ((key, entry) in value) defineScriptValue(result, key.toString()) { entry }
+        return result
+    }
     val objectValue = js("({})")
     when (value) {
         is BinaryProvider -> {
@@ -306,18 +313,24 @@ private fun scriptValue(value: Any?): dynamic {
         defineScriptValue(objectValue, "functions") { value.functions }
     }
     if (value is GenericBinaryProvider) defineScriptValue(objectValue, "nativeFormat") { value.nativeFormat }
+    if (value is ClrResourcesBinaryProvider) {
+        defineScriptValue(objectValue, "parsedResources") { value.parsedResources?.let(::clrResourcesScriptValue) }
+    }
     @Suppress("UNUSED_VARIABLE")
     val sourceValue = value.asDynamic()
     @Suppress("UNUSED_VARIABLE")
     val objectValueValue = objectValue
     @Suppress("UNUSED_VARIABLE")
     val wrapValue: (Any?) -> dynamic = ::scriptValue
+    // Reflection only finds getters in development builds: production bundles minimize member
+    // names, so anything a script must reach in the shipped webapp is mapped explicitly above.
+    // Kotlin/JS IR names public getters `get_<name>_<hash>_k$`.
     return js("""
         (function(source, objectValue, wrap) {
             if (Object.keys(objectValue).length !== 0) return objectValue;
             var result = {};
             var prototype = Object.getPrototypeOf(source);
-            var getterPattern = /^get_(.+?)_[a-z0-9]+$/;
+            var getterPattern = /^get_(.+?)_[a-z0-9]+(?:_k\$)?$/;
             while (prototype && prototype !== Object.prototype) {
                 Object.getOwnPropertyNames(prototype).forEach(function(name) {
                     var match = name.match(getterPattern);

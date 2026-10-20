@@ -262,11 +262,11 @@ private fun clrUserStringsTab(metadata: ClrMetadata): TableTabDescriptor? {
 
 private fun clrResourcesTab(provider: PeBinaryProvider, metadata: ClrMetadata): TableTabDescriptor? {
     val resources = metadata.manifestResources.takeIf { it.isNotEmpty() } ?: return null
-    // Embedded `.resources` sets expand to their entries; decoded on first expansion only.
-    val decoded = HashMap<Int, TableTabChildRows?>()
-    fun entries(index: Int): TableTabChildRows? = decoded.getOrPut(index) {
-        val resource = resources[index]
-        val data = resource.dataRange?.takeIf { resource.name.endsWith(".resources", ignoreCase = true) } ?: return@getOrPut null
+    // Embedded `.resources` sets expand to their entries. Decoded here, while the descriptor is
+    // built (a background job in IntelliJ), rather than on demand: tree tables ask every root row
+    // for its children just to draw the expand arrow, and they do that while composing the table.
+    val entries: List<TableTabChildRows?> = resources.map { resource ->
+        val data = resource.dataRange?.takeIf { resource.name.endsWith(".resources", ignoreCase = true) } ?: return@map null
         ClrResourcesParser.parse(provider.bytes, data)?.let(::clrResourceChildRows)
     }
     return TableTabDescriptor(
@@ -279,7 +279,7 @@ private fun clrResourcesTab(provider: PeBinaryProvider, metadata: ClrMetadata): 
         ),
         rowCount = resources.size,
         rowSelectionProvider = { resources.getOrNull(it)?.let { resource -> selection(resource.dataRange ?: resource.recordRange) } },
-        childrenProvider = { index -> if (index in resources.indices) entries(index) else null },
+        childrenProvider = { index -> entries.getOrNull(index) },
     )
 }
 
