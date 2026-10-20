@@ -33,7 +33,7 @@ import org.jetbrains.hexana.providers.pe.clr.ClrTypeDef
 // ---------------------------------------------------------------------------
 
 /** Tab label of the IL view, shared so every host names the tab identically. */
-const val CLR_IL_TAB_NAME: String = "IL"
+const val CLR_IL_TAB_NAME: String = "IL Disassembly"
 
 /** Section kinds of the IL view; see [clrIlChunkTree]. */
 object ClrIlSectionKinds {

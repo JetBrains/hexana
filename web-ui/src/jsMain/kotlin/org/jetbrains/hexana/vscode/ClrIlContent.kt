@@ -18,7 +18,7 @@ import org.jetbrains.hexana.shared.clrIlTypeRows
 import org.jetbrains.hexana.shared.clrIlTypes
 
 /**
- * Builds the **IL** tab for a .NET assembly, mirroring the IntelliJ plugin's `ClrIlPanel`. Rows,
+ * Builds the **IL Disassembly** tab for a .NET assembly, mirroring the IntelliJ plugin's `ClrIlPanel`. Rows,
  * operand resolution and exception clauses all come from `plugins-shared`'s `ClrIlText.kt`;
  * this file only draws them, the same way [dexSmaliExtraTabs] draws smali.
  */

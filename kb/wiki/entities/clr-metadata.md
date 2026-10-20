@@ -59,7 +59,7 @@ reflection-based API summary; `binary.format` stays `"pe"`.
 - Text model: `plugins-shared/ClrIlText.kt`, a sibling of `DexSmaliText.kt` (type header +
   lazily rendered body chunks; rows carry `fileOffset` + `byteSize`). Its chunk tree maps not only
   TypeDef rows but also Field/MethodDef rows and method bodies back to the type body, so a hex
-  offset inside IL finds its type. Tab name `CLR_IL_TAB_NAME` = "IL".
+  offset inside IL finds its type. Tab name `CLR_IL_TAB_NAME` = "IL Disassembly".
 - Hosts: IntelliJ `ui/panel/ClrIlPanel.kt` (VirtualizedChunkPanel; gutter click scrolls and selects
   the row's bytes), web `web-ui/.../ClrIlContent.kt` via `computeExtraTabs` for a managed
   `PeBinaryProvider`. Both are near-copies of the Smali hosts; a shared "foldable class listing"
