@@ -49,5 +49,27 @@ namespace Hexana.Sample
             Console.WriteLine(g.Greet(list[0]));
             return list.Count;
         }
+
+        public static string Describe(int value)
+        {
+            try
+            {
+                switch (value)
+                {
+                    case 0: return "zero";
+                    case 1: return "one";
+                    case 2: return "two";
+                    default: return new Box<int> { Value = value }.Map<string>(v => v.ToString());
+                }
+            }
+            catch (FormatException)
+            {
+                return "bad";
+            }
+            finally
+            {
+                Greeter.Counter++;
+            }
+        }
     }
 }

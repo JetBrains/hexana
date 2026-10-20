@@ -89,7 +89,8 @@ class DiffPayload(
  *
  * [provider] is optional but worth passing: for a DEX it is a
  * [DexBinaryProvider] that has already parsed the file, so handing it over
- * avoids decoding the string table a second time. The DWARF tabs need it outright - they read
+ * avoids decoding the string table a second time. A .NET assembly gets its IL tab only from a
+ * [PeBinaryProvider]. The DWARF tabs need it outright - they read
  * custom sections off an already-parsed wasm module and are skipped without one.
  */
 fun computeExtraTabs(
@@ -112,6 +113,11 @@ fun computeExtraTabs(
                 null
             }
         return if (dex != null) dexSmaliExtraTabs(dex, buffer) else emptyList()
+    }
+    // isManaged reads only the data directory; the metadata itself is decoded here, once, and
+    // shared with the provider's table tabs.
+    if (provider is PeBinaryProvider && provider.isManaged) {
+        return provider.clrMetadata?.let { clrIlExtraTabs(it, provider.bytes) }.orEmpty()
     }
     return dwarfExtraTabs(provider ?: return emptyList())
 }

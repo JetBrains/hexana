@@ -62,12 +62,14 @@ import org.jetbrains.hexana.HexanaLog
 import org.jetbrains.hexana.nativebin.JVM_FILE_SYSTEM
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.providers.DexBinaryProvider
+import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.features.RuntimeTargetsService
 import org.jetbrains.hexana.features.WasmFeatureCatalogService
 import org.jetbrains.hexana.features.WasmRuntimeCompatibilityConfigurable
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.shared.COMPATIBILITY_TAB_NAME
 import org.jetbrains.hexana.shared.PROBLEMS_TAB_NAME
+import org.jetbrains.hexana.shared.CLR_IL_TAB_NAME
 import org.jetbrains.hexana.shared.DEX_SMALI_TAB_NAME
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
 import org.jetbrains.hexana.shared.NativeDebugTabData
@@ -1126,9 +1128,13 @@ private fun NativeBinaryProvider.commonNativePanels(
     executionOffsetFlow: StateFlow<Long?>? = null,
     onToggleNativeBreakpoint: ((va: Long) -> Unit)? = null,
     onDeleteBreakpoint: ((id: String) -> Unit)? = null,
+    /** False for images without native code (pure IL assemblies), where both disassembly views would be empty. */
+    includeDisassembly: Boolean = true,
 ): List<Panel> {
+    val sbom = Panel("SBOM") { CycloneDxSbomPanel(this, state) }.takeIf { this.nativeImageInfo?.sbom != null }
+    if (!includeDisassembly) return listOfNotNull(sbom)
     return listOfNotNull(
-        Panel("SBOM") { CycloneDxSbomPanel(this, state) }.takeIf { this.nativeImageInfo?.sbom != null },
+        sbom,
         Panel("Disassembly") { NativeDisassemblyPanel(this, state) },
         Panel("Disassembly (virtualized)") {
             val gutterModel by (gutterMarksModelFlow
@@ -1250,6 +1256,13 @@ private fun BinaryProvider.resolveHardcodedPanels(
         commonNativePanels(
             state, gutterMarksModelFlow, executionOffsetFlow, onToggleNativeBreakpoint, onDeleteBreakpoint,
         ) + memoryPanel
+    }
+    is PeBinaryProvider -> {
+        val ilPanels = if (isManaged) clrIlPanels(this, state) else emptyList()
+        ilPanels + commonNativePanels(
+            state, gutterMarksModelFlow, executionOffsetFlow, onToggleNativeBreakpoint, onDeleteBreakpoint,
+            includeDisassembly = !isPureIl,
+        )
     }
     is NativeBinaryProvider -> commonNativePanels(
         state, gutterMarksModelFlow, executionOffsetFlow, onToggleNativeBreakpoint, onDeleteBreakpoint,
@@ -1950,6 +1963,11 @@ private fun BinaryProvider.discoverHardcodedPanelNames(fileName: String): List<S
     is ElfBinaryProvider -> {
         val base = listOf("Disassembly", "Disassembly (virtualized)")
         if (isMemoryBudgetEligible(header, sections)) base + "Memory" else base
+    }
+    is PeBinaryProvider -> buildList {
+        // Both checks read only the CLI header; the IL panel decodes metadata when it is opened.
+        if (isManaged) add(CLR_IL_TAB_NAME)
+        if (!isPureIl) addAll(listOf("Disassembly", "Disassembly (virtualized)"))
     }
     is NativeBinaryProvider -> {
         // SBOM depends on nativeImageInfo which is lazy/expensive — skip it in discovery.

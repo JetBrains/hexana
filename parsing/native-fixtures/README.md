@@ -59,5 +59,7 @@ csc -nologo -deterministic -optimize+ -debug- \
   -out:../../test-data/pe/sample-clr.exe Sample.cs
 ```
 
-The parser tests cross-check it against `monodis --typedef`, `--method`, `--memberref` and `--manifest` output;
-update `ClrFixtureParserTest` and `ClrTableTabsTest` together with the fixture.
+The parser tests cross-check it against `monodis --typedef`, `--method`, `--memberref` and `--manifest` output,
+and the IL tests against `ikdasm sample-clr.exe`. Update `ClrFixtureParserTest`, `ClrIlDecoderTest`,
+`ClrTableTabsTest` and `ClrIlTextTest` together with the fixture, and regenerate the base64 copy in
+`parsing/pe/src/commonTest/.../clr/ClrSampleFixture.kt` that the JS and Wasm tests use.

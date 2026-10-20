@@ -60,6 +60,30 @@ internal class ClrSignatureDecoder(
     fun typeSpec(blob: NativeByteRange?, context: ClrGenericContext, depth: Int): String =
         decodeOrInvalid(blob) { cursor -> type(cursor, context, depth) }
 
+    /** Type arguments of a MethodSpec instantiation blob (II.23.2.15), or null when malformed. */
+    fun genericInstantiation(blob: NativeByteRange?, context: ClrGenericContext): List<String>? {
+        if (blob == null || blob.size == 0 || bytes.byteOrNull(blob.offset) != GENERIC_INST) return null
+        val types = ArrayList<String>()
+        val result = decodeOrInvalid(blob) { cursor ->
+            cursor.u8()
+            repeat(cursor.count()) { types += type(cursor, context, 0) }
+            ""
+        }
+        return if (result == INVALID) null else types
+    }
+
+    /** Types of a `LOCAL_SIG` (II.23.2.6), or null when [blob] is not a local variable signature. */
+    fun localTypes(blob: NativeByteRange?, context: ClrGenericContext): List<String>? {
+        if (blob == null || blob.size == 0 || bytes.byteOrNull(blob.offset) != LOCAL_SIG) return null
+        val types = ArrayList<String>()
+        val result = decodeOrInvalid(blob) { cursor ->
+            cursor.u8()
+            repeat(cursor.count()) { types += type(cursor, context, 0) }
+            ""
+        }
+        return if (result == INVALID) null else types
+    }
+
     private fun parameters(cursor: Cursor, count: Int, context: ClrGenericContext): List<String> = buildList {
         repeat(count) {
             if (cursor.peek() == SENTINEL) {
@@ -172,6 +196,8 @@ internal class ClrSignatureDecoder(
         const val INVALID: String = "<invalid signature>"
         private const val GENERIC = 0x10
         private const val FIELD = 0x06
+        private const val LOCAL_SIG = 0x07
+        private const val GENERIC_INST = 0x0A
         private const val SENTINEL = 0x41
         private const val MAX_DEPTH = 48
         private const val MAX_NODES = 4096

@@ -606,7 +606,7 @@ private class RowBuilder(fileOffset: Long?) {
     fun func(text: String) = add(text, RenderTokenKind.FUNC_REF)
     fun error(text: String) = add(text, RenderTokenKind.ERROR)
 
-    fun string(value: String) = add("\"${escape(value)}\"", RenderTokenKind.STRING)
+    fun string(value: String) = add("\"${escapeStringLiteral(value)}\"", RenderTokenKind.STRING)
 
     fun register(register: Int, code: DexCodeItem?) =
         add(registerName(register, code), RenderTokenKind.LOCAL_REF)
@@ -681,7 +681,7 @@ internal fun formatLiteral(value: Long): String = when {
     else -> "0x" + value.toString(16)
 }
 
-private fun escape(value: String): String = buildString(value.length + 2) {
+internal fun escapeStringLiteral(value: String): String = buildString(value.length + 2) {
     for (ch in value) {
         when (ch) {
             '"' -> append("\\\"")
@@ -755,7 +755,7 @@ private class DexSmaliChunkTree(classes: List<DexSmaliClass>) : ChunkTree {
  * Index of the last ascending entry that is `<= offset`, or `-1` when every
  * entry is greater. Hand-rolled because array `binarySearch` is JVM-only.
  */
-private fun LongArray.lastIndexAtOrBefore(offset: Long): Int {
+internal fun LongArray.lastIndexAtOrBefore(offset: Long): Int {
     var low = 0
     var high = size - 1
     var result = -1

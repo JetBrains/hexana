@@ -29,6 +29,7 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.ArchiveBinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
+import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
@@ -50,6 +51,7 @@ import org.jetbrains.hexana.wasm.sections.WasmTypeIndexExternalType
 import org.jetbrains.hexana.wasm.sections.parseCodeEntry
 import org.jetbrains.hexana.providers.format.WasmComponentDiffOrchestrator
 import org.jetbrains.hexana.dwarf.ui.dwarfPanels
+import org.jetbrains.hexana.shared.CLR_IL_TAB_NAME
 import org.jetbrains.hexana.shared.TableTabsProviderRegistry
 import org.jetbrains.hexana.shared.WasmComponentTableTabsProvider
 import org.jetbrains.hexana.ui.ScriptTabSettings
@@ -1324,6 +1326,11 @@ object HexanaEditorUiTestProbe {
                 if (provider.canProvideWasmModule()) listOf("Dependencies", "WAT (virtualized)") else emptyList()
             }
             is ArchiveBinaryProvider -> listOf("Members")
+            is PeBinaryProvider -> buildList {
+                add("Top")
+                if (provider.isManaged) add(CLR_IL_TAB_NAME)
+                if (!provider.isPureIl) addAll(listOf("Disassembly", "Disassembly (virtualized)"))
+            }
             is NativeBinaryProvider -> listOf("Top", "Disassembly", "Disassembly (virtualized)")
             else -> emptyList()
         }

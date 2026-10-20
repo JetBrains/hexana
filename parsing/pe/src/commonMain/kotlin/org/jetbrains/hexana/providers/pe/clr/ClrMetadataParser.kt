@@ -30,11 +30,27 @@ object ClrMetadataParser {
      * cannot be read; failures further down are reported in [ClrMetadata.diagnostics].
      */
     fun parse(bytes: CommonByteBuffer, optionalHeader: PeOptionalHeader, sections: List<PeSection>): ClrMetadata? {
+        val header = parseCliHeader(bytes, optionalHeader, sections) ?: return null
+        val readyToRun = isReadyToRun(bytes, header, optionalHeader, sections)
+        return Decoder(bytes, header, readyToRun) { rva -> PeParser.rvaToFileOffset(bytes, rva, optionalHeader, sections) }.decode()
+    }
+
+    /** Reads only the CLI header, without touching the metadata; null for native images. */
+    fun parseCliHeader(bytes: CommonByteBuffer, optionalHeader: PeOptionalHeader, sections: List<PeSection>): ClrCliHeader? {
         val directory = optionalHeader.dataDirectories.getOrNull(PeDataDirectoryIndex.ClrRuntimeHeader) ?: return null
         if (directory.rva == 0u || directory.size == 0u) return null
-        val resolve = { rva: UInt -> PeParser.rvaToFileOffset(bytes, rva, optionalHeader, sections) }
-        val header = parseCliHeader(bytes, resolve(directory.rva) ?: return null) ?: return null
-        return Decoder(bytes, header, resolve).decode()
+        val offset = PeParser.rvaToFileOffset(bytes, directory.rva, optionalHeader, sections) ?: return null
+        return parseCliHeader(bytes, offset)
+    }
+
+    /**
+     * True when the image carries precompiled native code next to its IL: a ReadyToRun
+     * (crossgen) image, recognized by the `RTR` signature of its managed native header.
+     */
+    fun isReadyToRun(bytes: CommonByteBuffer, header: ClrCliHeader, optionalHeader: PeOptionalHeader, sections: List<PeSection>): Boolean {
+        if (header.managedNativeHeaderRva == 0u || header.managedNativeHeaderSize < 4u) return false
+        val offset = PeParser.rvaToFileOffset(bytes, header.managedNativeHeaderRva, optionalHeader, sections) ?: return false
+        return bytes.u32LeOrNull(offset) == READY_TO_RUN_SIGNATURE
     }
 
     /** True when [optionalHeader] declares a CLR runtime header, i.e. the image is a .NET assembly. */
@@ -69,6 +85,7 @@ object ClrMetadataParser {
     private class Decoder(
         private val bytes: CommonByteBuffer,
         private val header: ClrCliHeader,
+        private val readyToRun: Boolean,
         private val resolve: (UInt) -> Int?,
     ) {
         private val diagnostics = mutableListOf<NativeParserDiagnostic>()
@@ -80,6 +97,8 @@ object ClrMetadataParser {
         private var enclosingTypes: Map<Int, Int> = emptyMap()
         private var typeGenerics: Map<Int, List<String>> = emptyMap()
         private var methodGenerics: Map<Int, List<String>> = emptyMap()
+        private var interfaces: Map<Int, List<String>> = emptyMap()
+        private var fieldOwners = IntArray(0)
 
         fun decode(): ClrMetadata {
             val metadataOffset = resolve(header.metadataRva)
@@ -120,7 +139,7 @@ object ClrMetadataParser {
                 assembly = t?.let { decodeAssembly(it) },
                 targetFramework = t?.let { decodeTargetFramework(it) },
                 entryPoint = describeEntryPoint(t, typeDefs, methods),
-                readyToRun = isReadyToRun(),
+                readyToRun = readyToRun,
                 typeRefs = t?.let { decodeTypeRefs(it) }.orEmpty(),
                 typeDefs = typeDefs,
                 fields = fields,
@@ -131,6 +150,7 @@ object ClrMetadataParser {
                 manifestResources = t?.let { decodeManifestResources(it) }.orEmpty(),
                 userStrings = heaps.userStrings(),
                 diagnostics = diagnostics,
+                tokens = Resolver(methods),
             )
         }
 
@@ -266,6 +286,12 @@ object ClrMetadataParser {
             }
             typeGenerics = typeParameters.mapValues { (_, list) -> list.sortedBy { it.first }.map { it.second } }
             methodGenerics = methodParameters.mapValues { (_, list) -> list.sortedBy { it.first }.map { it.second } }
+            interfaces = buildMap<Int, MutableList<String>> {
+                for (row in 1..t.rowCount(T.INTERFACE_IMPL)) {
+                    val name = typeDefOrRefName(t.cell(T.INTERFACE_IMPL, row, 1)) ?: continue
+                    getOrPut(t.cell(T.INTERFACE_IMPL, row, 0)) { mutableListOf() }.add(name)
+                }
+            }
         }
 
         private fun typeDefFullName(row: Int, depth: Int = 0): String = typeDefNames.getOrPut(row) {
@@ -417,6 +443,7 @@ object ClrMetadataParser {
                     else -> ClrTypeKind.Class
                 },
                 extends = extends,
+                interfaces = interfaces[row].orEmpty(),
                 enclosingTypeRow = enclosingTypes[row],
                 genericParameters = typeGenerics[row].orEmpty(),
                 recordRange = t.rowRange(T.TYPE_DEF, row),
@@ -424,7 +451,7 @@ object ClrMetadataParser {
         }
 
         private fun decodeMembers(t: Tables): Pair<List<ClrField>, List<ClrMethodDef>> {
-            val fieldOwners = memberOwners(t, column = 4, T.FIELD_PTR, T.FIELD)
+            fieldOwners = memberOwners(t, column = 4, T.FIELD_PTR, T.FIELD)
             val methodOwners = memberOwners(t, column = 5, T.METHOD_PTR, T.METHOD_DEF)
             val parameterNames = parameterNames(t)
 
@@ -622,12 +649,6 @@ object ClrMetadataParser {
             } ?: "token 0x${token.toString(16).uppercase().padStart(8, '0')}"
         }
 
-        private fun isReadyToRun(): Boolean {
-            if (header.managedNativeHeaderRva == 0u || header.managedNativeHeaderSize < 4u) return false
-            val offset = resolve(header.managedNativeHeaderRva) ?: return false
-            return bytes.u32LeOrNull(offset) == READY_TO_RUN_SIGNATURE
-        }
-
         private fun parseMethodBody(offset: Int): ClrMethodBody? {
             val first = bytes.byteOrNull(offset) ?: return null
             return when (first and 0x3) {
@@ -659,10 +680,179 @@ object ClrMetadataParser {
                         hasExceptionSections = flags and MORE_SECTIONS != 0,
                         range = NativeByteRange(offset, headerSize + codeSize),
                         codeRange = NativeByteRange(codeOffset, codeSize),
+                        exceptionClauses = if (flags and MORE_SECTIONS != 0) parseExceptionClauses(codeOffset + codeSize) else emptyList(),
+                        initLocals = flags and INIT_LOCALS != 0,
                     )
                 }
                 else -> null
             }
+        }
+
+        /** Exception handling sections (II.25.4.5) that follow a fat body's code, 4-byte aligned. */
+        private fun parseExceptionClauses(codeEnd: Int): List<ClrExceptionClause> {
+            val clauses = ArrayList<ClrExceptionClause>()
+            var position = align4(codeEnd)
+            repeat(MAX_EXCEPTION_SECTIONS) {
+                val kind = bytes.byteOrNull(position) ?: return clauses
+                if (kind and SECTION_EH_TABLE == 0) return clauses
+                val fat = kind and SECTION_FAT_FORMAT != 0
+                val dataSize = if (fat) {
+                    (bytes.u32LeOrNull(position) ?: return clauses).toInt() ushr 8
+                } else {
+                    bytes.byteOrNull(position + 1) ?: return clauses
+                }
+                if (dataSize < 4 || !bytes.containsRange(position, dataSize)) return clauses
+                val clauseSize = if (fat) 24 else 12
+                for (index in 0 until (dataSize - 4) / clauseSize) {
+                    parseExceptionClause(position + 4 + index * clauseSize, fat)?.let(clauses::add)
+                }
+                if (kind and SECTION_MORE_SECTIONS == 0) return clauses
+                position = align4(position + dataSize)
+            }
+            return clauses
+        }
+
+        private fun parseExceptionClause(offset: Int, fat: Boolean): ClrExceptionClause? {
+            val flags: Int
+            val tryOffset: Int
+            val tryLength: Int
+            val handlerOffset: Int
+            val handlerLength: Int
+            if (fat) {
+                flags = bytes.u32LeOrNull(offset)?.toInt() ?: return null
+                tryOffset = bytes.u32LeOrNull(offset + 4)?.toBoundedInt() ?: return null
+                tryLength = bytes.u32LeOrNull(offset + 8)?.toBoundedInt() ?: return null
+                handlerOffset = bytes.u32LeOrNull(offset + 12)?.toBoundedInt() ?: return null
+                handlerLength = bytes.u32LeOrNull(offset + 16)?.toBoundedInt() ?: return null
+            } else {
+                flags = bytes.u16LeOrNull(offset) ?: return null
+                tryOffset = bytes.u16LeOrNull(offset + 2) ?: return null
+                tryLength = bytes.byteOrNull(offset + 4) ?: return null
+                handlerOffset = bytes.u16LeOrNull(offset + 5) ?: return null
+                handlerLength = bytes.byteOrNull(offset + 7) ?: return null
+            }
+            val classTokenOrFilter = bytes.u32LeOrNull(offset + if (fat) 20 else 8) ?: return null
+            val kind = when (flags) {
+                0 -> ClrExceptionClauseKind.Catch
+                1 -> ClrExceptionClauseKind.Filter
+                2 -> ClrExceptionClauseKind.Finally
+                4 -> ClrExceptionClauseKind.Fault
+                else -> return null
+            }
+            return ClrExceptionClause(
+                kind = kind,
+                tryOffset = tryOffset,
+                tryLength = tryLength,
+                handlerOffset = handlerOffset,
+                handlerLength = handlerLength,
+                catchType = if (kind == ClrExceptionClauseKind.Catch) typeTokenName(classTokenOrFilter, ClrGenericContext.Empty) else null,
+                filterOffset = if (kind == ClrExceptionClauseKind.Filter) classTokenOrFilter.toBoundedInt() else null,
+            )
+        }
+
+        /** Full name of a TypeDef, TypeRef or TypeSpec token, or null for any other table. */
+        private fun typeTokenName(token: UInt, context: ClrGenericContext): String? {
+            val row = (token and 0x00FFFFFFu).toInt()
+            return when ((token shr 24).toInt()) {
+                T.TYPE_DEF -> typeDefFullName(row)
+                T.TYPE_REF -> typeRefFullName(row)
+                T.TYPE_SPEC -> typeSpecName(row, context, 0)
+                else -> null
+            }
+        }
+
+        // endregion
+
+        // region IL operands
+
+        private inner class Resolver(private val methods: List<ClrMethodDef>) : ClrTokenResolver {
+            override fun describe(token: UInt, method: ClrMethodDef?): String? {
+                val table = (token shr 24).toInt()
+                val row = (token and 0x00FFFFFFu).toInt()
+                if (table == USER_STRING_TOKEN_TABLE) return heaps.userString(row)
+                val t = tables ?: return null
+                val tableId = table.takeIf { it < 64 } ?: return null
+                if (row !in 1..t.rowCount(tableId)) return null
+                val context = method?.let(::genericContextOf) ?: ClrGenericContext.Empty
+                return when (table) {
+                    T.TYPE_DEF -> typeDefDisplayName(row)
+                    T.TYPE_REF -> typeRefFullName(row)
+                    T.TYPE_SPEC -> typeSpecName(row, context, 0)
+                    T.FIELD -> fieldText(t, row)
+                    T.METHOD_DEF -> methodDefText(t, row, instantiation = null)
+                    T.MEMBER_REF -> memberRefText(t, row, instantiation = null)
+                    T.METHOD_SPEC -> methodSpecText(t, row, context)
+                    T.STAND_ALONE_SIG -> signatures.methodSignature(heaps.blob(t.cell(T.STAND_ALONE_SIG, row, 0)), "method", emptyList(), context)
+                    T.MODULE_REF -> heaps.string(t.cell(T.MODULE_REF, row, 0))
+                    else -> null
+                }
+            }
+
+            override fun localVariableTypes(method: ClrMethodDef): List<String> {
+                val token = method.body?.localVarSigToken ?: return emptyList()
+                if ((token shr 24).toInt() != T.STAND_ALONE_SIG) return emptyList()
+                val t = tables ?: return emptyList()
+                val row = (token and 0x00FFFFFFu).toInt()
+                if (row !in 1..t.rowCount(T.STAND_ALONE_SIG)) return emptyList()
+                return signatures.localTypes(heaps.blob(t.cell(T.STAND_ALONE_SIG, row, 0)), genericContextOf(method)).orEmpty()
+            }
+
+            private fun genericContextOf(method: ClrMethodDef) =
+                ClrGenericContext(typeGenerics[method.declaringTypeRow].orEmpty(), methodGenerics[method.row].orEmpty())
+
+            private fun fieldText(t: Tables, row: Int): String {
+                val owner = fieldOwners.getOrElse(row) { 0 }
+                val type = signatures.fieldType(heaps.blob(t.cell(T.FIELD, row, 2)), ClrGenericContext(typeGenerics[owner].orEmpty()))
+                return "$type ${typeDefDisplayName(owner)}::${heaps.string(t.cell(T.FIELD, row, 1))}"
+            }
+
+            private fun methodDefText(t: Tables, row: Int, instantiation: List<String>?): String {
+                val owner = methods.getOrNull(row - 1)?.declaringTypeRow ?: 0
+                val name = heaps.string(t.cell(T.METHOD_DEF, row, 3))
+                return signatures.methodSignature(
+                    blob = heaps.blob(t.cell(T.METHOD_DEF, row, 4)),
+                    name = "${typeDefDisplayName(owner)}::$name",
+                    parameterNames = emptyList(),
+                    context = ClrGenericContext(typeGenerics[owner].orEmpty(), instantiation ?: methodGenerics[row].orEmpty()),
+                )
+            }
+
+            private fun memberRefText(t: Tables, row: Int, instantiation: List<String>?): String {
+                val parent = decodeCoded(ClrCodedIndex.MemberRefParent, t.cell(T.MEMBER_REF, row, 0))
+                val parentRow = parent?.second ?: 0
+                val parentName = when (parent?.first) {
+                    T.TYPE_DEF -> typeDefDisplayName(parentRow)
+                    T.TYPE_REF -> typeRefFullName(parentRow)
+                    T.TYPE_SPEC -> typeSpecName(parentRow, ClrGenericContext.Empty, 0)
+                    T.MODULE_REF -> heaps.string(t.cell(T.MODULE_REF, parentRow, 0))
+                    // A vararg call site: the MemberRef refines a MethodDef's signature.
+                    T.METHOD_DEF -> return methodDefText(t, parentRow, instantiation)
+                    else -> "<parent>"
+                }
+                val name = heaps.string(t.cell(T.MEMBER_REF, row, 1))
+                val blob = heaps.blob(t.cell(T.MEMBER_REF, row, 2))
+                val typeParameters = if (parent?.first == T.TYPE_DEF) typeGenerics[parentRow].orEmpty() else emptyList()
+                if (signatures.isFieldSignature(blob)) {
+                    return "${signatures.fieldType(blob, ClrGenericContext(typeParameters))} $parentName::$name"
+                }
+                return signatures.methodSignature(blob, "$parentName::$name", emptyList(), ClrGenericContext(typeParameters, instantiation.orEmpty()))
+            }
+
+            private fun methodSpecText(t: Tables, row: Int, context: ClrGenericContext): String? {
+                val instantiation = signatures.genericInstantiation(heaps.blob(t.cell(T.METHOD_SPEC, row, 1)), context)
+                val (table, methodRow) = decodeCoded(ClrCodedIndex.MethodDefOrRef, t.cell(T.METHOD_SPEC, row, 0)) ?: return null
+                return when (table) {
+                    T.METHOD_DEF -> if (methodRow <= t.rowCount(T.METHOD_DEF)) methodDefText(t, methodRow, instantiation) else null
+                    else -> if (methodRow <= t.rowCount(T.MEMBER_REF)) memberRefText(t, methodRow, instantiation) else null
+                }
+            }
+        }
+
+        /** Full name with generic parameters spelled out instead of the arity suffix: `Ns.Box<T>`. */
+        private fun typeDefDisplayName(row: Int): String {
+            val fullName = typeDefFullName(row)
+            val generics = typeGenerics[row] ?: return fullName
+            return fullName.replace(GENERIC_ARITY, "") + generics.joinToString(", ", "<", ">")
         }
 
         // endregion
@@ -755,6 +945,25 @@ object ClrMetadataParser {
             return ByteArray(range.size) { bytes[range.offset + it] }
         }
 
+        /** The `#US` entry at heap [offset] (the low 24 bits of an `ldstr` token), or null when out of range. */
+        fun userString(offset: Int): String? {
+            val heap = userStrings ?: return null
+            if (offset <= 0 || offset >= heap.size) return null
+            val end = heap.offset + heap.size
+            val (length, prefix) = readCompressed(bytes, heap.offset + offset, end) ?: return null
+            val start = heap.offset + offset + prefix
+            if (length > end - start) return null
+            return decodeUtf16(start, length)
+        }
+
+        // The final byte of a #US entry is a flag (II.24.2.4); the rest is UTF-16LE.
+        private fun decodeUtf16(start: Int, length: Int): String =
+            CharArray(((length - 1) / 2).coerceAtLeast(0)) { charIndex ->
+                val low = bytes.byteOrNull(start + charIndex * 2) ?: 0
+                val high = bytes.byteOrNull(start + charIndex * 2 + 1) ?: 0
+                (low or (high shl 8)).toChar()
+            }.concatToString()
+
         fun userStrings(): List<ClrUserString> {
             val heap = userStrings ?: return emptyList()
             val end = heap.offset + heap.size
@@ -768,13 +977,7 @@ object ClrMetadataParser {
                     }
                     val dataStart = position + prefix
                     if (length > end - dataStart) break
-                    // The final byte is a flag (II.24.2.4); the rest is UTF-16LE.
-                    val chars = CharArray((length - 1) / 2) { charIndex ->
-                        val low = bytes.byteOrNull(dataStart + charIndex * 2) ?: 0
-                        val high = bytes.byteOrNull(dataStart + charIndex * 2 + 1) ?: 0
-                        (low or (high shl 8)).toChar()
-                    }
-                    add(ClrUserString(position - heap.offset, chars.concatToString(), NativeByteRange(position, prefix + length)))
+                    add(ClrUserString(position - heap.offset, decodeUtf16(dataStart, length), NativeByteRange(position, prefix + length)))
                     position = dataStart + length
                 }
             }
@@ -828,5 +1031,12 @@ private const val TINY_FORMAT = 0x2
 private const val FAT_FORMAT = 0x3
 private const val FAT_HEADER_SIZE = 12
 private const val MORE_SECTIONS = 0x8
+private const val INIT_LOCALS = 0x10
+private const val SECTION_EH_TABLE = 0x01
+private const val SECTION_FAT_FORMAT = 0x40
+private const val SECTION_MORE_SECTIONS = 0x80
+private const val MAX_EXCEPTION_SECTIONS = 16
+private const val USER_STRING_TOKEN_TABLE = 0x70
+private val GENERIC_ARITY = Regex("`[0-9]+")
 private const val READY_TO_RUN_SIGNATURE = 0x00525452u
 private const val TARGET_FRAMEWORK_ATTRIBUTE = "System.Runtime.Versioning.TargetFrameworkAttribute"

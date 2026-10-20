@@ -672,6 +672,18 @@ class PeBinaryProvider(
     /** Cheap check that does not decode metadata: true when the image declares a CLR runtime header. */
     val isManaged: Boolean by lazy { optionalHeader?.let(ClrMetadataParser::hasClrHeader) == true }
 
+    /**
+     * True for a managed image with no native code worth disassembling: IL-only, and not
+     * ReadyToRun-compiled. Reads only the CLI header, so it is cheap enough for tab discovery.
+     * Mixed-mode (C++/CLI) and ReadyToRun images report false.
+     */
+    val isPureIl: Boolean by lazy {
+        val o = optionalHeader ?: return@lazy false
+        val s = sections ?: return@lazy false
+        val header = ClrMetadataParser.parseCliHeader(bytes, o, s) ?: return@lazy false
+        header.isIlOnly && !header.hasNativeEntryPoint && !ClrMetadataParser.isReadyToRun(bytes, header, o, s)
+    }
+
     override val nativeImageInfo: NativeImageInfo? by lazy {
         val sec = sections ?: return@lazy null
         NativeImageDetector.fromPe(strings, sec, exports, bytes).takeIf { it !== NativeImageInfo.NONE }

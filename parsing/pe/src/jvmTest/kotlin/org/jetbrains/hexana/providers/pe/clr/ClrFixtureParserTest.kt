@@ -73,14 +73,15 @@ class ClrFixtureParserTest {
                 "Hexana.Sample.Color",
                 "Hexana.Sample.Program",
                 "Hexana.Sample.Greeter+Nested",
+                "Hexana.Sample.Program+<>c",
             ),
             clr.typeDefs.map { it.fullName },
         )
         assertEquals(
-            listOf(ClrTypeKind.Module, ClrTypeKind.Interface, ClrTypeKind.Class, ClrTypeKind.Class, ClrTypeKind.Enum, ClrTypeKind.Class, ClrTypeKind.Class),
+            listOf(ClrTypeKind.Module, ClrTypeKind.Interface, ClrTypeKind.Class, ClrTypeKind.Class, ClrTypeKind.Enum, ClrTypeKind.Class, ClrTypeKind.Class, ClrTypeKind.Class),
             clr.typeDefs.map { it.kind },
         )
-        val nested = clr.typeDefs.last()
+        val nested = clr.typeDefs[6]
         assertEquals(3, nested.enclosingTypeRow)
         assertEquals(listOf("T"), clr.typeDefs[3].genericParameters)
         assertEquals("System.Enum", clr.typeDefs[4].extends)
@@ -89,8 +90,8 @@ class ClrFixtureParserTest {
 
     @Test
     fun `assigns members to declaring types and decodes signatures`() {
-        assertEquals(10, clr.methods.size)
-        assertEquals(listOf(2, 3, 3, 3, 3, 3, 4, 4, 6, 7), clr.methods.map { it.declaringTypeRow })
+        assertEquals(14, clr.methods.size)
+        assertEquals(listOf(2, 3, 3, 3, 3, 3, 4, 4, 6, 6, 7, 8, 8, 8), clr.methods.map { it.declaringTypeRow })
         assertEquals("string Greet(string name)", clr.methods[0].signature)
         assertEquals("void .ctor(string prefix)", clr.methods[1].signature)
         assertEquals("void add_Greeted(EventHandler value)", clr.methods[4].signature)
@@ -113,7 +114,7 @@ class ClrFixtureParserTest {
         assertTrue("mscorlib:System.Runtime.Versioning.TargetFrameworkAttribute" in typeRefs)
         assertTrue("mscorlib:System.Diagnostics.DebuggableAttribute+DebuggingModes" in typeRefs, typeRefs.toString())
 
-        assertEquals(17, clr.memberRefs.size)
+        assertEquals(22, clr.memberRefs.size)
         val concat = clr.memberRefs.single { it.name == "Concat" }
         assertEquals("System.String", concat.parent)
         assertEquals("string Concat(string, string, string, string)", concat.signature)
@@ -136,8 +137,8 @@ class ClrFixtureParserTest {
         assertTrue(laidOut.all { it.range != null })
         val end = laidOut.maxOf { it.range!!.offset + it.range!!.size }
         assertTrue(end <= tablesStream.offset + tablesStream.size)
-        assertEquals(10, clr.tables.single { it.name == "MethodDef" }.rowCount)
-        assertEquals(7, clr.tables.single { it.name == "TypeDef" }.rowCount)
+        assertEquals(14, clr.tables.single { it.name == "MethodDef" }.rowCount)
+        assertEquals(8, clr.tables.single { it.name == "TypeDef" }.rowCount)
     }
 }
 
@@ -165,7 +166,16 @@ class ClrMalformedInputTest {
             repeat(1 + random.nextInt(8)) {
                 corrupted[random.nextInt(start, end)] = random.nextInt(256).toByte()
             }
-            PeParser.parse(corrupted.toCommonByteBuffer())
+            val buffer = corrupted.toCommonByteBuffer()
+            val clr = (PeParser.parse(buffer) as? NativeParseSuccess<PeFile>)?.value?.let { it as? PeImageFile }?.clr ?: return@repeat
+            // Everything the IL view does with a method: decode its body, resolve every token, read its locals.
+            for (method in clr.methods) {
+                val body = method.body ?: continue
+                for (instruction in ClrIlDecoder.decode(buffer, body.codeRange).instructions) {
+                    (instruction.operand as? ClrIlOperand.Token)?.let { clr.tokens.describe(it.token, method) }
+                }
+                clr.tokens.localVariableTypes(method)
+            }
         }
     }
 }

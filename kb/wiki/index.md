@@ -33,7 +33,8 @@ consult-first / write-back rules.
   composition-local host bindings, top-level-only tree-table context menus.
 - [[entities/apk-classes-tab]] — APK Classes tab + "Reveal in DEX" in IntelliJ and VS Code:
 - [[entities/clr-metadata]] — .NET assemblies: ECMA-335 metadata decoding in `parsing/pe/clr`, the hardening
-  the mutation test forced, and the `.NET` / Types / Methods / `.NET Metadata` tabs on PE files.
+  the mutation test forced, the `.NET` / Types / Methods / `.NET Metadata` tabs, the virtualized IL
+  view, and when native Disassembly tabs are hidden.
   shared async collection, lazy tabs, entry-editor reuse, and the cross-host "select table row" request.
 
 ## Sources

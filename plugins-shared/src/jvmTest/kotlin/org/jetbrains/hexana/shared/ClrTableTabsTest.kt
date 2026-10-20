@@ -36,12 +36,15 @@ class ClrTableTabsTest {
             tabsProvider.groupedTabs(managed).single { it.name == ".NET Metadata" }.innerTabs.map { it.name },
         )
         assertEquals("PE32 (.NET)", fileTypeDescription(managed))
+        // IL-only and not ReadyToRun: hosts drop the native disassembly views for it.
+        assertTrue(managed.isPureIl)
     }
 
     @Test
     fun `native PE gets no CLR tabs`() {
         val native = provider("pe/sample.exe")
         assertFalse(native.isManaged)
+        assertFalse(native.isPureIl)
         assertTrue(tabsProvider.tableTabs(native).none { it.name == ".NET" || it.name == "Types" })
         assertEquals(emptyList(), tabsProvider.groupedTabs(native))
         assertEquals("PE32+", fileTypeDescription(native))
@@ -58,7 +61,7 @@ class ClrTableTabsTest {
         assertEquals("1.2.3.4", field("Assembly Version"))
         assertEquals("v4.0.30319", field("Metadata Version"))
         assertEquals("SHA1 (0x8004)", field("Hash Algorithm"))
-        assertEquals("7", field("Types"))
+        assertEquals("8", field("Types"))
     }
 
     @Test

@@ -34,6 +34,8 @@ data class ClrMetadata(
     val manifestResources: List<ClrManifestResource>,
     val userStrings: List<ClrUserString>,
     val diagnostics: List<NativeParserDiagnostic>,
+    /** Renders metadata tokens that IL instructions refer to; see [ClrTokenResolver]. */
+    val tokens: ClrTokenResolver,
 ) {
     /** Fields grouped by the 1-based TypeDef row of their declaring type. */
     val fieldsByType: Map<Int, List<ClrField>> by lazy { fields.groupBy { it.declaringTypeRow } }
@@ -203,6 +205,8 @@ data class ClrTypeDef(
     val fullName: String,
     val flags: UInt,
     val kind: ClrTypeKind,
+    /** Implemented interfaces, from the InterfaceImpl table. */
+    val interfaces: List<String>,
     val extends: String?,
     /** 1-based row of the enclosing type, or null for a top-level type. */
     val enclosingTypeRow: Int?,
@@ -247,10 +251,52 @@ data class ClrMethodBody(
     val codeSize: Int,
     val localVarSigToken: UInt,
     val hasExceptionSections: Boolean,
-    /** Header plus IL code. */
+    /** Header plus IL code; exception sections that follow the code are not included. */
     val range: NativeByteRange,
     val codeRange: NativeByteRange,
+    val exceptionClauses: List<ClrExceptionClause> = emptyList(),
+    /** Fat-header `InitLocals` flag: locals are zero-initialized (`.locals init`). */
+    val initLocals: Boolean = false,
 )
+
+enum class ClrExceptionClauseKind(val label: String) {
+    Catch("catch"),
+    Filter("filter"),
+    Finally("finally"),
+    Fault("fault"),
+}
+
+/** ECMA-335 II.25.4.6 exception handling clause; offsets are relative to the start of the IL code. */
+data class ClrExceptionClause(
+    val kind: ClrExceptionClauseKind,
+    val tryOffset: Int,
+    val tryLength: Int,
+    val handlerOffset: Int,
+    val handlerLength: Int,
+    /** Caught type for [ClrExceptionClauseKind.Catch]. */
+    val catchType: String?,
+    /** Start of the filter block for [ClrExceptionClauseKind.Filter]. */
+    val filterOffset: Int?,
+)
+
+/**
+ * Turns metadata tokens into the text IL listings show for instruction operands, e.g.
+ * `string System.String::Concat(string, string)` for a MemberRef.
+ *
+ * Signatures are decoded on demand rather than at parse time, so a large assembly pays only for
+ * the methods a reader actually opens. Implementations share the parser's caches and are not
+ * thread-safe: callers must serialize access.
+ */
+interface ClrTokenResolver {
+    /**
+     * Display text of [token] as an operand inside [method]'s body (whose generic parameters are
+     * in scope), or null when the token does not resolve.
+     */
+    fun describe(token: UInt, method: ClrMethodDef?): String?
+
+    /** Local variable types of a method body, from its `LocalVarSigTok`; empty when there are none. */
+    fun localVariableTypes(method: ClrMethodDef): List<String>
+}
 
 data class ClrMemberRef(
     val row: Int,
