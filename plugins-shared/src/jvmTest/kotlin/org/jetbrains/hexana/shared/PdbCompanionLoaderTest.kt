@@ -17,7 +17,10 @@ class PdbCompanionLoaderTest {
     private val dir = File("../parsing/native-fixtures/test-data/pe").canonicalFile
 
     /** A file system over the fixtures directory, with optional replacement file contents. */
-    private class FixtureFileSystem(private val overrides: Map<String, ByteArray> = emptyMap()) : FileSystem {
+    private class FixtureFileSystem(
+        private val overrides: Map<String, ByteArray> = emptyMap(),
+        private val sizes: Map<String, Long?> = emptyMap(),
+    ) : FileSystem {
         val reads = mutableListOf<String>()
         override fun listEntries(dir: String): List<FileEntry> = emptyList()
         override fun readFile(path: String): ByteArray? { reads += path; return overrides[path] ?: File(path).takeIf { it.isFile }?.readBytes() }
@@ -25,12 +28,14 @@ class PdbCompanionLoaderTest {
         override fun parentDir(path: String): String = File(path).parent
         override fun joinPath(base: String, child: String): String = File(base, child).path
         override fun pathRoot(path: String): String = "/"
+        override fun regularFileSize(path: String): Long? =
+            if (path in sizes) sizes[path] else overrides[path]?.size?.toLong() ?: File(path).takeIf { it.isFile }?.length()
     }
 
-    private fun pe(name: String): PeBinaryProvider {
-        val file = dir.resolve(name)
-        return assertIs<PeBinaryProvider>(createBinaryProvider(file.readBytes().toCommonByteBuffer(), file.path, name))
-    }
+    private fun pe(name: String, bytes: ByteArray = dir.resolve(name).readBytes()): PeBinaryProvider =
+        assertIs<PeBinaryProvider>(createBinaryProvider(bytes.toCommonByteBuffer(), dir.resolve(name).path, name))
+
+    private fun TableTabDescriptor.pdbRow(): Int = (0 until rowCount).single { cell(it, "Kind") == "PDB symbols" }
 
     private val tabs = NativeTableTabsProvider()
     private fun PeBinaryProvider.tab(name: String, fs: FileSystem) =
@@ -43,7 +48,8 @@ class PdbCompanionLoaderTest {
     fun `candidate paths put the recorded name next to the image first`() {
         val exe = pe("sample.exe")
         assertEquals(
-            listOf(dir.resolve("sample.pdb").path, dir.resolve("sample.exe.pdb").path, "/out/pe/sample.pdb"),
+            // The recorded `/out/pe/sample.pdb` contributes its file name only.
+            listOf(dir.resolve("sample.pdb").path, dir.resolve("sample.exe.pdb").path),
             PdbCompanionLoader.candidatePaths(exe),
         )
         // Nothing to look for: no CodeView record, or the PDB is embedded.
@@ -116,5 +122,38 @@ class PdbCompanionLoaderTest {
         val context = assertNotNull(exe.tab("Debug Context", FixtureFileSystem()))
         assertEquals("Embedded Portable PDB", context.cell(0, "Name"))
         assertTrue((0 until context.rowCount).none { context.cell(it, "Kind") == "PDB symbols" })
+    }
+
+    @Test
+    fun `files that cannot be a PDB are reported and never read`() {
+        val pdbPath = dir.resolve("sample.pdb").path
+        // A device or directory under the PDB's name, and an oversized file.
+        for ((size, reason) in listOf(null to PdbMatch.Unreadable, PdbCompanionLoader.MAX_AUTOMATIC_PDB_SIZE + 1 to PdbMatch.TooLarge)) {
+            val exe = pe("sample.exe")
+            val fs = FixtureFileSystem(sizes = mapOf(pdbPath to size))
+            assertEquals(reason, PdbCompanionLoader.load(exe, fs))
+            assertTrue(pdbPath !in fs.reads)
+            val context = assertNotNull(exe.tab("Debug Context", fs))
+            assertEquals("does not match", context.cell(context.pdbRow(), "Status"))
+            assertTrue(context.cell(context.pdbRow(), "Notes").startsWith("Not loaded: ${reason.description}"))
+        }
+        // Present but not a PDB.
+        val exe = pe("sample.exe")
+        val fs = FixtureFileSystem(overrides = mapOf(pdbPath to ByteArray(64) { 0x41 }))
+        assertEquals(PdbMatch.Unreadable, PdbCompanionLoader.load(exe, fs))
+        assertEquals(PdbMatch.Unreadable, exe.debugSymbolsRejection?.reason)
+        assertEquals(pdbPath, exe.debugSymbolsRejection?.path)
+    }
+
+    @Test
+    fun `a corrupt embedded PDB still lets a companion file be looked for`() {
+        val bytes = dir.resolve("sample-clr-embedded.exe").readBytes()
+        val probe = pe("sample-clr-embedded.exe", bytes)
+        val entry = assertNotNull(probe.debugEntries?.firstOrNull { it.type == 17u }?.dataRange)
+        bytes[entry.offset] = 0 // "MPDB" signature
+        val exe = pe("sample-clr-embedded.exe", bytes)
+        assertTrue(exe.hasDebugSymbols, "discovery stays optimistic")
+        assertNull(exe.debugSymbols)
+        assertTrue(PdbCompanionLoader.candidatePaths(exe).isNotEmpty())
     }
 }

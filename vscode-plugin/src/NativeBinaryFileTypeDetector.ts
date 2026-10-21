@@ -211,11 +211,12 @@ function getFileName(uri: vscode.Uri): string {
  *
  * For files with an extension, the glob pattern is `*.<ext>` (so all files
  * sharing that extension benefit). For extensionless files, the exact file
- * name is used as the pattern.
+ * name is used as the pattern. Extensions shared with text formats are never
+ * persisted: one binary `.pdb` must not send every Protein Data Bank file to
+ * Hexana, so those keep being sniffed on each open.
  */
 function persistEditorAssociation(uri: vscode.Uri): void {
-    const ext = getExtension(uri);
-    const pattern = ext !== "" ? `*${ext}` : getFileName(uri);
+    const pattern = editorAssociationPattern(uri);
     if (!pattern) return;
 
     const config = vscode.workspace.getConfiguration("workbench");
@@ -296,6 +297,16 @@ export function registerNativeBinaryDetector(context: vscode.ExtensionContext): 
         }),
     );
 }
+
+/** The `workbench.editorAssociations` pattern to persist for [uri], or null to persist none. */
+export function editorAssociationPattern(uri: vscode.Uri): string | null {
+    const ext = getExtension(uri);
+    if (CONTENT_TYPED_EXTENSIONS.has(ext)) return null;
+    return (ext !== "" ? `*${ext}` : getFileName(uri)) || null;
+}
+
+/** Extensions that text formats share, so only the content of each file decides (`.pdb`: PDB or Protein Data Bank). */
+export const CONTENT_TYPED_EXTENSIONS = new Set([".pdb"]);
 
 const MSF7_MAGIC = "Microsoft C/C++ MSF 7.00\r\n\x1aDS\0\0\0";
 

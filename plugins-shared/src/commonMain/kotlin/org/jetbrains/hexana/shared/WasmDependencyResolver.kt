@@ -26,6 +26,13 @@ interface FileSystem {
 
     /** Returns the filesystem root of [path] (e.g. `/` or `C:\`). */
     fun pathRoot(path: String): String
+
+    /**
+     * Size of [path] when it is a regular file (after following links), or null for a directory,
+     * a device, a missing file, or a file system that cannot tell. Callers that read whole files
+     * of untrusted name check this first.
+     */
+    fun regularFileSize(path: String): Long? = null
 }
 
 /** A directory entry returned by [FileSystem.listEntries]. */

@@ -702,14 +702,20 @@ class PeBinaryProvider(
         return match
     }
 
-    /** The last `.pdb` that [attachDebugSymbols] turned down, so debug tabs can say why. */
+    /** The last `.pdb` that was turned down, so debug tabs can say why. */
     @Volatile
     var debugSymbolsRejection: PeDebugSymbolsRejection? = null
         private set
 
+    /** Records that the file at [path] could not be used at all (unreadable, too large, not a PDB). */
+    fun rejectDebugSymbols(path: String?, reason: PdbMatch) {
+        debugSymbolsRejection = PeDebugSymbolsRejection(path, reason)
+    }
+
     /**
-     * Whether [debugSymbols] is non-null, without inflating an embedded PDB: reads only the debug
-     * directory, so tab discovery can ask.
+     * Whether [debugSymbols] is likely non-null, without inflating an embedded PDB: reads only the
+     * debug directory, so tab discovery can ask. Optimistic for an embedded PDB that turns out to be
+     * corrupt; use [debugSymbols] where the answer must be exact.
      */
     val hasDebugSymbols: Boolean
         get() = attachment != null || ClrEmbeddedPortablePdb.entry(debugEntries.orEmpty()) != null

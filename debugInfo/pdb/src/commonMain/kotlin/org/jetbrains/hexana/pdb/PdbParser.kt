@@ -317,11 +317,13 @@ object PdbParser {
                 return emptyList()
             }
             val counts = IntArray(moduleCount) { stream.u16(countsStart + it * 2)!! }
-            val namesStart = offsetsStart + counts.sumOf { it.toLong() }.toInt() * 4
-            if (namesStart > end) {
+            // Up to 65535 modules of up to 65535 files each: the offset table size overflows an Int.
+            val namesStartLong = offsetsStart + counts.sumOf { it.toLong() } * 4
+            if (namesStartLong > end) {
                 warn("pdb.invalid_source_files", "The DBI source file substream is truncated.", substream.fileRange)
                 return emptyList()
             }
+            val namesStart = namesStartLong.toInt()
             val names = HashMap<UInt, String>()
             var offsetIndex = 0
             return counts.map { count ->

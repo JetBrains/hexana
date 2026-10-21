@@ -18,6 +18,9 @@ internal val JVM_FILE_SYSTEM = object : FileSystem {
 
     override fun fileExists(path: String): Boolean = File(path).exists()
 
+    override fun regularFileSize(path: String): Long? =
+        File(path).takeIf { it.isFile }?.length()
+
     override fun parentDir(path: String): String = File(path).parent ?: ""
 
     override fun joinPath(base: String, child: String): String = File(base, child).path

@@ -19,6 +19,8 @@ class ClrPortablePdb internal constructor(
     val documents: List<ClrPdbDocument>,
     /** Rows of MethodDebugInformation, one per MethodDef of the described assembly. */
     val methodDebugInformationCount: Int,
+    /** Methods whose row has a sequence point blob; counted from the table, without decoding blobs. */
+    val methodsWithSequencePoints: Int,
     private val sequencePointReader: (methodRow: Int) -> List<ClrSequencePoint>,
 ) {
     /**

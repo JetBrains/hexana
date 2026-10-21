@@ -362,7 +362,9 @@ object ClrMetadataParser {
                     recordRange = t.rowRange(T.DOCUMENT, row),
                 )
             }
-            return ClrPortablePdb(header, documents, t.rowCount(T.METHOD_DEBUG_INFORMATION)) { row -> decodeSequencePoints(t, row) }
+            val methodRows = t.rowCount(T.METHOD_DEBUG_INFORMATION)
+            val withPoints = (1..methodRows).count { t.cell(T.METHOD_DEBUG_INFORMATION, it, 1) != 0 }
+            return ClrPortablePdb(header, documents, methodRows, withPoints) { row -> decodeSequencePoints(t, row) }
         }
 
         /**

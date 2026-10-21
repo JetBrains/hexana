@@ -1594,6 +1594,7 @@ interface PeBinaryProvider extends NativeBinaryProvider {
         stamp: number;
       };
       methodDebugInformationCount: number;
+      methodsWithSequencePoints: number;
       sequencePointReader: Function1;
     };
     readyToRun: boolean;
@@ -1752,7 +1753,7 @@ interface PeBinaryProvider extends NativeBinaryProvider {
   debugSymbols?: PeDebugSymbols;
   debugSymbolsRejection?: {
     path?: string;
-    reason: "Matches" | "NoReference" | "WrongKind" | "Unreadable" | "GuidMismatch" | "AgeMismatch" | "StampMismatch";
+    reason: "Matches" | "NoReference" | "WrongKind" | "Unreadable" | "TooLarge" | "GuidMismatch" | "AgeMismatch" | "StampMismatch";
   };
   dosHeader?: {
     mzRange: {
@@ -1797,6 +1798,7 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       stamp: number;
     };
     methodDebugInformationCount: number;
+    methodsWithSequencePoints: number;
     sequencePointReader: Function1;
   };
   exports?: {
@@ -1964,6 +1966,7 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       stamp: number;
     };
     methodDebugInformationCount: number;
+    methodsWithSequencePoints: number;
     sequencePointReader: Function1;
   };
   readyToRunImage?: {
@@ -4797,6 +4800,7 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
         stamp: number;
       };
       methodDebugInformationCount: number;
+      methodsWithSequencePoints: number;
       sequencePointReader: Function1;
     };
     readyToRun: boolean;
@@ -7269,6 +7273,7 @@ interface ClrMetadata {
       stamp: number;
     };
     methodDebugInformationCount: number;
+    methodsWithSequencePoints: number;
     sequencePointReader: Function1;
   };
   readyToRun: boolean;
@@ -7655,6 +7660,7 @@ interface ClrMetadata {
       stamp: number;
     };
     methodDebugInformationCount: number;
+    methodsWithSequencePoints: number;
     sequencePointReader: Function1;
   } | null): {
     assembly?: {
@@ -7928,6 +7934,7 @@ interface ClrMetadata {
         stamp: number;
       };
       methodDebugInformationCount: number;
+      methodsWithSequencePoints: number;
       sequencePointReader: Function1;
     };
     readyToRun: boolean;
@@ -8403,6 +8410,7 @@ interface ClrPortablePdb {
     stamp: number;
   };
   methodDebugInformationCount: number;
+  methodsWithSequencePoints: number;
   sequencePointReader: Function1;
   document(row: number): {
     hash: string;
@@ -14212,10 +14220,10 @@ interface PeDebugSymbols {
 
 interface PeDebugSymbolsRejection {
   path?: string;
-  reason: "Matches" | "NoReference" | "WrongKind" | "Unreadable" | "GuidMismatch" | "AgeMismatch" | "StampMismatch";
-  copy(path: string | null, reason: "Matches" | "NoReference" | "WrongKind" | "Unreadable" | "GuidMismatch" | "AgeMismatch" | "StampMismatch"): {
+  reason: "Matches" | "NoReference" | "WrongKind" | "Unreadable" | "TooLarge" | "GuidMismatch" | "AgeMismatch" | "StampMismatch";
+  copy(path: string | null, reason: "Matches" | "NoReference" | "WrongKind" | "Unreadable" | "TooLarge" | "GuidMismatch" | "AgeMismatch" | "StampMismatch"): {
     path?: string;
-    reason: "Matches" | "NoReference" | "WrongKind" | "Unreadable" | "GuidMismatch" | "AgeMismatch" | "StampMismatch";
+    reason: "Matches" | "NoReference" | "WrongKind" | "Unreadable" | "TooLarge" | "GuidMismatch" | "AgeMismatch" | "StampMismatch";
   };
 }
 

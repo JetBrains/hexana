@@ -210,18 +210,12 @@ fun BinaryEditorApp() {
             var debugSymbolsPending by remember(provider) { mutableStateOf(pdbCandidates.isNotEmpty()) }
             LaunchedEffect(provider) {
                 val pe = provider as? PeBinaryProvider ?: return@LaunchedEffect
-                for (path in pdbCandidates) {
-                    // A missing file is answered with a failure at once; only a slow disk waits.
-                    val pdbBytes = try {
-                        host.readBinaryFile(path).await()
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Throwable) {
-                        continue
-                    }
-                    if (PdbCompanionLoader.attach(pe, path, pdbBytes) == PdbMatch.Matches) break
+                // Cleared however the loop ends, or the editor would wait on this forever.
+                try {
+                    loadPdbCompanion(pe, pdbCandidates, host)
+                } finally {
+                    debugSymbolsPending = false
                 }
-                debugSymbolsPending = false
             }
             if (debugSymbolsPending) {
                 Div({ classes("loading") }) {
@@ -284,5 +278,22 @@ fun BinaryEditorApp() {
                 tableRowSelection = tableRowSelection,
             )
         }
+    }
+}
+
+/**
+ * Reads [candidates] in order through the extension host and attaches the first matching PDB.
+ * A missing file is answered with a failure at once; only a slow disk waits.
+ */
+private suspend fun loadPdbCompanion(pe: PeBinaryProvider, candidates: List<String>, host: Host) {
+    for (path in candidates) {
+        val pdbBytes = try {
+            host.readBinaryFile(path).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            continue
+        }
+        if (PdbCompanionLoader.attach(pe, path, pdbBytes) == PdbMatch.Matches) break
     }
 }

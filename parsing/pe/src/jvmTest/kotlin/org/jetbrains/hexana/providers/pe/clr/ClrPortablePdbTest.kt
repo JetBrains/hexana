@@ -109,6 +109,7 @@ class ClrPortablePdbTest {
         for ((method, points) in expected) {
             assertEquals(points, pdb.sequencePoints(method).map { it.render() }, "method $method")
         }
+        assertEquals(expected.values.count { it.isNotEmpty() }, pdb.methodsWithSequencePoints)
         assertEquals(emptyList(), pdb.sequencePoints(0))
         assertEquals(emptyList(), pdb.sequencePoints(15))
     }

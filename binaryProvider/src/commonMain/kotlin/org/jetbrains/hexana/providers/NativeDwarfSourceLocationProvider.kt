@@ -62,7 +62,11 @@ interface NativeSourceLocationProvider {
     fun getVirtualAddressesForSourceLocation(filePath: String, line: Int): List<ULong>
 }
 
-data class AddressLineRow(val address: ULong, val file: String, val line: Int, val column: Int)
+/**
+ * One line-table row. [end] (exclusive) bounds the code the row can describe, when the format
+ * records it — a PDB line block's code size; null leaves the row in force up to the next one.
+ */
+data class AddressLineRow(val address: ULong, val file: String, val line: Int, val column: Int, val end: ULong? = null)
 
 /** A line table sorted by address, looked up by binary search. */
 class AddressLineTable(rows: List<AddressLineRow>) : NativeSourceLocationProvider {
@@ -94,6 +98,7 @@ class AddressLineTable(rows: List<AddressLineRow>) : NativeSourceLocationProvide
             }
         }
         val row = rows.getOrNull(found) ?: return null
+        if (row.end != null && virtualAddress >= row.end) return null
         return HexanaSourceLocation(filePath = row.file, line = row.line, column = row.column)
     }
 

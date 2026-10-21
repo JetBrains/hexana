@@ -59,6 +59,16 @@ describe('binary format routing', function () {
             expect(isNativeBinary(new Uint8Array(Buffer.from('HEADER    PLANT PROTEIN    30-APR-81   1CRN\n')))).to.equal(false);
         });
 
+        it('never persists an extension-wide association for .pdb', function () {
+            const {editorAssociationPattern} = requireDetector();
+            const uri = (fsPath: string) => ({fsPath, path: fsPath, scheme: 'file'});
+
+            expect(editorAssociationPattern(uri('/work/app.pdb'))).to.equal(null);
+            expect(editorAssociationPattern(uri('/work/APP.PDB'))).to.equal(null);
+            expect(editorAssociationPattern(uri('/work/app.elf'))).to.equal('*.elf');
+            expect(editorAssociationPattern(uri('/work/firmware'))).to.equal('firmware');
+        });
+
         it('still recognizes the formats it always did', function () {
             const {isNativeBinary} = requireDetector();
 
@@ -86,7 +96,10 @@ function peFixturesDir(): string {
     return path.join(dir, 'parsing', 'native-fixtures', 'test-data', 'pe');
 }
 
-function requireDetector(): {isNativeBinary(bytes: Uint8Array): boolean} {
+function requireDetector(): {
+    isNativeBinary(bytes: Uint8Array): boolean;
+    editorAssociationPattern(uri: {fsPath: string; path: string; scheme: string}): string | null;
+} {
     return require('../../../src/NativeBinaryFileTypeDetector');
 }
 

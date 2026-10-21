@@ -2098,6 +2098,15 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         try {
             const uri = vscode.Uri.file(binaryPath);
             const stat = await vscode.workspace.fs.stat(uri);
+            // A device or directory has no meaningful size and may never end (/dev/zero).
+            if ((stat.type & vscode.FileType.File) === 0) {
+                void webviewPanel.webview.postMessage(binaryFileReadFailure(
+                    requestId,
+                    binaryPath,
+                    "not a regular file",
+                ));
+                return;
+            }
             const statedOversize = scriptOpenOversizeReason(stat.size);
             if (statedOversize) {
                 void webviewPanel.webview.postMessage(binaryFileReadFailure(

@@ -31,6 +31,13 @@ class PeDebugSymbolsTest {
         assertEquals(20, lines.getSourceLocationForVirtualAddress(0x140001027uL)?.line)
         assertEquals(21, lines.getSourceLocationForVirtualAddress(0x140001028uL)?.line)
         assertNull(lines.getSourceLocationForVirtualAddress(0x140000FFFuL))
+        // Blocks are `0001:00000000-00000019` and `0001:00000020-00000092`: the padding between maps to nothing,
+        // and so does code after the last block (`0001:000000B0-000000C4`).
+        assertEquals(11, lines.getSourceLocationForVirtualAddress(0x140001018uL)?.line)
+        assertNull(lines.getSourceLocationForVirtualAddress(0x140001019uL))
+        assertNull(lines.getSourceLocationForVirtualAddress(0x14000101FuL))
+        assertEquals(33, lines.getSourceLocationForVirtualAddress(0x1400010C3uL)?.line)
+        assertNull(lines.getSourceLocationForVirtualAddress(0x1400010C4uL))
         assertEquals(listOf(0x140001089uL), lines.getVirtualAddressesForSourceLocation("sample.c", 29))
         assertEquals(12, lines.summary.lineRowCount)
         assertEquals(1, lines.summary.fileCount)

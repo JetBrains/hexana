@@ -73,8 +73,8 @@ debugSymbols = File(symbols, path) | Embedded(type 17, MPDB + deflate)   rejecti
 - **`NativeSourceLocationProvider` is the neutral interface** (`NativeDwarfSourceLocationProvider` is
   one implementation). `AddressLineTable` does the lookups by binary search — the DWARF provider used a
   linear `findLast` per instruction before, so it got faster too.
-- **Candidate order:** recorded file name next to the image, `<stem>.pdb`, `<name>.pdb`, then the
-  recorded absolute path (a local build). Skipped entirely when the PDB is embedded or already attached.
+- **Candidate order:** recorded file name next to the image, `<stem>.pdb`, `<name>.pdb` (the recorded
+  directory is never used — see review fixes). Skipped when the PDB is embedded or already attached.
 - **Attach before tabs, never after.** Tab discovery is cheap (`availableTabNames` checks
   `debugSymbols != null`, which reads only the debug directory), and tabs are not rebuilt later. IntelliJ
   inserts tabs without placeholders before the script panels, so "Debug Info" appears anyway.
@@ -88,6 +88,27 @@ debugSymbols = File(symbols, path) | Embedded(type 17, MPDB + deflate)   rejecti
 - Sequence point blob: δIL (0 after the first record = document change), ΔLines, ΔColumns (unsigned if
   ΔLines is 0, else signed); both 0 = hidden; start line/column absolute for the first visible point, then
   signed deltas. Compressed signed ints sign-extend from 6/13/28 bits.
+
+## Review fixes (2026-10-21)
+
+- **Never follow the recorded PDB path.** The CodeView path is chosen by whoever built the image; a
+  crafted PE could name `/dev/zero` or a huge file and the IDE would read it whole. Only its *file name*
+  is used, next to the image. `FileSystem.regularFileSize` (JVM: `File.isFile`) gates the read, capped at
+  `PdbCompanionLoader.MAX_AUTOMATIC_PDB_SIZE` (512 MiB); the VS Code read channel rejects non-regular files.
+- Every failed candidate is recorded (`rejectDebugSymbols`: `Unreadable`, `TooLarge`), so Debug Context
+  says "does not match" with the reason instead of "unverified". `attach` never throws.
+- `hasDebugSymbols` stays optimistic (cheap, for tab discovery); `candidatePaths` uses the exact
+  `debugSymbols`, so a corrupt embedded PDB no longer blocks looking for a companion file.
+- C13 rows carry their block's end (`AddressLineRow.end`): padding between functions and code past the
+  last block map to no line instead of the previous one.
+- DBI file-info: the offset-table size (≤ 65535 × 65535 × 4) overflowed `Int`; computed in `Long`.
+- Debug Info counts methods with a sequence-point blob from the table (`methodsWithSequencePoints`)
+  instead of decoding every blob.
+- VS Code: `.pdb` never gets a global `*.pdb` editor association (`editorAssociationPattern`); the
+  webview clears "Loading debug symbols…" in `finally`.
+- Declined: decoding the companion / embedded PDB in composition in the webview. It is the same
+  host-wide pattern as CLR metadata and every table tab there (see [[entities/clr-metadata]] review
+  fixes); moving it means a worker pipeline for the whole web host, not a PDB change.
 
 ## Not done yet
 

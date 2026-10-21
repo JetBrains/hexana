@@ -47,7 +47,8 @@ enum class PdbMatch(val description: String) {
     Matches("matches the image"),
     NoReference("the image has no CodeView record naming a PDB"),
     WrongKind("the image expects the other kind of PDB"),
-    Unreadable("the PDB could not be read"),
+    Unreadable("the file could not be read as a PDB"),
+    TooLarge("the file is too large to load automatically"),
     GuidMismatch("the PDB GUID differs from the image's"),
     AgeMismatch("the PDB age differs from the image's (rebuilt since)"),
     StampMismatch("the PDB id stamp differs from the image's (rebuilt since)"),
@@ -92,13 +93,15 @@ sealed interface PeDebugSymbols {
 
 /**
  * Native line info from a Windows PDB: C13 rows are `section:offset`, placed at
- * `image base + section RVA + offset` so they line up with disassembly addresses.
+ * `image base + section RVA + offset` so they line up with disassembly addresses. Each row is
+ * bounded by its block's code range, so padding between functions maps to no line.
  */
 internal fun pdbNativeSourceLocations(pdb: PdbFile, imageBase: ULong, sections: List<PeSection>): NativeSourceLocationProvider? {
     val rows = pdb.lineBlocks.flatMap { block ->
         val section = sections.getOrNull(block.section - 1) ?: return@flatMap emptyList()
         val base = imageBase + section.virtualAddress.toULong()
-        block.rows.map { row -> AddressLineRow(base + row.offset.toULong(), row.file, row.line, row.column) }
+        val end = base + block.offset.toULong() + block.codeSize.toULong()
+        block.rows.map { row -> AddressLineRow(base + row.offset.toULong(), row.file, row.line, row.column, end) }
     }
     return rows.takeIf { it.isNotEmpty() }?.let(::AddressLineTable)
 }

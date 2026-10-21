@@ -155,8 +155,7 @@ class NativeTableTabsProvider : TableTabsProvider {
                 addAll(resolveDebugData(provider, debugData).debugInfoRows.orEmpty())
             }
             provider.portablePdb?.let { pdb ->
-                val methods = (1..pdb.methodDebugInformationCount).count { pdb.sequencePoints(it).any { point -> !point.isHidden } }
-                add("Methods with source lines" to "$methods of ${pdb.methodDebugInformationCount}")
+                add("Methods with sequence points" to "${pdb.methodsWithSequencePoints} of ${pdb.methodDebugInformationCount}")
                 add("Source files" to pdb.documents.size.toString())
                 pdb.documents.take(50).forEachIndexed { index, document -> add("File ${index + 1}" to document.name) }
             }
