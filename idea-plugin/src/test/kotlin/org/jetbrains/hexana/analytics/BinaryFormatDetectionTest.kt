@@ -1,6 +1,5 @@
 package org.jetbrains.hexana.analytics
 
-import com.intellij.mock.MockVirtualFile
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
@@ -210,12 +209,12 @@ class BinaryFormatDetectionTest {
             intArrayOf(0xCA, 0xFE, 0xBA, 0xBE, 0x00, 0x00, 0x00, 0x37).getOrElse(i) { 0 }.toByte()
         }
         val provider = ClassFileBinaryProvider(head.toCommonByteBuffer())
-        assertEquals(HexanaEvent.BinaryFormat.CLASS, binaryFormatOf(file = null, provider = provider))
+        assertEquals(HexanaEvent.BinaryFormat.CLASS, binaryFormatOf(fileName = null, provider = provider))
     }
     private fun formatOf(fileName: String?, vararg head: Int): HexanaEvent.BinaryFormat {
         val bytes = ByteArray(64) { i -> head.getOrElse(i) { 0 }.toByte() }
         val provider = nativeOrGenericBinaryProvider(bytes.toCommonByteBuffer())
-        return binaryFormatOf(fileName?.let { MockVirtualFile(it) }, provider)
+        return binaryFormatOf(fileName, provider)
     }
 
     private val zipHead = intArrayOf(0x50, 0x4B, 0x03, 0x04)
@@ -236,6 +235,15 @@ class BinaryFormatDetectionTest {
     }
 
     @Test
+    fun gzippedZipUsesInnerExtension() {
+        // The editor inflates `app.jar.gz` and resolves a ZipBinaryProvider over it;
+        // the format must follow the inner name, not the `gz` suffix.
+        assertEquals(HexanaEvent.BinaryFormat.JAR, formatOf("app.jar.gz", *zipHead))
+        assertEquals(HexanaEvent.BinaryFormat.APK, formatOf("app.APK.GZ", *zipHead))
+        assertEquals(HexanaEvent.BinaryFormat.ZIP, formatOf("lib.aar.gz", *zipHead))
+    }
+
+    @Test
     fun dexReportsDex() =
         assertEquals(HexanaEvent.BinaryFormat.DEX, formatOf("classes.bin", 0x64, 0x65, 0x78, 0x0A, 0x30, 0x33, 0x35, 0x00))
 
@@ -250,15 +258,15 @@ class BinaryFormatDetectionTest {
     @Test
     fun explicitProtobufMessageStaysGeneric() {
         val provider = ProtobufMessageBinaryProvider(ByteArray(8).toCommonByteBuffer())
-        assertEquals(HexanaEvent.BinaryFormat.GENERIC, binaryFormatOf(MockVirtualFile("msg.pb"), provider))
+        assertEquals(HexanaEvent.BinaryFormat.GENERIC, binaryFormatOf("msg.pb", provider))
     }
 
     @Test
     fun providerlessZipFamilyExtensionReportsZip() {
-        assertEquals(HexanaEvent.BinaryFormat.ZIP, binaryFormatOf(MockVirtualFile("lib.aar"), provider = null))
-        assertEquals(HexanaEvent.BinaryFormat.APK, binaryFormatOf(MockVirtualFile("app.apk"), provider = null))
-        assertEquals(HexanaEvent.BinaryFormat.ZIP, binaryFormatOf(MockVirtualFile("lib.aar.gz"), provider = null))
-        assertEquals(HexanaEvent.BinaryFormat.TAR, binaryFormatOf(MockVirtualFile("src.tar.gz"), provider = null))
-        assertEquals(HexanaEvent.BinaryFormat.GENERIC, binaryFormatOf(MockVirtualFile("blob.xyz"), provider = null))
+        assertEquals(HexanaEvent.BinaryFormat.ZIP, binaryFormatOf("lib.aar", provider = null))
+        assertEquals(HexanaEvent.BinaryFormat.APK, binaryFormatOf("app.apk", provider = null))
+        assertEquals(HexanaEvent.BinaryFormat.ZIP, binaryFormatOf("lib.aar.gz", provider = null))
+        assertEquals(HexanaEvent.BinaryFormat.TAR, binaryFormatOf("src.tar.gz", provider = null))
+        assertEquals(HexanaEvent.BinaryFormat.GENERIC, binaryFormatOf("blob.xyz", provider = null))
     }
 }

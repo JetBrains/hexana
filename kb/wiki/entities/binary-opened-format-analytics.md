@@ -34,6 +34,13 @@ Rules now:
   (`BinaryFormat.forZipContent`). Without content (providerless editors, `.gz` inner name),
   `BinaryFormat.fromExtension` maps `ZIP_FAMILY_EXTENSIONS` (aar, whl, nupkg, vsix, ipa, docx, …)
   to `zip`.
+- IDE classifies by the *logical* name: one trailing `.gz` is stripped (`app.jar.gz` → jar),
+  because the editor resolves the provider over the inflated bytes by the inner name.
+  `binaryFormatOf` takes a file name, not a `VirtualFile`, so `BinaryEditorView` (tab events) can
+  pass its `fileName` for providers that carry no file.
+- VS Code never falls back to the extension after content checks fail: the host passes inflated
+  bytes under the inner name and the webview picks providers by content, so a malformed `.wasm` /
+  `.dex` / `.jar` is shown — and reported — as `generic`. The extension only picks the zip subtype.
 - Explicit "Open as Protobuf message" (`ProtobufMessageBinaryProvider`) stays `generic` by design.
 - `GenericExt` gained firmware/object/dump buckets: o, obj, exe, elf, ko, efi, sys, hex, uf2, fw,
   rom, pak, dmp, core, raw.

@@ -128,7 +128,7 @@ private fun buildBinaryOpenedEvent(
     file: VirtualFile,
     editor: HexanaFileEditor,
 ): HexanaEvent.BinaryOpened {
-    val format = binaryFormatOf(file, editor.binaryProvider)
+    val format = binaryFormatOf(file.name, editor.binaryProvider)
     val native = editor.binaryProvider as? NativeBinaryProvider
     // Only the GENERIC catch-all carries the extension + magic-sniff
     // breakdown; structured formats already identify themselves via `format`.

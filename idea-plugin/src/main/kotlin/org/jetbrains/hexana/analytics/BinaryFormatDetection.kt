@@ -26,21 +26,25 @@ import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
 
 /**
- * Maps a `(BinaryProvider, VirtualFile)` pair to the analytics-side
+ * Maps a `(BinaryProvider, file name)` pair to the analytics-side
  * [HexanaEvent.BinaryFormat] enum. Single source of truth so the
  * `binary_opened` event and the `hex_tab_selected` enrichment agree on
  * which format string each editor is.
  *
- * The archive / `.class` editors don't set [BinaryProvider]; their format
- * is recovered from the file extension. Order matters: provider-typed
+ * [fileName] is the name the editor was opened for; a trailing `.gz` is
+ * stripped first, because the editor resolves the provider over the
+ * inflated bytes by the inner name (`app.jar.gz` is a jar). The archive /
+ * `.class` editors don't set [BinaryProvider]; their format is recovered
+ * from that inner extension. Order matters: provider-typed
  * cases are checked first so a `.bin`-named ELF doesn't get tagged
  * GENERIC. GENERIC therefore means "no Hexana format matched", never a
  * supported format reported under the catch-all.
  */
 internal fun binaryFormatOf(
-    file: VirtualFile?,
+    fileName: String?,
     provider: BinaryProvider?,
 ): HexanaEvent.BinaryFormat {
+    val ext = fileName?.let(::logicalExtension)
     when (provider) {
         is WasmComponentBinaryProvider -> return HexanaEvent.BinaryFormat.WASM_COMPONENT
         is WasmBinaryProvider -> return HexanaEvent.BinaryFormat.WASM
@@ -56,7 +60,7 @@ internal fun binaryFormatOf(
         is TarBinaryProvider -> return HexanaEvent.BinaryFormat.TAR
         // Content-verified zip: jar/war/apk keep their own format, every other
         // zip-based container (aar, whl, nupkg, vsix, docx, …) reports ZIP.
-        is ZipBinaryProvider -> return HexanaEvent.BinaryFormat.forZipContent(file?.extension)
+        is ZipBinaryProvider -> return HexanaEvent.BinaryFormat.forZipContent(ext)
         // The providers below extend GenericBinaryProvider, so they must precede
         // its branch. Each is content-verified (magic + header check), so the
         // format holds even when the file name says otherwise.
@@ -72,15 +76,13 @@ internal fun binaryFormatOf(
         // No provider: the archive / class editors; classified by extension below.
         null -> Unit
     }
-    val ext = file?.extension?.lowercase()
-    if (ext == "gz") {
-        val name = file?.name ?: return HexanaEvent.BinaryFormat.GENERIC
-        if (name.endsWith(".tar.gz", ignoreCase = true)) return HexanaEvent.BinaryFormat.TAR
-        // Strip .gz and re-detect based on the inner extension.
-        val innerExt = name.dropLast(3).substringAfterLast('.', "")
-        return HexanaEvent.BinaryFormat.fromExtension(innerExt) ?: HexanaEvent.BinaryFormat.GENERIC
-    }
     return HexanaEvent.BinaryFormat.fromExtension(ext) ?: HexanaEvent.BinaryFormat.GENERIC
+}
+
+/** Lowercased extension of [fileName] after stripping one trailing `.gz` (`src.tar.gz` → `tar`). */
+private fun logicalExtension(fileName: String): String? {
+    val inner = if (fileName.endsWith(".gz", ignoreCase = true)) fileName.dropLast(3) else fileName
+    return inner.substringAfterLast('.', "").lowercase().ifEmpty { null }
 }
 
 /**

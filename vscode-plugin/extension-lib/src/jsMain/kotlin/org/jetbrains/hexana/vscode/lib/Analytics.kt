@@ -105,8 +105,14 @@ fun captureBinaryOpened(fileName: String, bytes: ByteArray) {
  * Resolves the analytics [HexanaEvent.BinaryFormat] from file content,
  * mirroring the IDE plugin's `binaryFormatOf`: whatever the shared provider factory
  * resolves the bytes to first, then the content checks `nativeOrGenericBinaryProvider`
- * runs (in its order), then native formats, then the extension, else GENERIC.
- * Only the cheap static detectors run here — no provider is built.
+ * runs (in its order), then native formats, else GENERIC. Only the cheap static
+ * detectors run here — no provider is built.
+ *
+ * The host hands over already-inflated bytes under the inner name (`app.jar.gz` →
+ * `app.jar`), and the editor picks its provider from content, so once every content
+ * check has failed the user sees a generic view: the extension is not consulted
+ * again, or a malformed `.wasm` / `.dex` would be reported as a format it is not
+ * displayed as. The extension only names the zip subtype (jar / war / apk).
  */
 private fun resolveBinaryFormat(fileName: String, bytes: ByteArray): HexanaEvent.BinaryFormat {
     // The same call the editor makes, so the reported format is the one the user is
@@ -131,14 +137,7 @@ private fun resolveBinaryFormat(fileName: String, bytes: ByteArray): HexanaEvent
         NativeBinaryFormat.Archive -> return HexanaEvent.BinaryFormat.ARCHIVE
         null -> Unit
     }
-    return when {
-        fileName.endsWith(".tar.gz", ignoreCase = true) -> HexanaEvent.BinaryFormat.TAR
-        fileName.endsWith(".gz", ignoreCase = true) -> {
-            val innerName = fileName.substring(0, fileName.length - 3)
-            resolveBinaryFormat(innerName, bytes)
-        }
-        else -> HexanaEvent.BinaryFormat.fromExtension(extensionOf(fileName)) ?: HexanaEvent.BinaryFormat.GENERIC
-    }
+    return HexanaEvent.BinaryFormat.GENERIC
 }
 
 /**

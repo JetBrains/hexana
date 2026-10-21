@@ -262,8 +262,9 @@ internal fun BinaryEditorView(
     // Binary format derived once per opened provider — fed into the
     // `hex_tab_selected` analytics event so cross-tab funnels can filter
     // by container format (e.g. "ELF users → Disassembly tab").
-    val binaryFormat = remember(binaryProvider) {
-        binaryFormatOf((binaryProvider as? BinaryVirtualFileProvider)?.file, binaryProvider)
+    val binaryFormat = remember(binaryProvider, fileName) {
+        val name = fileName.ifEmpty { (binaryProvider as? BinaryVirtualFileProvider)?.file?.name }
+        binaryFormatOf(name, binaryProvider)
     }
     // The WASM function nav-target flow. Lifted here (above the panels
     // remember boundary) so the same flow instance persists across provider

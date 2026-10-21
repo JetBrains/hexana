@@ -169,6 +169,42 @@ class VscodeAnalyticsTest {
     }
 
     @Test
+    fun malformedContentUnderRecognisedNameIsGeneric() = runTest {
+        if (!isNodeTestRuntime()) return@runTest
+
+        val server = FakePostHogNodeServer.start()
+        try {
+            withProcessEnv(AnalyticsConfig.HOST_ENV_VAR, server.url) {
+                initAnalytics(
+                    storagePath = temporaryStoragePath(),
+                    telemetryEnabled = true,
+                    appName = "Visual Studio Code",
+                    appVersion = "1.102.0",
+                    pluginVersion = "9.9.9",
+                )
+
+                // The editor picks its provider from content, so bytes that match no
+                // format open as a generic view whatever the name says.
+                val junk = bytes(0xDE, 0xAD, 0xBE, 0xEF)
+                for (name in listOf("broken.wasm", "broken.dex", "broken.pdb", "broken.pcap", "broken.jar", "broken.aar")) {
+                    captureBinaryOpened(name, junk)
+                }
+
+                flushUntilEvents(server, expectedCount = 6)
+
+                val formats = server.events()
+                    .filter { it.name == "binary_opened" }
+                    .map { "${it.properties["format"]}" }
+                    .toSet()
+                assertEquals(setOf("generic"), formats)
+            }
+        } finally {
+            shutdownAnalytics()
+            server.close()
+        }
+    }
+
+    @Test
     fun telemetryDisabledSendsNoRequestsThroughExportedApi() = runTest {
         if (!isNodeTestRuntime()) return@runTest
 
