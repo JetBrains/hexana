@@ -221,6 +221,10 @@ sealed class HexanaEvent {
         PCAP("pcap"),
         PROTOBUF("protobuf"),
         ARCHIVE("archive"),
+        PDB("pdb"),
+        PORTABLE_PDB("portable_pdb"),
+        ARSC("arsc"),
+        DOTNET_RESOURCES("dotnet_resources"),
         OTHER("other"),
         GENERIC("generic"),
         ;
@@ -234,6 +238,51 @@ sealed class HexanaEvent {
              */
             fun fromValue(value: String): BinaryFormat? =
                 entries.firstOrNull { it.value == value }
+
+            /**
+             * Extensions of zip-based containers that have no format of their
+             * own: all report [ZIP]. `jar`, `war` and `apk` are deliberately
+             * absent — they keep their dedicated formats.
+             */
+            val ZIP_FAMILY_EXTENSIONS: Set<String> = setOf(
+                "zip", "aar", "ear", "jmod", "sar", "hpi", "kar", "nar",
+                "aab", "apks", "xapk", "ipa", "appx", "msix", "appxbundle", "msixbundle",
+                "nupkg", "snupkg", "vsix", "whl", "egg", "xpi", "crx",
+                "epub", "docx", "xlsx", "pptx", "odt", "ods", "odp", "kmz", "sketch",
+            )
+
+            /**
+             * Format of content already verified to be a zip archive: `jar`,
+             * `war` and `apk` keep their own format, every other name
+             * (including none) is [ZIP].
+             */
+            fun forZipContent(extension: String?): BinaryFormat = when (extension?.lowercase()) {
+                "jar" -> JAR
+                "war" -> WAR
+                "apk" -> APK
+                else -> ZIP
+            }
+
+            /**
+             * Format implied by a file extension alone, for paths where the
+             * content was not classified (no provider, or the inner name of a
+             * `.gz`). Returns null for an unrecognised extension.
+             */
+            fun fromExtension(extension: String?): BinaryFormat? = when (val ext = extension?.lowercase()) {
+                null -> null
+                "wasm" -> WASM
+                "class" -> CLASS
+                "jar" -> JAR
+                "war" -> WAR
+                "apk" -> APK
+                "tar", "tgz" -> TAR
+                "parquet" -> PARQUET
+                "arrow" -> ARROW_IPC
+                "dex" -> DEX
+                "pcap", "pcapng" -> PCAP
+                "pdb" -> PDB
+                else -> if (ext in ZIP_FAMILY_EXTENSIONS) ZIP else null
+            }
         }
     }
 
@@ -275,6 +324,23 @@ sealed class HexanaEvent {
         DB("db"),
         IMG("img"),
         ISO("iso"),
+        // Firmware, object-file and dump extensions — a native/embedded
+        // audience opens these when the content is not a recognised container.
+        O("o"),
+        OBJ("obj"),
+        EXE("exe"),
+        ELF("elf"),
+        KO("ko"),
+        EFI("efi"),
+        SYS("sys"),
+        HEX("hex"),
+        UF2("uf2"),
+        FW("fw"),
+        ROM("rom"),
+        PAK("pak"),
+        DMP("dmp"),
+        CORE("core"),
+        RAW("raw"),
         OTHER("other"),
         ;
 

@@ -101,7 +101,9 @@ class VscodeAnalyticsTest {
 
                 // One file per newly-supported container magic. Each name has an
                 // unrecognized extension so it falls through to generic and is
-                // classified by its magic bytes alone. tar is the offset-257 case.
+                // classified by its magic bytes alone. tar is the offset-257 case;
+                // the editor opens it as a tar archive, so it reports format=tar
+                // rather than generic + detected_format.
                 captureBinaryOpened("a.blob", bytes(0x28, 0xB5, 0x2F, 0xFD)) // zstd
                 captureBinaryOpened("b.blob", bytes(0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C)) // 7z
                 captureBinaryOpened("c.blob", bytes(0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00)) // xz
@@ -113,14 +115,52 @@ class VscodeAnalyticsTest {
 
                 flushUntilEvents(server, expectedCount = 8)
 
-                val detected = server.events()
+                val classified = server.events()
                     .filter { it.name == "binary_opened" }
-                    .map { "${it.properties["detected_format"]}" }
+                    .map { "${it.properties["format"]}/${it.properties["detected_format"]}" }
                     .toSet()
                 assertEquals(
-                    setOf("zstd", "sevenzip", "xz", "bzip2", "rar", "lz4", "cab", "tar"),
-                    detected,
+                    setOf(
+                        "generic/zstd", "generic/sevenzip", "generic/xz", "generic/bzip2",
+                        "generic/rar", "generic/lz4", "generic/cab", "tar/undefined",
+                    ),
+                    classified,
                 )
+            }
+        } finally {
+            shutdownAnalytics()
+            server.close()
+        }
+    }
+
+    @Test
+    fun supportedContainersAreNotReportedAsGeneric() = runTest {
+        if (!isNodeTestRuntime()) return@runTest
+
+        val server = FakePostHogNodeServer.start()
+        try {
+            withProcessEnv(AnalyticsConfig.HOST_ENV_VAR, server.url) {
+                initAnalytics(
+                    storagePath = temporaryStoragePath(),
+                    telemetryEnabled = true,
+                    appName = "Visual Studio Code",
+                    appVersion = "1.102.0",
+                    pluginVersion = "9.9.9",
+                )
+
+                val zip = bytes(0x50, 0x4B, 0x03, 0x04)
+                captureBinaryOpened("lib.aar", zip)
+                captureBinaryOpened("app.apk", zip)
+                captureBinaryOpened("libfoo.a", bytes(0x21, 0x3C, 0x61, 0x72, 0x63, 0x68, 0x3E, 0x0A)) // "!<arch>\n"
+                captureBinaryOpened("classes.dex", bytes(0x64, 0x65, 0x78, 0x0A, 0x30, 0x33, 0x35, 0x00))
+
+                flushUntilEvents(server, expectedCount = 4)
+
+                val formats = server.events()
+                    .filter { it.name == "binary_opened" }
+                    .map { "${it.properties["format"]}" }
+                    .toSet()
+                assertEquals(setOf("zip", "apk", "archive", "dex"), formats)
             }
         } finally {
             shutdownAnalytics()

@@ -6,8 +6,17 @@ import org.jetbrains.hexana.analytics.*
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormatDetector
+import org.jetbrains.hexana.providers.ArscBinaryProvider
 import org.jetbrains.hexana.providers.BinaryProviderKind
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
+import org.jetbrains.hexana.providers.ClrResourcesBinaryProvider
+import org.jetbrains.hexana.providers.DexBinaryProvider
+import org.jetbrains.hexana.providers.PcapBinaryProvider
+import org.jetbrains.hexana.providers.PdbBinaryProvider
+import org.jetbrains.hexana.providers.PortablePdbBinaryProvider
+import org.jetbrains.hexana.providers.ProtobufBinaryProvider
+import org.jetbrains.hexana.providers.TarBinaryProvider
+import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.providers.resolveBinaryProviderKind
 
 /** Safely converts a JS [Double] to [Long], clamping NaN, Infinity, and negative values to 0. */
@@ -95,10 +104,9 @@ fun captureBinaryOpened(fileName: String, bytes: ByteArray) {
 /**
  * Resolves the analytics [HexanaEvent.BinaryFormat] from file content,
  * mirroring the IDE plugin's `binaryFormatOf`: whatever the shared provider factory
- * resolves the bytes to first, then Java class by content magic, then native formats,
- * then archive by extension, else GENERIC. `.a` static
- * archives ([NativeBinaryFormat.Archive]) fall through to GENERIC, matching
- * the IDE.
+ * resolves the bytes to first, then the content checks `nativeOrGenericBinaryProvider`
+ * runs (in its order), then native formats, then the extension, else GENERIC.
+ * Only the cheap static detectors run here — no provider is built.
  */
 private fun resolveBinaryFormat(fileName: String, bytes: ByteArray): HexanaEvent.BinaryFormat {
     // The same call the editor makes, so the reported format is the one the user is
@@ -110,39 +118,49 @@ private fun resolveBinaryFormat(fileName: String, bytes: ByteArray): HexanaEvent
         is BinaryProviderKind.Arrow -> return HexanaEvent.BinaryFormat.ARROW_IPC
         // A Protobuf message is only ever reached through an explicit `.pb` open, not
         // auto-detected, so it reports GENERIC exactly as it does in the IDE.
-        BinaryProviderKind.ProtobufMessage,
+        BinaryProviderKind.ProtobufMessage -> return HexanaEvent.BinaryFormat.GENERIC
         BinaryProviderKind.NativeOrGeneric -> Unit
     }
-    // Class check must precede the native detector: both key off 0xCAFEBABE
-    // (Java class file vs Mach-O universal), and the editor's provider
-    // dispatch resolves the ambiguity in this order too.
-    if (ClassFileBinaryProvider.isClassFile(bytes.toCommonByteBuffer())) {
-        return HexanaEvent.BinaryFormat.CLASS
-    }
+    contentFormatOf(fileName, bytes)?.let { return it }
     when (NativeBinaryFormatDetector.detect(bytes.toCommonByteBuffer())) {
         is NativeBinaryFormat.Elf -> return HexanaEvent.BinaryFormat.ELF
         is NativeBinaryFormat.MachO -> return HexanaEvent.BinaryFormat.MACHO
         is NativeBinaryFormat.FatMachO -> return HexanaEvent.BinaryFormat.FAT_MACHO
         is NativeBinaryFormat.Pe -> return HexanaEvent.BinaryFormat.PE
         is NativeBinaryFormat.Coff -> return HexanaEvent.BinaryFormat.COFF
-        NativeBinaryFormat.Archive, null -> Unit
+        NativeBinaryFormat.Archive -> return HexanaEvent.BinaryFormat.ARCHIVE
+        null -> Unit
     }
-    return when (extensionOf(fileName)) {
-        "class" -> HexanaEvent.BinaryFormat.CLASS
-        "jar" -> HexanaEvent.BinaryFormat.JAR
-        "war" -> HexanaEvent.BinaryFormat.WAR
-        "apk" -> HexanaEvent.BinaryFormat.APK
-        "zip" -> HexanaEvent.BinaryFormat.ZIP
-        "tar" -> HexanaEvent.BinaryFormat.TAR
-        "tgz" -> HexanaEvent.BinaryFormat.TAR
-        else -> when {
-            fileName.endsWith(".tar.gz", ignoreCase = true) -> HexanaEvent.BinaryFormat.TAR
-            fileName.endsWith(".gz", ignoreCase = true) -> {
-                val innerName = fileName.substring(0, fileName.length - 3)
-                resolveBinaryFormat(innerName, bytes)
-            }
-            else -> HexanaEvent.BinaryFormat.GENERIC
+    return when {
+        fileName.endsWith(".tar.gz", ignoreCase = true) -> HexanaEvent.BinaryFormat.TAR
+        fileName.endsWith(".gz", ignoreCase = true) -> {
+            val innerName = fileName.substring(0, fileName.length - 3)
+            resolveBinaryFormat(innerName, bytes)
         }
+        else -> HexanaEvent.BinaryFormat.fromExtension(extensionOf(fileName)) ?: HexanaEvent.BinaryFormat.GENERIC
+    }
+}
+
+/**
+ * The content checks of `nativeOrGenericBinaryProvider`, in the same order, so a
+ * format the editor recognises is never reported as GENERIC. The class check also
+ * precedes the native detector there: both key off 0xCAFEBABE (Java class file vs
+ * Mach-O universal).
+ */
+private fun contentFormatOf(fileName: String, bytes: ByteArray): HexanaEvent.BinaryFormat? {
+    val buffer = bytes.toCommonByteBuffer()
+    return when {
+        ZipBinaryProvider.isZip(buffer) -> HexanaEvent.BinaryFormat.forZipContent(extensionOf(fileName))
+        TarBinaryProvider.isTar(buffer) -> HexanaEvent.BinaryFormat.TAR
+        ClassFileBinaryProvider.isClassFile(buffer) -> HexanaEvent.BinaryFormat.CLASS
+        DexBinaryProvider.isDexFile(buffer) -> HexanaEvent.BinaryFormat.DEX
+        ArscBinaryProvider.isArscFile(buffer) -> HexanaEvent.BinaryFormat.ARSC
+        ClrResourcesBinaryProvider.isResourcesFile(buffer) -> HexanaEvent.BinaryFormat.DOTNET_RESOURCES
+        PdbBinaryProvider.isPdbFile(buffer) -> HexanaEvent.BinaryFormat.PDB
+        PortablePdbBinaryProvider.isPortablePdbFile(buffer) -> HexanaEvent.BinaryFormat.PORTABLE_PDB
+        PcapBinaryProvider.isPcapFile(buffer) -> HexanaEvent.BinaryFormat.PCAP
+        ProtobufBinaryProvider.isFileDescriptorSet(buffer) -> HexanaEvent.BinaryFormat.PROTOBUF
+        else -> null
     }
 }
 

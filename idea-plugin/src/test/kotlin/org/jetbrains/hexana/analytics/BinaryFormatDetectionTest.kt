@@ -1,8 +1,11 @@
 package org.jetbrains.hexana.analytics
 
+import com.intellij.mock.MockVirtualFile
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
+import org.jetbrains.hexana.providers.ProtobufMessageBinaryProvider
+import org.jetbrains.hexana.providers.nativeOrGenericBinaryProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -11,6 +14,10 @@ import org.junit.Test
  * Unit tests for the GENERIC-bucket breakdown: the magic-byte sniffer in
  * [genericDetailOf]. Extension-to-bucket mapping is covered at the enum
  * level in `HexanaEventTest.genericExtFromExtensionAllowlist`.
+ *
+ * Also covers [binaryFormatOf] for the supported formats whose providers extend
+ * [GenericBinaryProvider] or used to fall through to the extension switch, so
+ * none of them is reported under the GENERIC catch-all.
  */
 class BinaryFormatDetectionTest {
 
@@ -204,5 +211,54 @@ class BinaryFormatDetectionTest {
         }
         val provider = ClassFileBinaryProvider(head.toCommonByteBuffer())
         assertEquals(HexanaEvent.BinaryFormat.CLASS, binaryFormatOf(file = null, provider = provider))
+    }
+    private fun formatOf(fileName: String?, vararg head: Int): HexanaEvent.BinaryFormat {
+        val bytes = ByteArray(64) { i -> head.getOrElse(i) { 0 }.toByte() }
+        val provider = nativeOrGenericBinaryProvider(bytes.toCommonByteBuffer())
+        return binaryFormatOf(fileName?.let { MockVirtualFile(it) }, provider)
+    }
+
+    private val zipHead = intArrayOf(0x50, 0x4B, 0x03, 0x04)
+
+    @Test
+    fun zipFamilyContainersReportZip() {
+        for (name in listOf("lib.aar", "pkg.whl", "pkg.nupkg", "ext.vsix", "app.ipa", "doc.docx", "data.bin", "archive.zip")) {
+            assertEquals(name, HexanaEvent.BinaryFormat.ZIP, formatOf(name, *zipHead))
+        }
+        assertEquals(HexanaEvent.BinaryFormat.ZIP, formatOf(null, *zipHead))
+    }
+
+    @Test
+    fun jarWarApkKeepTheirOwnFormat() {
+        assertEquals(HexanaEvent.BinaryFormat.JAR, formatOf("lib.jar", *zipHead))
+        assertEquals(HexanaEvent.BinaryFormat.WAR, formatOf("app.WAR", *zipHead))
+        assertEquals(HexanaEvent.BinaryFormat.APK, formatOf("app.apk", *zipHead))
+    }
+
+    @Test
+    fun dexReportsDex() =
+        assertEquals(HexanaEvent.BinaryFormat.DEX, formatOf("classes.bin", 0x64, 0x65, 0x78, 0x0A, 0x30, 0x33, 0x35, 0x00))
+
+    @Test
+    fun pcapReportsPcap() = assertEquals(HexanaEvent.BinaryFormat.PCAP, formatOf("capture.bin", 0xD4, 0xC3, 0xB2, 0xA1, 0x02, 0x00, 0x04, 0x00))
+
+    @Test
+    fun staticArchiveReportsArchive() =
+        // "!<arch>\n"
+        assertEquals(HexanaEvent.BinaryFormat.ARCHIVE, formatOf("libfoo.a", 0x21, 0x3C, 0x61, 0x72, 0x63, 0x68, 0x3E, 0x0A))
+
+    @Test
+    fun explicitProtobufMessageStaysGeneric() {
+        val provider = ProtobufMessageBinaryProvider(ByteArray(8).toCommonByteBuffer())
+        assertEquals(HexanaEvent.BinaryFormat.GENERIC, binaryFormatOf(MockVirtualFile("msg.pb"), provider))
+    }
+
+    @Test
+    fun providerlessZipFamilyExtensionReportsZip() {
+        assertEquals(HexanaEvent.BinaryFormat.ZIP, binaryFormatOf(MockVirtualFile("lib.aar"), provider = null))
+        assertEquals(HexanaEvent.BinaryFormat.APK, binaryFormatOf(MockVirtualFile("app.apk"), provider = null))
+        assertEquals(HexanaEvent.BinaryFormat.ZIP, binaryFormatOf(MockVirtualFile("lib.aar.gz"), provider = null))
+        assertEquals(HexanaEvent.BinaryFormat.TAR, binaryFormatOf(MockVirtualFile("src.tar.gz"), provider = null))
+        assertEquals(HexanaEvent.BinaryFormat.GENERIC, binaryFormatOf(MockVirtualFile("blob.xyz"), provider = null))
     }
 }

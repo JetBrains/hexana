@@ -2,21 +2,27 @@ package org.jetbrains.hexana.analytics
 
 import com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.providers.BinaryProvider
-import org.jetbrains.hexana.providers.CoffBinaryProvider
-import org.jetbrains.hexana.providers.ElfBinaryProvider
-import org.jetbrains.hexana.providers.FatMachOBinaryProvider
 import org.jetbrains.hexana.providers.ArchiveBinaryProvider
 import org.jetbrains.hexana.providers.ArrowBinaryProvider
+import org.jetbrains.hexana.providers.ArscBinaryProvider
+import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
+import org.jetbrains.hexana.providers.ClrResourcesBinaryProvider
+import org.jetbrains.hexana.providers.CoffBinaryProvider
 import org.jetbrains.hexana.providers.DexBinaryProvider
+import org.jetbrains.hexana.providers.ElfBinaryProvider
+import org.jetbrains.hexana.providers.FatMachOBinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.ParquetBinaryProvider
+import org.jetbrains.hexana.providers.PcapBinaryProvider
+import org.jetbrains.hexana.providers.PdbBinaryProvider
 import org.jetbrains.hexana.providers.PeBinaryProvider
+import org.jetbrains.hexana.providers.PortablePdbBinaryProvider
+import org.jetbrains.hexana.providers.ProtobufBinaryProvider
+import org.jetbrains.hexana.providers.TarBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
-import org.jetbrains.hexana.providers.TarBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
 
 /**
@@ -28,7 +34,8 @@ import org.jetbrains.hexana.providers.ZipBinaryProvider
  * The archive / `.class` editors don't set [BinaryProvider]; their format
  * is recovered from the file extension. Order matters: provider-typed
  * cases are checked first so a `.bin`-named ELF doesn't get tagged
- * GENERIC.
+ * GENERIC. GENERIC therefore means "no Hexana format matched", never a
+ * supported format reported under the catch-all.
  */
 internal fun binaryFormatOf(
     file: VirtualFile?,
@@ -44,56 +51,36 @@ internal fun binaryFormatOf(
         is CoffBinaryProvider -> return HexanaEvent.BinaryFormat.COFF
         is ParquetBinaryProvider -> return HexanaEvent.BinaryFormat.PARQUET
         is ArrowBinaryProvider -> return HexanaEvent.BinaryFormat.ARROW_IPC
-        is ArchiveBinaryProvider -> return HexanaEvent.BinaryFormat.GENERIC
-        // Content-verified (0xCAFEBABE + version check) — report CLASS even
-        // when the file isn't named `.class`. Must precede the
-        // GenericBinaryProvider branch, which this provider extends.
+        is ArchiveBinaryProvider -> return HexanaEvent.BinaryFormat.ARCHIVE
+        is DexBinaryProvider -> return HexanaEvent.BinaryFormat.DEX
+        is TarBinaryProvider -> return HexanaEvent.BinaryFormat.TAR
+        // Content-verified zip: jar/war/apk keep their own format, every other
+        // zip-based container (aar, whl, nupkg, vsix, docx, …) reports ZIP.
+        is ZipBinaryProvider -> return HexanaEvent.BinaryFormat.forZipContent(file?.extension)
+        // The providers below extend GenericBinaryProvider, so they must precede
+        // its branch. Each is content-verified (magic + header check), so the
+        // format holds even when the file name says otherwise.
         is ClassFileBinaryProvider -> return HexanaEvent.BinaryFormat.CLASS
+        is PdbBinaryProvider -> return HexanaEvent.BinaryFormat.PDB
+        is PortablePdbBinaryProvider -> return HexanaEvent.BinaryFormat.PORTABLE_PDB
+        is PcapBinaryProvider -> return HexanaEvent.BinaryFormat.PCAP
+        is ProtobufBinaryProvider -> return HexanaEvent.BinaryFormat.PROTOBUF
+        is ArscBinaryProvider -> return HexanaEvent.BinaryFormat.ARSC
+        is ClrResourcesBinaryProvider -> return HexanaEvent.BinaryFormat.DOTNET_RESOURCES
         // ProtobufMessageBinaryProvider (explicit Open-As) intentionally reports as GENERIC — not an auto-detected format.
         is GenericBinaryProvider -> return HexanaEvent.BinaryFormat.GENERIC
-        is TarBinaryProvider -> return HexanaEvent.BinaryFormat.TAR
-        // Zip / dex providers are classified by extension below (jar/war/apk/zip).
-        is ZipBinaryProvider, is DexBinaryProvider, null -> Unit
+        // No provider: the archive / class editors; classified by extension below.
+        null -> Unit
     }
-    return when (file?.extension?.lowercase()) {
-        "class" -> HexanaEvent.BinaryFormat.CLASS
-        "jar" -> HexanaEvent.BinaryFormat.JAR
-        "war" -> HexanaEvent.BinaryFormat.WAR
-        "apk" -> HexanaEvent.BinaryFormat.APK
-        "zip" -> HexanaEvent.BinaryFormat.ZIP
-        "tar" -> HexanaEvent.BinaryFormat.TAR
-        "tgz" -> HexanaEvent.BinaryFormat.TAR
-        "gz" -> {
-            val name = file?.name ?: return HexanaEvent.BinaryFormat.GENERIC
-            if (name.endsWith(".tar.gz", ignoreCase = true)) {
-                HexanaEvent.BinaryFormat.TAR
-            } else {
-                // Strip .gz and re-detect based on the inner extension.
-                val inner = name.removeSuffix(".gz").removeSuffix(".GZ")
-                val innerExt = inner.substringAfterLast('.', "").lowercase()
-                binaryFormatByExtension(innerExt)
-            }
-        }
-        else -> HexanaEvent.BinaryFormat.GENERIC
+    val ext = file?.extension?.lowercase()
+    if (ext == "gz") {
+        val name = file?.name ?: return HexanaEvent.BinaryFormat.GENERIC
+        if (name.endsWith(".tar.gz", ignoreCase = true)) return HexanaEvent.BinaryFormat.TAR
+        // Strip .gz and re-detect based on the inner extension.
+        val innerExt = name.dropLast(3).substringAfterLast('.', "")
+        return HexanaEvent.BinaryFormat.fromExtension(innerExt) ?: HexanaEvent.BinaryFormat.GENERIC
     }
-}
-
-/**
- * Maps a lowercased file extension to a [HexanaEvent.BinaryFormat], returning
- * [HexanaEvent.BinaryFormat.GENERIC] for unrecognised extensions. Used by the
- * `.gz` branch to classify the inner content.
- */
-private fun binaryFormatByExtension(ext: String): HexanaEvent.BinaryFormat = when (ext) {
-    "wasm" -> HexanaEvent.BinaryFormat.WASM
-    "class" -> HexanaEvent.BinaryFormat.CLASS
-    "jar" -> HexanaEvent.BinaryFormat.JAR
-    "war" -> HexanaEvent.BinaryFormat.WAR
-    "apk" -> HexanaEvent.BinaryFormat.APK
-    "zip" -> HexanaEvent.BinaryFormat.ZIP
-    "tar", "tgz" -> HexanaEvent.BinaryFormat.TAR
-    "parquet" -> HexanaEvent.BinaryFormat.PARQUET
-    "arrow" -> HexanaEvent.BinaryFormat.ARROW_IPC
-    else -> HexanaEvent.BinaryFormat.GENERIC
+    return HexanaEvent.BinaryFormat.fromExtension(ext) ?: HexanaEvent.BinaryFormat.GENERIC
 }
 
 /**

@@ -109,6 +109,38 @@ class HexanaEventTest {
     }
 
     @Test
+    fun binaryFormatForZipContentKeepsJarWarApk() {
+        assertEquals(HexanaEvent.BinaryFormat.JAR, HexanaEvent.BinaryFormat.forZipContent("jar"))
+        assertEquals(HexanaEvent.BinaryFormat.WAR, HexanaEvent.BinaryFormat.forZipContent("WAR"))
+        assertEquals(HexanaEvent.BinaryFormat.APK, HexanaEvent.BinaryFormat.forZipContent("apk"))
+        assertEquals(HexanaEvent.BinaryFormat.ZIP, HexanaEvent.BinaryFormat.forZipContent("aar"))
+        assertEquals(HexanaEvent.BinaryFormat.ZIP, HexanaEvent.BinaryFormat.forZipContent("bin"))
+        assertEquals(HexanaEvent.BinaryFormat.ZIP, HexanaEvent.BinaryFormat.forZipContent(null))
+    }
+
+    @Test
+    fun binaryFormatFromExtension() {
+        for (ext in HexanaEvent.BinaryFormat.ZIP_FAMILY_EXTENSIONS) {
+            assertEquals(HexanaEvent.BinaryFormat.ZIP, HexanaEvent.BinaryFormat.fromExtension(ext), ext)
+        }
+        assertEquals(HexanaEvent.BinaryFormat.ZIP, HexanaEvent.BinaryFormat.fromExtension("NUPKG"))
+        assertEquals(HexanaEvent.BinaryFormat.APK, HexanaEvent.BinaryFormat.fromExtension("apk"))
+        assertEquals(HexanaEvent.BinaryFormat.TAR, HexanaEvent.BinaryFormat.fromExtension("tgz"))
+        assertEquals(HexanaEvent.BinaryFormat.DEX, HexanaEvent.BinaryFormat.fromExtension("dex"))
+        assertEquals(HexanaEvent.BinaryFormat.PCAP, HexanaEvent.BinaryFormat.fromExtension("pcapng"))
+        assertEquals(HexanaEvent.BinaryFormat.PDB, HexanaEvent.BinaryFormat.fromExtension("pdb"))
+        assertNull(HexanaEvent.BinaryFormat.fromExtension("xyz"))
+        assertNull(HexanaEvent.BinaryFormat.fromExtension(null))
+    }
+
+    @Test
+    fun zipFamilyExcludesFormatsReportedSeparately() {
+        for (ext in listOf("jar", "war", "apk")) {
+            assertFalse(ext in HexanaEvent.BinaryFormat.ZIP_FAMILY_EXTENSIONS, ext)
+        }
+    }
+
+    @Test
     fun genericBreakdownEnumValuesAreSnakeCase() {
         val valueRegex = Regex("^[a-z][a-z0-9_]*$")
         for (ext in HexanaEvent.GenericExt.entries) {
@@ -116,6 +148,9 @@ class HexanaEventTest {
         }
         for (fmt in HexanaEvent.DetectedFormat.entries) {
             assertTrue(valueRegex.matches(fmt.value), "DetectedFormat value '${fmt.value}' is not snake_case")
+        }
+        for (fmt in HexanaEvent.BinaryFormat.entries) {
+            assertTrue(valueRegex.matches(fmt.value), "BinaryFormat value '${fmt.value}' is not snake_case")
         }
     }
 
