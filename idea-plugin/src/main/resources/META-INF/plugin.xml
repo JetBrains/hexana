@@ -254,6 +254,11 @@
                   fieldName="INSTANCE"
                   extensions="pcap;pcapng;cap"/>
 
+        <!-- No extensions: `.pdb` is also the Protein Data Bank text format; typed by content instead. -->
+        <fileType name="PDB Debug Symbols"
+                  implementationClass="org.jetbrains.hexana.PdbFileType"
+                  fieldName="INSTANCE"/>
+
         <fileType name="Protobuf Descriptor Set"
                   implementationClass="org.jetbrains.hexana.ProtobufFileType"
                   fieldName="INSTANCE"

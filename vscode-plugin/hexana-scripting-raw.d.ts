@@ -1641,6 +1641,32 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       };
       row: number;
     }[];
+    portablePdb?: {
+      documents: {
+        hash: string;
+        hashAlgorithm?: string;
+        language?: string;
+        name: string;
+        recordRange: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        row: number;
+      }[];
+      header: {
+        entryPointToken: number;
+        guid: string;
+        range: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        referencedTableRows: Record<number, number>;
+        stamp: number;
+      };
+      methodDebugInformationCount: number;
+    };
     readyToRun: boolean;
     root?: {
       flags: number;
@@ -1781,6 +1807,9 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       size: number;
     };
     index: number;
+    isPortablePdbCodeView: boolean;
+    majorVersion: number;
+    minorVersion: number;
     pointerToRawData: number;
     recordRange: {
       endExclusive: number;
@@ -4283,6 +4312,557 @@ interface ClrResourcesBinaryProvider extends GenericBinaryProvider {
   }[];
 }
 
+interface PdbSymbolsBinaryProvider extends GenericBinaryProvider {
+  pdbGuid?: string;
+}
+
+interface PdbBinaryProvider extends PdbSymbolsBinaryProvider {
+  parsedPdb?: {
+    blockMapRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    dbi?: {
+      age: number;
+      buildMajor: number;
+      buildMinor: number;
+      flags: number;
+      globalSymbolStream?: number;
+      hasConflictingTypes: boolean;
+      isIncrementallyLinked: boolean;
+      isStripped: boolean;
+      machine: number;
+      modules: {
+        c11ByteSize: number;
+        c13ByteSize: number;
+        contribution: {
+          characteristics: number;
+          dataCrc: number;
+          fileRange?: {
+            endExclusive: number;
+            offset: number;
+            size: number;
+          };
+          moduleIndex: number;
+          offset: number;
+          relocCrc: number;
+          section: number;
+          size: number;
+        };
+        fileRange?: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        flags: number;
+        index: number;
+        moduleName: string;
+        objectFileName: string;
+        recordSize: number;
+        sourceFileCount: number;
+        sourceFiles: string[];
+        streamOffset: number;
+        symbolByteSize: number;
+        symbolStream?: number;
+      }[];
+      optionalDebugStreams: Record<"Fpo" | "Exception" | "Fixup" | "OmapToSource" | "OmapFromSource" | "SectionHeaders" | "TokenRidMap" | "Xdata" | "Pdata" | "NewFpo" | "OriginalSectionHeaders", number>;
+      pdbDllRebuild: number;
+      pdbDllVersion: number;
+      publicSymbolStream?: number;
+      sectionContributions: {
+        characteristics: number;
+        dataCrc: number;
+        fileRange?: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        moduleIndex: number;
+        offset: number;
+        relocCrc: number;
+        section: number;
+        size: number;
+      }[];
+      substreams: {
+        fileRange?: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        name: string;
+        size: number;
+        streamOffset: number;
+      }[];
+      symbolRecordStream?: number;
+      version: number;
+      versionSignature: number;
+    };
+    diagnostics: {
+      code: string;
+      message: string;
+      range?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      severity: "Info" | "Warning" | "Error";
+    }[];
+    identity?: {
+      age: number;
+      guid: string;
+    };
+    info?: {
+      age: number;
+      features: "Vc110" | "Vc140" | "NoTypeMerge" | "MinimalDebugInfo"[];
+      guid?: string;
+      namedStreams: Record<string, number>;
+      signature: number;
+      version: number;
+    };
+    ipi?: {
+      hashAuxStream?: number;
+      hashStream?: number;
+      headerSize: number;
+      recordCount: number;
+      typeIndexBegin: number;
+      typeIndexEnd: number;
+      typeRecordBytes: number;
+      version: number;
+    };
+    streamRoles: Record<number, string>;
+    streams: {
+      blockSize: number;
+      blocks: number[];
+      bytes: {
+        indices: {
+          endExclusive: number;
+          endInclusive: number;
+          first: number;
+          last: number;
+          start: number;
+          step: number;
+        };
+        lastIndex: number;
+        size: number;
+      };
+      index: number;
+      isNil: boolean;
+      size: number;
+    }[];
+    superBlock: {
+      blockCount: number;
+      blockMapAddress: number;
+      blockSize: number;
+      directoryByteCount: number;
+      freeBlockMapBlock: number;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+    };
+    tpi?: {
+      hashAuxStream?: number;
+      hashStream?: number;
+      headerSize: number;
+      recordCount: number;
+      typeIndexBegin: number;
+      typeIndexEnd: number;
+      typeRecordBytes: number;
+      version: number;
+    };
+  };
+  pdbGuid?: string;
+  structureRanges: {
+    label: string;
+    offset: number;
+    size: number;
+    tabName?: string;
+  }[];
+}
+
+interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
+  metadata: {
+    assembly?: {
+      culture: string;
+      flags: number;
+      hashAlgorithm: number;
+      name: string;
+      publicKey: number[];
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      version: {
+        build: number;
+        major: number;
+        minor: number;
+        revision: number;
+      };
+    };
+    assemblyRefs: {
+      culture: string;
+      flags: number;
+      name: string;
+      publicKeyOrToken: number[];
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      token: number;
+      version: {
+        build: number;
+        major: number;
+        minor: number;
+        revision: number;
+      };
+    }[];
+    diagnostics: {
+      code: string;
+      message: string;
+      range?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      severity: "Info" | "Warning" | "Error";
+    }[];
+    entryPoint?: string;
+    fields: {
+      declaringTypeRow: number;
+      flags: number;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      token: number;
+      type: string;
+    }[];
+    fieldsByType: Record<number, {
+      declaringTypeRow: number;
+      flags: number;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      token: number;
+      type: string;
+    }[]>;
+    header: {
+      entryPointToken: number;
+      flags: number;
+      hasNativeEntryPoint: boolean;
+      headerRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      isIlOnly: boolean;
+      isStrongNameSigned: boolean;
+      majorRuntimeVersion: number;
+      managedNativeHeaderRva: number;
+      managedNativeHeaderSize: number;
+      metadataRva: number;
+      metadataSize: number;
+      minorRuntimeVersion: number;
+      prefers32Bit: boolean;
+      requires32Bit: boolean;
+      resourcesRva: number;
+      resourcesSize: number;
+      size: number;
+      strongNameSignatureRva: number;
+      strongNameSignatureSize: number;
+      vTableFixupsRva: number;
+      vTableFixupsSize: number;
+    };
+    manifestResources: {
+      dataRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      flags: number;
+      implementation: string;
+      isPublic: boolean;
+      name: string;
+      offset: number;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      size?: number;
+    }[];
+    memberRefs: {
+      isField: boolean;
+      name: string;
+      parent: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      signature: string;
+      token: number;
+    }[];
+    methods: {
+      body?: {
+        codeRange: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        codeSize: number;
+        exceptionClauses: {
+          catchType?: string;
+          filterOffset?: number;
+          handlerLength: number;
+          handlerOffset: number;
+          kind: "Catch" | "Filter" | "Finally" | "Fault";
+          tryLength: number;
+          tryOffset: number;
+        }[];
+        exceptionSectionsRange?: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        hasExceptionSections: boolean;
+        initLocals: boolean;
+        isFat: boolean;
+        localVarSigToken: number;
+        maxStack: number;
+        range: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+      };
+      declaringTypeRow: number;
+      flags: number;
+      implFlags: number;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      rva: number;
+      signature: string;
+      token: number;
+    }[];
+    methodsByType: Record<number, {
+      body?: {
+        codeRange: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        codeSize: number;
+        exceptionClauses: {
+          catchType?: string;
+          filterOffset?: number;
+          handlerLength: number;
+          handlerOffset: number;
+          kind: "Catch" | "Filter" | "Finally" | "Fault";
+          tryLength: number;
+          tryOffset: number;
+        }[];
+        exceptionSectionsRange?: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        hasExceptionSections: boolean;
+        initLocals: boolean;
+        isFat: boolean;
+        localVarSigToken: number;
+        maxStack: number;
+        range: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+      };
+      declaringTypeRow: number;
+      flags: number;
+      implFlags: number;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      rva: number;
+      signature: string;
+      token: number;
+    }[]>;
+    module?: {
+      generation: number;
+      mvid?: string;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+    };
+    moduleRefs: {
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+    }[];
+    portablePdb?: {
+      documents: {
+        hash: string;
+        hashAlgorithm?: string;
+        language?: string;
+        name: string;
+        recordRange: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        row: number;
+      }[];
+      header: {
+        entryPointToken: number;
+        guid: string;
+        range: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        referencedTableRows: Record<number, number>;
+        stamp: number;
+      };
+      methodDebugInformationCount: number;
+    };
+    readyToRun: boolean;
+    root?: {
+      flags: number;
+      majorVersion: number;
+      minorVersion: number;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      streamCount: number;
+      version: string;
+    };
+    streams: {
+      contentRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      headerRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      index: number;
+      name: string;
+      offset: number;
+      size: number;
+    }[];
+    tables: {
+      id: number;
+      name: string;
+      range?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      rowCount: number;
+      rowSize: number;
+      sorted: boolean;
+    }[];
+    tablesHeader?: {
+      heapSizes: number;
+      majorVersion: number;
+      minorVersion: number;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      sortedMask: number;
+      streamName: string;
+      validMask: number;
+    };
+    targetFramework?: string;
+    tokens: ClrTokenResolver;
+    typeDefs: {
+      enclosingTypeRow?: number;
+      extends?: string;
+      flags: number;
+      fullName: string;
+      genericParameters: string[];
+      interfaces: string[];
+      kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module";
+      name: string;
+      namespace: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      token: number;
+    }[];
+    typeRefs: {
+      fullName: string;
+      name: string;
+      namespace: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+      scope: string;
+      token: number;
+    }[];
+    userStrings: {
+      heapOffset: number;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      token: number;
+      value: string;
+    }[];
+  };
+  pdbGuid?: string;
+  structureRanges: {
+    label: string;
+    offset: number;
+    size: number;
+    tabName?: string;
+  }[];
+}
+
 interface AddressSourceLocation {
   offset: number;
   sourceLocation: {
@@ -6596,6 +7176,32 @@ interface ClrMetadata {
     };
     row: number;
   }[];
+  portablePdb?: {
+    documents: {
+      hash: string;
+      hashAlgorithm?: string;
+      language?: string;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+    }[];
+    header: {
+      entryPointToken: number;
+      guid: string;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      referencedTableRows: Record<number, number>;
+      stamp: number;
+    };
+    methodDebugInformationCount: number;
+  };
   readyToRun: boolean;
   root?: {
     flags: number;
@@ -6955,7 +7561,32 @@ interface ClrMetadata {
       size: number;
     };
     severity: "Info" | "Warning" | "Error";
-  }[], tokens: ClrTokenResolver): {
+  }[], tokens: ClrTokenResolver, portablePdb: {
+    documents: {
+      hash: string;
+      hashAlgorithm?: string;
+      language?: string;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+    }[];
+    header: {
+      entryPointToken: number;
+      guid: string;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      referencedTableRows: Record<number, number>;
+      stamp: number;
+    };
+    methodDebugInformationCount: number;
+  } | null): {
     assembly?: {
       culture: string;
       flags: number;
@@ -7202,6 +7833,32 @@ interface ClrMetadata {
       };
       row: number;
     }[];
+    portablePdb?: {
+      documents: {
+        hash: string;
+        hashAlgorithm?: string;
+        language?: string;
+        name: string;
+        recordRange: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        row: number;
+      }[];
+      header: {
+        entryPointToken: number;
+        guid: string;
+        range: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        referencedTableRows: Record<number, number>;
+        stamp: number;
+      };
+      methodDebugInformationCount: number;
+    };
     readyToRun: boolean;
     root?: {
       flags: number;
@@ -7591,6 +8248,136 @@ interface ClrModuleRef {
       size: number;
     };
     row: number;
+  };
+}
+
+interface ClrPdbDocument {
+  hash: string;
+  hashAlgorithm?: string;
+  language?: string;
+  name: string;
+  recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  row: number;
+  copy(row: number, name: string, hashAlgorithm: string | null, hash: string, language: string | null, recordRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    hash: string;
+    hashAlgorithm?: string;
+    language?: string;
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+  };
+}
+
+interface ClrPdbStreamHeader {
+  entryPointToken: number;
+  guid: string;
+  range: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  referencedTableRows: Record<number, number>;
+  stamp: number;
+  copy(guid: string, stamp: number, entryPointToken: number, referencedTableRows: Record<number, number>, range: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    entryPointToken: number;
+    guid: string;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    referencedTableRows: Record<number, number>;
+    stamp: number;
+  };
+}
+
+interface ClrPortablePdb {
+  documents: {
+    hash: string;
+    hashAlgorithm?: string;
+    language?: string;
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+  }[];
+  header: {
+    entryPointToken: number;
+    guid: string;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    referencedTableRows: Record<number, number>;
+    stamp: number;
+  };
+  methodDebugInformationCount: number;
+  copy(header: {
+    entryPointToken: number;
+    guid: string;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    referencedTableRows: Record<number, number>;
+    stamp: number;
+  }, documents: {
+    hash: string;
+    hashAlgorithm?: string;
+    language?: string;
+    name: string;
+    recordRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    row: number;
+  }[], methodDebugInformationCount: number): {
+    documents: {
+      hash: string;
+      hashAlgorithm?: string;
+      language?: string;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+    }[];
+    header: {
+      entryPointToken: number;
+      guid: string;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      referencedTableRows: Record<number, number>;
+      stamp: number;
+    };
+    methodDebugInformationCount: number;
   };
 }
 
@@ -11461,6 +12248,77 @@ interface MonosResult {
   };
 }
 
+interface MsfStream {
+  blockSize: number;
+  blocks: number[];
+  bytes: {
+    indices: {
+      endExclusive: number;
+      endInclusive: number;
+      first: number;
+      last: number;
+      start: number;
+      step: number;
+    };
+    lastIndex: number;
+    size: number;
+  };
+  index: number;
+  isNil: boolean;
+  size: number;
+  blockRanges(): {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }[];
+  bytes(position: number, length: number): number[] | null;
+  cString(position: number, maxLength: number): {
+    first: A;
+    second: B;
+  } | null;
+  fileOffset(position: number): number | null;
+  fileRange(position: number, length: number): {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null;
+  guid(position: number): string | null;
+  i32(position: number): number | null;
+  isFullyReadable(): boolean;
+  u16(position: number): number | null;
+  u32(position: number): number | null;
+  u8(position: number): number | null;
+}
+
+interface MsfSuperBlock {
+  blockCount: number;
+  blockMapAddress: number;
+  blockSize: number;
+  directoryByteCount: number;
+  freeBlockMapBlock: number;
+  range: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  copy(blockSize: number, freeBlockMapBlock: number, blockCount: number, directoryByteCount: number, blockMapAddress: number, range: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    blockCount: number;
+    blockMapAddress: number;
+    blockSize: number;
+    directoryByteCount: number;
+    freeBlockMapBlock: number;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+  };
+}
+
 interface NativeBinaryFormat {
   displayName: string;
 }
@@ -12079,6 +12937,576 @@ interface ParseProblem {
   };
 }
 
+interface PdbDbiStream {
+  age: number;
+  buildMajor: number;
+  buildMinor: number;
+  flags: number;
+  globalSymbolStream?: number;
+  hasConflictingTypes: boolean;
+  isIncrementallyLinked: boolean;
+  isStripped: boolean;
+  machine: number;
+  modules: {
+    c11ByteSize: number;
+    c13ByteSize: number;
+    contribution: {
+      characteristics: number;
+      dataCrc: number;
+      fileRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      moduleIndex: number;
+      offset: number;
+      relocCrc: number;
+      section: number;
+      size: number;
+    };
+    fileRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    flags: number;
+    index: number;
+    moduleName: string;
+    objectFileName: string;
+    recordSize: number;
+    sourceFileCount: number;
+    sourceFiles: string[];
+    streamOffset: number;
+    symbolByteSize: number;
+    symbolStream?: number;
+  }[];
+  optionalDebugStreams: Record<"Fpo" | "Exception" | "Fixup" | "OmapToSource" | "OmapFromSource" | "SectionHeaders" | "TokenRidMap" | "Xdata" | "Pdata" | "NewFpo" | "OriginalSectionHeaders", number>;
+  pdbDllRebuild: number;
+  pdbDllVersion: number;
+  publicSymbolStream?: number;
+  sectionContributions: {
+    characteristics: number;
+    dataCrc: number;
+    fileRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    moduleIndex: number;
+    offset: number;
+    relocCrc: number;
+    section: number;
+    size: number;
+  }[];
+  substreams: {
+    fileRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    name: string;
+    size: number;
+    streamOffset: number;
+  }[];
+  symbolRecordStream?: number;
+  version: number;
+  versionSignature: number;
+  copy(versionSignature: number, version: number, age: number, globalSymbolStream: number | null, publicSymbolStream: number | null, symbolRecordStream: number | null, buildMajor: number, buildMinor: number, pdbDllVersion: number, pdbDllRebuild: number, flags: number, machine: number, modules: {
+    c11ByteSize: number;
+    c13ByteSize: number;
+    contribution: {
+      characteristics: number;
+      dataCrc: number;
+      fileRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      moduleIndex: number;
+      offset: number;
+      relocCrc: number;
+      section: number;
+      size: number;
+    };
+    fileRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    flags: number;
+    index: number;
+    moduleName: string;
+    objectFileName: string;
+    recordSize: number;
+    sourceFileCount: number;
+    sourceFiles: string[];
+    streamOffset: number;
+    symbolByteSize: number;
+    symbolStream?: number;
+  }[], sectionContributions: {
+    characteristics: number;
+    dataCrc: number;
+    fileRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    moduleIndex: number;
+    offset: number;
+    relocCrc: number;
+    section: number;
+    size: number;
+  }[], optionalDebugStreams: Record<"Fpo" | "Exception" | "Fixup" | "OmapToSource" | "OmapFromSource" | "SectionHeaders" | "TokenRidMap" | "Xdata" | "Pdata" | "NewFpo" | "OriginalSectionHeaders", number>, substreams: {
+    fileRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    name: string;
+    size: number;
+    streamOffset: number;
+  }[]): {
+    age: number;
+    buildMajor: number;
+    buildMinor: number;
+    flags: number;
+    globalSymbolStream?: number;
+    hasConflictingTypes: boolean;
+    isIncrementallyLinked: boolean;
+    isStripped: boolean;
+    machine: number;
+    modules: {
+      c11ByteSize: number;
+      c13ByteSize: number;
+      contribution: {
+        characteristics: number;
+        dataCrc: number;
+        fileRange?: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        moduleIndex: number;
+        offset: number;
+        relocCrc: number;
+        section: number;
+        size: number;
+      };
+      fileRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      flags: number;
+      index: number;
+      moduleName: string;
+      objectFileName: string;
+      recordSize: number;
+      sourceFileCount: number;
+      sourceFiles: string[];
+      streamOffset: number;
+      symbolByteSize: number;
+      symbolStream?: number;
+    }[];
+    optionalDebugStreams: Record<"Fpo" | "Exception" | "Fixup" | "OmapToSource" | "OmapFromSource" | "SectionHeaders" | "TokenRidMap" | "Xdata" | "Pdata" | "NewFpo" | "OriginalSectionHeaders", number>;
+    pdbDllRebuild: number;
+    pdbDllVersion: number;
+    publicSymbolStream?: number;
+    sectionContributions: {
+      characteristics: number;
+      dataCrc: number;
+      fileRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      moduleIndex: number;
+      offset: number;
+      relocCrc: number;
+      section: number;
+      size: number;
+    }[];
+    substreams: {
+      fileRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      name: string;
+      size: number;
+      streamOffset: number;
+    }[];
+    symbolRecordStream?: number;
+    version: number;
+    versionSignature: number;
+  };
+}
+
+interface PdbDbiSubstream {
+  fileRange?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  name: string;
+  size: number;
+  streamOffset: number;
+  copy(name: string, streamOffset: number, size: number, fileRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null): {
+    fileRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    name: string;
+    size: number;
+    streamOffset: number;
+  };
+}
+
+interface PdbFile {
+  blockMapRange?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  dbi?: {
+    age: number;
+    buildMajor: number;
+    buildMinor: number;
+    flags: number;
+    globalSymbolStream?: number;
+    hasConflictingTypes: boolean;
+    isIncrementallyLinked: boolean;
+    isStripped: boolean;
+    machine: number;
+    modules: {
+      c11ByteSize: number;
+      c13ByteSize: number;
+      contribution: {
+        characteristics: number;
+        dataCrc: number;
+        fileRange?: {
+          endExclusive: number;
+          offset: number;
+          size: number;
+        };
+        moduleIndex: number;
+        offset: number;
+        relocCrc: number;
+        section: number;
+        size: number;
+      };
+      fileRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      flags: number;
+      index: number;
+      moduleName: string;
+      objectFileName: string;
+      recordSize: number;
+      sourceFileCount: number;
+      sourceFiles: string[];
+      streamOffset: number;
+      symbolByteSize: number;
+      symbolStream?: number;
+    }[];
+    optionalDebugStreams: Record<"Fpo" | "Exception" | "Fixup" | "OmapToSource" | "OmapFromSource" | "SectionHeaders" | "TokenRidMap" | "Xdata" | "Pdata" | "NewFpo" | "OriginalSectionHeaders", number>;
+    pdbDllRebuild: number;
+    pdbDllVersion: number;
+    publicSymbolStream?: number;
+    sectionContributions: {
+      characteristics: number;
+      dataCrc: number;
+      fileRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      moduleIndex: number;
+      offset: number;
+      relocCrc: number;
+      section: number;
+      size: number;
+    }[];
+    substreams: {
+      fileRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      name: string;
+      size: number;
+      streamOffset: number;
+    }[];
+    symbolRecordStream?: number;
+    version: number;
+    versionSignature: number;
+  };
+  diagnostics: {
+    code: string;
+    message: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    severity: "Info" | "Warning" | "Error";
+  }[];
+  identity?: {
+    age: number;
+    guid: string;
+  };
+  info?: {
+    age: number;
+    features: "Vc110" | "Vc140" | "NoTypeMerge" | "MinimalDebugInfo"[];
+    guid?: string;
+    namedStreams: Record<string, number>;
+    signature: number;
+    version: number;
+  };
+  ipi?: {
+    hashAuxStream?: number;
+    hashStream?: number;
+    headerSize: number;
+    recordCount: number;
+    typeIndexBegin: number;
+    typeIndexEnd: number;
+    typeRecordBytes: number;
+    version: number;
+  };
+  streamRoles: Record<number, string>;
+  streams: {
+    blockSize: number;
+    blocks: number[];
+    bytes: {
+      indices: {
+        endExclusive: number;
+        endInclusive: number;
+        first: number;
+        last: number;
+        start: number;
+        step: number;
+      };
+      lastIndex: number;
+      size: number;
+    };
+    index: number;
+    isNil: boolean;
+    size: number;
+  }[];
+  superBlock: {
+    blockCount: number;
+    blockMapAddress: number;
+    blockSize: number;
+    directoryByteCount: number;
+    freeBlockMapBlock: number;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+  };
+  tpi?: {
+    hashAuxStream?: number;
+    hashStream?: number;
+    headerSize: number;
+    recordCount: number;
+    typeIndexBegin: number;
+    typeIndexEnd: number;
+    typeRecordBytes: number;
+    version: number;
+  };
+  stream(index: number): {
+    blockSize: number;
+    blocks: number[];
+    bytes: {
+      indices: {
+        endExclusive: number;
+        endInclusive: number;
+        first: number;
+        last: number;
+        start: number;
+        step: number;
+      };
+      lastIndex: number;
+      size: number;
+    };
+    index: number;
+    isNil: boolean;
+    size: number;
+  } | null;
+}
+
+interface PdbIdentity {
+  age: number;
+  guid: string;
+  copy(guid: string, age: number): {
+    age: number;
+    guid: string;
+  };
+}
+
+interface PdbInfoStream {
+  age: number;
+  features: "Vc110" | "Vc140" | "NoTypeMerge" | "MinimalDebugInfo"[];
+  guid?: string;
+  namedStreams: Record<string, number>;
+  signature: number;
+  version: number;
+  copy(version: number, signature: number, age: number, guid: string | null, namedStreams: Record<string, number>, features: "Vc110" | "Vc140" | "NoTypeMerge" | "MinimalDebugInfo"[]): {
+    age: number;
+    features: "Vc110" | "Vc140" | "NoTypeMerge" | "MinimalDebugInfo"[];
+    guid?: string;
+    namedStreams: Record<string, number>;
+    signature: number;
+    version: number;
+  };
+}
+
+interface PdbModule {
+  c11ByteSize: number;
+  c13ByteSize: number;
+  contribution: {
+    characteristics: number;
+    dataCrc: number;
+    fileRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    moduleIndex: number;
+    offset: number;
+    relocCrc: number;
+    section: number;
+    size: number;
+  };
+  fileRange?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  flags: number;
+  index: number;
+  moduleName: string;
+  objectFileName: string;
+  recordSize: number;
+  sourceFileCount: number;
+  sourceFiles: string[];
+  streamOffset: number;
+  symbolByteSize: number;
+  symbolStream?: number;
+  copy(index: number, moduleName: string, objectFileName: string, symbolStream: number | null, symbolByteSize: number, c11ByteSize: number, c13ByteSize: number, sourceFileCount: number, flags: number, sourceFiles: string[], contribution: {
+    characteristics: number;
+    dataCrc: number;
+    fileRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    moduleIndex: number;
+    offset: number;
+    relocCrc: number;
+    section: number;
+    size: number;
+  }, streamOffset: number, recordSize: number, fileRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null): {
+    c11ByteSize: number;
+    c13ByteSize: number;
+    contribution: {
+      characteristics: number;
+      dataCrc: number;
+      fileRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      moduleIndex: number;
+      offset: number;
+      relocCrc: number;
+      section: number;
+      size: number;
+    };
+    fileRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    flags: number;
+    index: number;
+    moduleName: string;
+    objectFileName: string;
+    recordSize: number;
+    sourceFileCount: number;
+    sourceFiles: string[];
+    streamOffset: number;
+    symbolByteSize: number;
+    symbolStream?: number;
+  };
+}
+
+interface PdbSectionContribution {
+  characteristics: number;
+  dataCrc: number;
+  fileRange?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  moduleIndex: number;
+  offset: number;
+  relocCrc: number;
+  section: number;
+  size: number;
+  copy(section: number, offset: number, size: number, characteristics: number, moduleIndex: number, dataCrc: number, relocCrc: number, fileRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null): {
+    characteristics: number;
+    dataCrc: number;
+    fileRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    moduleIndex: number;
+    offset: number;
+    relocCrc: number;
+    section: number;
+    size: number;
+  };
+}
+
+interface PdbTypeStreamHeader {
+  hashAuxStream?: number;
+  hashStream?: number;
+  headerSize: number;
+  recordCount: number;
+  typeIndexBegin: number;
+  typeIndexEnd: number;
+  typeRecordBytes: number;
+  version: number;
+  copy(version: number, headerSize: number, typeIndexBegin: number, typeIndexEnd: number, typeRecordBytes: number, hashStream: number | null, hashAuxStream: number | null): {
+    hashAuxStream?: number;
+    hashStream?: number;
+    headerSize: number;
+    recordCount: number;
+    typeIndexBegin: number;
+    typeIndexEnd: number;
+    typeRecordBytes: number;
+    version: number;
+  };
+}
+
 interface Pe {
   displayName: string;
   machine?: number;
@@ -12442,6 +13870,9 @@ interface PeDebugEntry {
     size: number;
   };
   index: number;
+  isPortablePdbCodeView: boolean;
+  majorVersion: number;
+  minorVersion: number;
   pointerToRawData: number;
   recordRange: {
     endExclusive: number;
@@ -12464,7 +13895,7 @@ interface PeDebugEntry {
     endExclusive: number;
     offset: number;
     size: number;
-  } | null): {
+  } | null, majorVersion: number, minorVersion: number): {
     addressOfRawData: number;
     codeView?: {
       age?: number;
@@ -12478,6 +13909,9 @@ interface PeDebugEntry {
       size: number;
     };
     index: number;
+    isPortablePdbCodeView: boolean;
+    majorVersion: number;
+    minorVersion: number;
     pointerToRawData: number;
     recordRange: {
       endExclusive: number;

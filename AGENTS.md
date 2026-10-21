@@ -80,6 +80,10 @@ All agents — the main session and every subagent it dispatches — MUST treat 
 - `cli/integration-tests/`: test-only black-box support for installed CLI products: process execution, deterministic
   environment setup, local telemetry fixtures, and focused runner tests. Product behavior contracts live with their
   respective `hexana-cli` and `hexana-cli-script` distributions.
+- `debugInfo/dwarf/`: Kotlin Multiplatform DWARF decoder (line programs, DIEs, types, inline frames, variables).
+- `debugInfo/pdb/`: Kotlin Multiplatform Windows PDB decoder: MSF 7.00 container, PDB info, DBI (modules,
+  source files, section contributions) and TPI/IPI headers. .NET Portable PDBs are ECMA-335 metadata and are
+  decoded by `parsing/pe/.../clr` (`ClrMetadataParser.parsePortablePdb`) instead.
 - `encdec/`: shared `CommonByteBuffer` abstraction and platform-specific byte-buffer helpers.
 - `graalwasm/`: JVM wrappers around embedded `.wasm` utilities used for built-in `wasm -> wat` and `wat -> wasm`.
 - `wasm-modules/`: Rust sources and Docker build flow that produce the embedded `.wasm` artifacts consumed by `graalwasm/`.
@@ -125,6 +129,7 @@ Run the narrowest command that proves your change.
 - Build the FUS scheme artifact: `./gradlew :idea-plugin:buildEventsScheme`
 - Run JVM parser tests: `./gradlew :wasmParser:jvmTest`
 - Run native parser JVM tests: `./gradlew :parsing:common:jvmTest :parsing:elf:jvmTest :parsing:macho:jvmTest :parsing:pe:jvmTest`
+- Run debug-info decoder tests: `./gradlew :debugInfo:dwarf:allTests :debugInfo:pdb:allTests`
 - Run native disassembly tests: `./gradlew :disassembly:core:jvmTest :disassembly:llvm-objdump:test`
 - Run JS browser parser tests: `./gradlew :wasmParser:jsBrowserTest`
 - Run browser webapp tests: `./gradlew :webapp:jsBrowserTest -Phx.tests.web.enableChromeOrChromium=1`

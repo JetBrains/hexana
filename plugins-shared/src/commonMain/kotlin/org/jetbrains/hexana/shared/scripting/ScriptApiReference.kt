@@ -129,7 +129,7 @@ object ScriptApiReference {
                     "readonly format: string",
                     "Stable format id: \"wasm\", \"wasm-component\", \"elf\", \"macho\", " +
                         "\"macho-universal\", \"pe\", \"coff\", \"archive\", \"zip\", \"tar\", " +
-                        "\"class\", \"dex\", \"arsc\", \"dotnet-resources\", \"pcap\", \"pcapng\", \"parquet\", " +
+                        "\"class\", \"dex\", \"arsc\", \"dotnet-resources\", \"pdb\", \"portable-pdb\", \"pcap\", \"pcapng\", \"parquet\", " +
                         "\"arrow\", \"protobuf\" or \"binary\". Safe to branch on.",
                     "if (binary.format === \"elf\") print(binary.raw.header.machine);",
                 ),

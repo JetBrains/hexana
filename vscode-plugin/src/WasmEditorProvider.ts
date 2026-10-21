@@ -163,6 +163,12 @@ const HEXANA_DIFF_EXTENSIONS = new Set([
 /** Native-binary extensions offered by the compare file dialog (besides `.wasm`). */
 const COMPARABLE_NATIVE_EXTENSIONS = ["o", "obj", "so", "dylib", "dll", "exe", "elf", "a", "lib", "ko", "sys", "axf", "bin", "out"];
 
+/**
+ * Extensions shared with text formats, so only the content decides: `.pdb` is both PDB debug
+ * symbols and the Protein Data Bank text format.
+ */
+const CONTENT_TYPED_EXTENSIONS = new Set(["pdb"]);
+
 const OPENABLE_ENTRY_EXTENSIONS = new Set([
     "wasm", "class", "dex", "arsc", "resources", "jar", "zip", "war", "apk", "bin",
     "elf", "exe", "so", "o", "a", "dll", "dylib",
@@ -564,7 +570,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         const base = path.basename(uri.path).toLowerCase();
         const ext = base.includes(".") ? base.split(".").pop() ?? "" : "";
         try {
-            if (ext !== "") {
+            if (ext !== "" && !CONTENT_TYPED_EXTENSIONS.has(ext)) {
                 if (!HEXANA_DIFF_EXTENSIONS.has(ext) && !base.endsWith(".tar.gz")) return false;
                 await vscode.workspace.fs.stat(uri);
                 return true;

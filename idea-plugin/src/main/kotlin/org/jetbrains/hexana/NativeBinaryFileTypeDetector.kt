@@ -5,7 +5,9 @@ import com.intellij.openapi.fileTypes.FileType
 import com.intellij.openapi.fileTypes.FileTypeRegistry
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.util.io.ByteSequence
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
+import org.jetbrains.hexana.providers.PdbSymbolsBinaryProvider
 
 /**
  * Magic-byte detector that routes extensionless (or ambiguously-named) binaries to the
@@ -87,6 +89,13 @@ class NativeBinaryFileTypeDetector : FileTypeRegistry.FileTypeDetector {
             if (version1 == 0x00 && (version0 == 0x01 || version0 == 0x0D)) {
                 return WasmFileType.INSTANCE
             }
+        }
+
+        // Windows PDB ("Microsoft C/C++ MSF 7.00") or Portable PDB (metadata root "BSJB" with a
+        // #Pdb stream, whose headers fit in the prefix). The same check the provider factory uses,
+        // so a file typed PDB here always opens with the PDB tabs.
+        if ((b0 == 0x4D && b1 == 0x69 && b2 == 0x63 && b3 == 0x72) || (b0 == 0x42 && b1 == 0x53 && b2 == 0x4A && b3 == 0x42)) {
+            if (PdbSymbolsBinaryProvider.isPdbSymbolsFile(firstBytes.toBytes().toCommonByteBuffer())) return PdbFileType.INSTANCE
         }
 
         // ELF: 7F 45 4C 46

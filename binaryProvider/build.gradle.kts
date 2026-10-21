@@ -37,6 +37,7 @@ kotlin {
                 api(project(":parsing:parquet"))
                 api(project(":parsing:arrow"))
                 implementation(project(":debugInfo:dwarf"))
+                api(project(":debugInfo:pdb"))
             }
         }
 

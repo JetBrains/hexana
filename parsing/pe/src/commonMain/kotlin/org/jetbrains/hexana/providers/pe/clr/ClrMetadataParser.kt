@@ -62,6 +62,29 @@ object ClrMetadataParser {
         return Decoder(bytes, header, readyToRun = false) { rva -> if (rva == 0u) range.offset else null }.decode()
     }
 
+    /**
+     * True when [bytes] is a standalone Portable PDB: a metadata root at offset 0 with a `#Pdb`
+     * stream. Reads only the root and stream headers.
+     */
+    fun isPortablePdb(bytes: CommonByteBuffer): Boolean {
+        if (bytes.u32LeOrNull(0) != METADATA_SIGNATURE) return false
+        val versionLength = bytes.u32LeOrNull(12)?.toBoundedInt() ?: return false
+        if (versionLength > MAX_VERSION_LENGTH) return false
+        val flagsOffset = 16 + align4(versionLength)
+        val streamCount = bytes.u16LeOrNull(flagsOffset + 2) ?: return false
+        var position = flagsOffset + 4
+        repeat(streamCount.coerceAtMost(MAX_STREAMS)) {
+            if (!bytes.containsRange(position, 8)) return false
+            val name = bytes.nullTerminatedString(position + 8, MAX_STREAM_NAME_LENGTH)
+            if (name == "#Pdb") return true
+            position += 8 + align4(name.length + 1)
+        }
+        return false
+    }
+
+    /** Decodes a standalone Portable PDB; [ClrMetadata.portablePdb] is null when it has no `#Pdb` stream. */
+    fun parsePortablePdb(bytes: CommonByteBuffer): ClrMetadata = parseStandalone(bytes, NativeByteRange(0, bytes.size))
+
     /** Reads only the CLI header, without touching the metadata; null for native images. */
     fun parseCliHeader(bytes: CommonByteBuffer, optionalHeader: PeOptionalHeader, sections: List<PeSection>): ClrCliHeader? {
         val directory = optionalHeader.dataDirectories.getOrNull(PeDataDirectoryIndex.ClrRuntimeHeader) ?: return null
@@ -118,6 +141,7 @@ object ClrMetadataParser {
         private val diagnostics = mutableListOf<NativeParserDiagnostic>()
         private var heaps = Heaps(bytes, null, null, null, null)
         private var tables: Tables? = null
+        private var pdbHeader: ClrPdbStreamHeader? = null
         private val signatures = ClrSignatureDecoder(bytes, ::encodedTypeName)
 
         private val typeDefNames = HashMap<Int, String>()
@@ -142,6 +166,11 @@ object ClrMetadataParser {
             val streams = parseStreams(metadataOffset!!, metadataSize!!, root)
             fun stream(name: String) = streams.firstOrNull { it.name == name }?.contentRange
             heaps = Heaps(bytes, stream("#Strings"), stream("#Blob"), stream("#GUID"), stream("#US"))
+            val pdbStream = streams.firstOrNull { it.name == "#Pdb" }
+            pdbHeader = pdbStream?.contentRange?.let { parsePdbStream(it) }
+            if (pdbStream != null && pdbHeader == null) {
+                warn("clr.invalid_pdb_stream", "Portable PDB #Pdb stream is malformed.", pdbStream.headerRange)
+            }
 
             val tablesStream = streams.firstOrNull { it.name == "#~" || it.name == "#-" }
             val tablesHeader = tablesStream?.contentRange?.let { range -> parseTables(tablesStream.name, range) }
@@ -178,6 +207,7 @@ object ClrMetadataParser {
                 userStrings = heaps.userStrings(),
                 diagnostics = diagnostics,
                 tokens = Resolver(methods),
+                portablePdb = pdbHeader?.let { header -> t?.let { decodePortablePdb(it, header) } },
             )
         }
 
@@ -255,7 +285,9 @@ object ClrMetadataParser {
         }
 
         private fun layoutTables(rowCounts: IntArray, heapSizes: Int, valid: ULong, sorted: ULong, start: Int, end: Int): Tables {
-            val sizing = ColumnSizing(rowCounts, heapSizes)
+            // Portable PDB tables index the described assembly's tables, whose row counts only #Pdb knows.
+            val referenced = pdbHeader?.referencedTableRows.orEmpty()
+            val sizing = ColumnSizing(IntArray(64) { maxOf(rowCounts[it], referenced[it] ?: 0) }, heapSizes)
             val infos = mutableListOf<ClrTableInfo>()
             val layouts = arrayOfNulls<TableLayout>(64)
             var position: Int? = start
@@ -290,6 +322,70 @@ object ClrMetadataParser {
                 position = range?.let { it.offset + it.size }
             }
             return Tables(bytes, layouts, infos)
+        }
+
+        /** `#Pdb`: 20-byte PDB id, entry point token, referenced-tables mask and their row counts. */
+        private fun parsePdbStream(range: NativeByteRange): ClrPdbStreamHeader? {
+            if (range.size < PDB_STREAM_FIXED_SIZE) return null
+            val guid = bytes.guidLeString(range.offset) ?: return null
+            val mask = bytes.u64LeOrNull(range.offset + 24) ?: return null
+            val rows = LinkedHashMap<Int, Int>()
+            var position = range.offset + PDB_STREAM_FIXED_SIZE
+            for (id in 0 until 64) {
+                if (mask and (1uL shl id) == 0uL) continue
+                if (position + 4 > range.offset + range.size) return null
+                rows[id] = bytes.u32LeOrNull(position)?.toBoundedInt() ?: return null
+                position += 4
+            }
+            return ClrPdbStreamHeader(
+                guid = guid,
+                stamp = bytes.u32LeOrNull(range.offset + 16) ?: return null,
+                entryPointToken = bytes.u32LeOrNull(range.offset + 20) ?: return null,
+                referencedTableRows = rows,
+                range = NativeByteRange(range.offset, position - range.offset),
+            )
+        }
+
+        // endregion
+
+        // region Portable PDB
+
+        private fun decodePortablePdb(t: Tables, header: ClrPdbStreamHeader): ClrPortablePdb {
+            val documents = (1..t.rowCount(T.DOCUMENT).coerceAtMost(MAX_PDB_DOCUMENTS)).map { row ->
+                val hash = heaps.blobBytes(t.cell(T.DOCUMENT, row, 2))
+                ClrPdbDocument(
+                    row = row,
+                    name = documentName(t.cell(T.DOCUMENT, row, 0)),
+                    hashAlgorithm = heaps.guid(t.cell(T.DOCUMENT, row, 1))?.let(ClrPdbGuids::hashAlgorithmName),
+                    hash = hash.joinToString("") { (it.toInt() and 0xFF).toString(16).uppercase().padStart(2, '0') },
+                    language = heaps.guid(t.cell(T.DOCUMENT, row, 3))?.let(ClrPdbGuids::languageName),
+                    recordRange = t.rowRange(T.DOCUMENT, row),
+                )
+            }
+            return ClrPortablePdb(header, documents, t.rowCount(T.METHOD_DEBUG_INFORMATION))
+        }
+
+        /**
+         * Document name blob: a separator character (0 for none), then compressed `#Blob` indices
+         * of the UTF-8 parts, joined with the separator.
+         */
+        private fun documentName(blobIndex: Int): String {
+            val range = heaps.blob(blobIndex) ?: return ""
+            if (range.size == 0) return ""
+            val end = range.offset + range.size
+            val separator = bytes.byteOrNull(range.offset) ?: return ""
+            var position = range.offset + 1
+            val parts = mutableListOf<String>()
+            var length = 0
+            while (position < end && parts.size < MAX_DOCUMENT_NAME_PARTS) {
+                val (part, prefix) = readCompressed(bytes, position, end) ?: break
+                position += prefix
+                val text = heaps.blobBytes(part).decodeToString()
+                length += text.length
+                if (length > MAX_DOCUMENT_NAME_LENGTH) break
+                parts.add(text)
+            }
+            return if (separator == 0) parts.joinToString("") else parts.joinToString(separator.toChar().toString())
         }
 
         // endregion
@@ -1079,6 +1175,10 @@ private fun shortTypeName(fullName: String): String {
 }
 
 private const val CLI_HEADER_SIZE = 72
+private const val PDB_STREAM_FIXED_SIZE = 32
+private const val MAX_PDB_DOCUMENTS = 1_000_000
+private const val MAX_DOCUMENT_NAME_PARTS = 4096
+private const val MAX_DOCUMENT_NAME_LENGTH = 32768
 private const val METADATA_SIGNATURE = 0x424A5342u
 private const val METADATA_ROOT_MIN_SIZE = 20
 private const val MAX_VERSION_LENGTH = 255

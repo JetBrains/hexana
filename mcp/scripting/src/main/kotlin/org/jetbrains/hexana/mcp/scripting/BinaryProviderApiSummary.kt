@@ -301,6 +301,9 @@ object BinaryProviderApiSummary {
                 "org.jetbrains.hexana.providers.DexBinaryProvider",
                 "org.jetbrains.hexana.providers.ArscBinaryProvider",
                 "org.jetbrains.hexana.providers.ClrResourcesBinaryProvider",
+                "org.jetbrains.hexana.providers.PdbSymbolsBinaryProvider",
+                "org.jetbrains.hexana.providers.PdbBinaryProvider",
+                "org.jetbrains.hexana.providers.PortablePdbBinaryProvider",
             )
             for (name in knownImpls) {
                 try {

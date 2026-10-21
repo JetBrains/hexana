@@ -518,6 +518,8 @@ object PeParser {
                             null
                         },
                         recordRange = NativeByteRange(offset, DEBUG_DIRECTORY_ENTRY_SIZE),
+                        majorVersion = bytes.u16LeOrNull(offset + 8) ?: return null,
+                        minorVersion = bytes.u16LeOrNull(offset + 10) ?: return null,
                         dataRange = dataRange,
                     )
                 )

@@ -37,6 +37,10 @@ consult-first / write-back rules.
   view, when native Disassembly tabs are hidden, and ReadyToRun code → method attribution behind the
   managed Top tab.
   shared async collection, lazy tabs, entry-editor reuse, and the cross-host "select table row" request.
+- [[entities/pdb-support-feasibility]] — what DWARF-parity for Windows PDB means (native line info
+  only), the seams, MSF/DBI/C13 work breakdown, matched `sample.exe`/`sample.pdb` fixture, risks.
+- [[entities/pdb-symbols]] — Windows PDB (`debugInfo/pdb`, MSF) and Portable PDB (CLR metadata + `#Pdb`):
+  providers, content-only routing (`.pdb` is also Protein Data Bank text), tabs, fixtures, next steps.
 
 ## Sources
 

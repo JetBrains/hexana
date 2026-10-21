@@ -247,6 +247,8 @@ internal fun debugTypeName(type: UInt): String = when (type) {
     2u -> "CodeView (${hex(type)})"
     12u -> "VC Feature (${hex(type)})"
     16u -> "Repro (${hex(type)})"
+    17u -> "Embedded Portable PDB (${hex(type)})"
+    19u -> "PDB Checksum (${hex(type)})"
     20u -> "Extended DLL Characteristics (${hex(type)})"
     else -> hex(type)
 }

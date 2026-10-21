@@ -53,7 +53,7 @@ private const val MAX_NATIVE_IMAGE_TEXT_CHARS = 1_024
 
 /** Every id the worker's `nonWasmFormat` can emit; one missing here turns that format into PARSE_FAILED. */
 private val supportedFormats = setOf(
-    "core_wasm", "wasm_component", "zip", "class", "dex", "arsc", "dotnet-resources", "pcap", "protobuf",
+    "core_wasm", "wasm_component", "zip", "class", "dex", "arsc", "dotnet-resources", "pdb", "portable-pdb", "pcap", "protobuf",
     "elf", "macho", "fat_macho", "pe", "coff", "archive", "parquet", "arrow", "generic",
 )
 private val supportedCapabilities = setOf("summary", "structural_ranges", "tables", "diagnostics", "component_dependency_graph")
@@ -75,6 +75,8 @@ private val supportedLegacyTabsByFormat = mapOf(
     "dex" to emptySet(),
     "arsc" to emptySet(),
     "dotnet-resources" to emptySet(),
+    "pdb" to emptySet(),
+    "portable-pdb" to emptySet(),
     "pcap" to emptySet(),
     "protobuf" to emptySet(),
     "elf" to emptySet(),

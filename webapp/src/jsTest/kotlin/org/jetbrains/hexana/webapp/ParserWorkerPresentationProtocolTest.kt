@@ -14,7 +14,7 @@ class ParserWorkerPresentationProtocolTest {
         // The ids `nonWasmFormat` in ParserWorkerMain can return. One the protocol does not know
         // fails the producer's own validation, so the whole file opens as "Failed to parse".
         val emitted = listOf(
-            "zip", "class", "dex", "arsc", "dotnet-resources", "pcap", "protobuf", "elf", "macho",
+            "zip", "class", "dex", "arsc", "dotnet-resources", "pdb", "portable-pdb", "pcap", "protobuf", "elf", "macho",
             "fat_macho", "pe", "coff", "archive", "parquet", "arrow", "generic",
         )
         for (format in emitted) {

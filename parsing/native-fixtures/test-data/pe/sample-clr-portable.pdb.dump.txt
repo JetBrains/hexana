@@ -1,0 +1,24 @@
+metadata version: PDB v1.0
+pdb id: guid=ac392da6-2c27-4521-a6b4-0d5948fc1f02 stamp=0x83123A8A
+entry point: 0x06000009
+table Document: 1
+table MethodDebugInformation: 14
+table LocalScope: 7
+table LocalVariable: 2
+table ImportScope: 4
+table CustomDebugInformation: 8
+document 1: /src/clr/Sample.cs hash=8829d00f-11b8-4213-878b-770e8597ac16:48516C4152A0ECABBEC20DB45020A8F6565005F199E132B558BF7F6E9A897128 language=3f5162f8-07c6-11d3-9053-00c04fa302a1
+method 0x06000001: document=0 sequence points=0
+method 0x06000002: document=1 sequence points=4
+method 0x06000003: document=1 sequence points=4
+method 0x06000004: document=1 sequence points=3
+method 0x06000005: document=0 sequence points=0
+method 0x06000006: document=0 sequence points=0
+method 0x06000007: document=1 sequence points=3
+method 0x06000008: document=0 sequence points=0
+method 0x06000009: document=1 sequence points=6
+method 0x0600000A: document=1 sequence points=16
+method 0x0600000B: document=0 sequence points=0
+method 0x0600000C: document=0 sequence points=0
+method 0x0600000D: document=0 sequence points=0
+method 0x0600000E: document=1 sequence points=1

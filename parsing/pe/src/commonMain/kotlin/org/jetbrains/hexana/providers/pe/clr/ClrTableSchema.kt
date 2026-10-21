@@ -38,6 +38,18 @@ internal enum class ClrCodedIndex(val tagBits: Int, val tables: List<Int>) {
     CustomAttributeType(3, listOf(-1, -1, T.METHOD_DEF, T.MEMBER_REF, -1)),
     ResolutionScope(2, listOf(T.MODULE, T.MODULE_REF, T.ASSEMBLY_REF, T.TYPE_REF)),
     TypeOrMethodDef(1, listOf(T.TYPE_DEF, T.METHOD_DEF)),
+
+    /** Portable PDB: the parent of a CustomDebugInformation row. */
+    HasCustomDebugInformation(
+        5,
+        listOf(
+            T.METHOD_DEF, T.FIELD, T.TYPE_REF, T.TYPE_DEF, T.PARAM, T.INTERFACE_IMPL, T.MEMBER_REF, T.MODULE,
+            T.DECL_SECURITY, T.PROPERTY, T.EVENT, T.STAND_ALONE_SIG, T.MODULE_REF, T.TYPE_SPEC, T.ASSEMBLY,
+            T.ASSEMBLY_REF, T.FILE, T.EXPORTED_TYPE, T.MANIFEST_RESOURCE, T.GENERIC_PARAM,
+            T.GENERIC_PARAM_CONSTRAINT, T.METHOD_SPEC, T.DOCUMENT, T.LOCAL_SCOPE, T.LOCAL_VARIABLE,
+            T.LOCAL_CONSTANT, T.IMPORT_SCOPE,
+        ),
+    ),
 }
 
 internal class ClrTableSchema(val id: Int, val name: String, val columns: List<ClrColumn>)
@@ -51,7 +63,10 @@ private val blob = ClrColumn.BlobIndex
 private fun idx(table: Int) = ClrColumn.TableIndex(table)
 private fun coded(kind: ClrCodedIndex) = ClrColumn.Coded(kind)
 
-/** Schemas indexed by table id, covering every table defined by ECMA-335 (0x00..0x2C). */
+/**
+ * Schemas indexed by table id, covering every table defined by ECMA-335 (0x00..0x2C) and the
+ * Portable PDB debug tables (0x30..0x37).
+ */
 internal val CLR_TABLE_SCHEMAS: List<ClrTableSchema?> = run {
     val schemas = arrayOfNulls<ClrTableSchema>(64)
     fun def(id: Int, name: String, vararg columns: ClrColumn) {
@@ -103,18 +118,27 @@ internal val CLR_TABLE_SCHEMAS: List<ClrTableSchema?> = run {
     def(T.GENERIC_PARAM, "GenericParam", u2(), u2(), coded(ClrCodedIndex.TypeOrMethodDef), str)
     def(T.METHOD_SPEC, "MethodSpec", coded(ClrCodedIndex.MethodDefOrRef), blob)
     def(T.GENERIC_PARAM_CONSTRAINT, "GenericParamConstraint", idx(T.GENERIC_PARAM), coded(ClrCodedIndex.TypeDefOrRef))
+    // Portable PDB: Name, HashAlgorithm, Hash, Language.
+    def(T.DOCUMENT, "Document", blob, guid, blob, guid)
+    // Document, SequencePoints.
+    def(T.METHOD_DEBUG_INFORMATION, "MethodDebugInformation", idx(T.DOCUMENT), blob)
+    // Method, ImportScope, VariableList, ConstantList, StartOffset, Length.
+    def(T.LOCAL_SCOPE, "LocalScope", idx(T.METHOD_DEF), idx(T.IMPORT_SCOPE), idx(T.LOCAL_VARIABLE), idx(T.LOCAL_CONSTANT), u4(), u4())
+    // Attributes, Index, Name.
+    def(T.LOCAL_VARIABLE, "LocalVariable", u2(), u2(), str)
+    // Name, Signature.
+    def(T.LOCAL_CONSTANT, "LocalConstant", str, blob)
+    // Parent, Imports.
+    def(T.IMPORT_SCOPE, "ImportScope", idx(T.IMPORT_SCOPE), blob)
+    // MoveNextMethod, KickoffMethod.
+    def(T.STATE_MACHINE_METHOD, "StateMachineMethod", idx(T.METHOD_DEF), idx(T.METHOD_DEF))
+    // Parent, Kind, Value.
+    def(T.CUSTOM_DEBUG_INFORMATION, "CustomDebugInformation", coded(ClrCodedIndex.HasCustomDebugInformation), guid, blob)
     schemas.toList()
 }
 
-/** Portable PDB tables (0x30..0x37) only appear in standalone or embedded PDB metadata. */
-internal fun clrTableName(id: Int): String = CLR_TABLE_SCHEMAS.getOrNull(id)?.name ?: when (id) {
-    0x30 -> "Document"
-    0x31 -> "MethodDebugInformation"
-    0x32 -> "LocalScope"
-    0x33 -> "LocalVariable"
-    0x34 -> "LocalConstant"
-    0x35 -> "ImportScope"
-    0x36 -> "StateMachineMethod"
-    0x37 -> "CustomDebugInformation"
-    else -> "Table 0x${id.toString(16).uppercase().padStart(2, '0')}"
-}
+internal fun clrTableName(id: Int): String =
+    CLR_TABLE_SCHEMAS.getOrNull(id)?.name ?: "Table 0x${id.toString(16).uppercase().padStart(2, '0')}"
+
+/** Display name of metadata table [id], e.g. `MethodDef`, for callers outside the parser. */
+fun clrTableDisplayName(id: Int): String = clrTableName(id)

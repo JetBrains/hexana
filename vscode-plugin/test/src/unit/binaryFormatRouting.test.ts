@@ -1,4 +1,6 @@
 import {expect} from 'chai';
+import * as fs from 'fs';
+import * as path from 'path';
 import {installVscodeMock, VscodeMock} from './vscode-mock';
 
 /**
@@ -48,6 +50,15 @@ describe('binary format routing', function () {
             expect(isNativeBinary(stream)).to.equal(false);
         });
 
+        it('recognizes Windows and Portable PDBs, but not Protein Data Bank text', function () {
+            const {isNativeBinary} = requireDetector();
+            const read = (name: string) => new Uint8Array(fs.readFileSync(path.join(peFixturesDir(), name))).subarray(0, 64);
+
+            expect(isNativeBinary(read('sample.pdb'))).to.equal(true);
+            expect(isNativeBinary(read('sample-clr-portable.pdb'))).to.equal(true);
+            expect(isNativeBinary(new Uint8Array(Buffer.from('HEADER    PLANT PROTEIN    30-APR-81   1CRN\n')))).to.equal(false);
+        });
+
         it('still recognizes the formats it always did', function () {
             const {isNativeBinary} = requireDetector();
 
@@ -62,6 +73,17 @@ describe('binary format routing', function () {
 function withMagic(magic: string): Uint8Array {
     const head = Buffer.from(magic, 'binary');
     return new Uint8Array(Buffer.concat([head, Buffer.alloc(32), head]));
+}
+
+/** `parsing/native-fixtures/test-data/pe`, found by walking up to the repository root. */
+function peFixturesDir(): string {
+    let dir = __dirname;
+    while (!fs.existsSync(path.join(dir, 'settings.gradle.kts'))) {
+        const parent = path.dirname(dir);
+        if (parent === dir) throw new Error('repository root not found');
+        dir = parent;
+    }
+    return path.join(dir, 'parsing', 'native-fixtures', 'test-data', 'pe');
 }
 
 function requireDetector(): {isNativeBinary(bytes: Uint8Array): boolean} {

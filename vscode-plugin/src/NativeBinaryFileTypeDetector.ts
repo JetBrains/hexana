@@ -44,7 +44,8 @@ const KNOWN_EXTENSIONS = new Set([
 /**
  * Detects whether the given byte prefix matches a binary format Hexana can open.
  * Returns true for ELF, Mach-O (thin and fat/universal), PE, static-library
- * archive, COFF object files, WebAssembly, .NET resource sets, pcap/pcapng, Parquet and Arrow IPC files.
+ * archive, COFF object files, WebAssembly, .NET resource sets, Windows and Portable PDBs, pcap/pcapng,
+ * Parquet and Arrow IPC files.
  */
 export function isNativeBinary(bytes: Uint8Array): boolean {
     const len = bytes.length;
@@ -122,6 +123,17 @@ export function isNativeBinary(bytes: Uint8Array): boolean {
 
     // .NET resource set (.resources): ResourceManager magic 0xBEEFCACE, little-endian
     if (b0 === 0xCE && b1 === 0xCA && b2 === 0xEF && b3 === 0xBE) {
+        return true;
+    }
+
+    // PDB debug symbols: matched by content only, because `.pdb` is also the Protein Data Bank
+    // text format. Windows PDB: "Microsoft C/C++ MSF 7.00\r\n\x1aDS\0\0\0".
+    if (startsWithAscii(bytes, MSF7_MAGIC)) {
+        return true;
+    }
+    // Portable PDB: a metadata root ("BSJB") whose version string is "PDB v1.0".
+    if (b0 === 0x42 && b1 === 0x53 && b2 === 0x4A && b3 === 0x42 && len >= 24 &&
+        startsWithAscii(bytes.subarray(16), "PDB v")) {
         return true;
     }
 
@@ -283,4 +295,14 @@ export function registerNativeBinaryDetector(context: vscode.ExtensionContext): 
             }
         }),
     );
+}
+
+const MSF7_MAGIC = "Microsoft C/C++ MSF 7.00\r\n\x1aDS\0\0\0";
+
+function startsWithAscii(bytes: Uint8Array, text: string): boolean {
+    if (bytes.length < text.length) return false;
+    for (let i = 0; i < text.length; i++) {
+        if (bytes[i] !== text.charCodeAt(i)) return false;
+    }
+    return true;
 }

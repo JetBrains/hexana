@@ -13,6 +13,8 @@ import org.jetbrains.hexana.providers.ArchiveBinaryProvider
 import org.jetbrains.hexana.providers.ArrowBinaryProvider
 import org.jetbrains.hexana.providers.ArscBinaryProvider
 import org.jetbrains.hexana.providers.ClrResourcesBinaryProvider
+import org.jetbrains.hexana.providers.PdbBinaryProvider
+import org.jetbrains.hexana.providers.PortablePdbBinaryProvider
 import org.jetbrains.hexana.shared.scripting.clrResourcesScriptValue
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
@@ -566,6 +568,8 @@ private fun nonWasmFormat(provider: BinaryProvider): String = when (provider) {
     is DexBinaryProvider -> "dex"
     is ArscBinaryProvider -> "arsc"
     is ClrResourcesBinaryProvider -> "dotnet-resources"
+    is PdbBinaryProvider -> "pdb"
+    is PortablePdbBinaryProvider -> "portable-pdb"
     is PcapBinaryProvider -> "pcap"
     is ProtobufBinaryProvider -> "protobuf"
     is ElfBinaryProvider -> "elf"

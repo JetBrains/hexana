@@ -32,6 +32,7 @@ Expected outputs include:
 - `test-data/pe/sample.pdb`
 - `test-data/pe/sample_cpp.coff`
 - `test-data/pe/sample-clr.exe` (see below; not built by the Docker image)
+- `test-data/pe/sample-clr-portable.exe` + `sample-clr-portable.pdb` (see below; not built by the Docker image)
 - `test-data/manifest.txt`
 
 When LLVM inspection tools are available, the build also writes `*.llvm-readobj.txt` reference dumps next to the generated binaries.
@@ -66,6 +67,35 @@ The parser tests cross-check it against `monodis --typedef`, `--method`, `--memb
 and the IL tests against `ikdasm sample-clr.exe`. Update `ClrFixtureParserTest`, `ClrIlDecoderTest`,
 `ClrTableTabsTest` and `ClrIlTextTest` together with the fixture, and regenerate the base64 copy in
 `parsing/pe/src/commonTest/.../clr/ClrSampleFixture.kt` that the JS and Wasm tests use.
+
+### Windows PDB reference dump
+
+`test-data/pe/sample.pdb` is the PDB `lld-link` writes next to `sample.exe` (they share GUID
+`{AEBD2BE3-…}` and age 1). `sample.pdb.llvm-pdbutil.txt` is what `debugInfo/pdb`'s `PdbFixtureTest`
+is checked against:
+
+```bash
+cd parsing/native-fixtures/test-data/pe
+llvm-pdbutil dump -summary -streams -modules -files -section-contribs -types -ids sample.pdb > sample.pdb.llvm-pdbutil.txt
+```
+
+### Portable PDB fixture
+
+`test-data/pe/sample-clr-portable.exe` and `sample-clr-portable.pdb` are a debug build of the same
+`src/clr/Sample.cs` with a Portable PDB (the assembly's CodeView record names the PDB's id).
+`sample-clr-portable.pdb.dump.txt` is what the runtime's own `System.Reflection.Metadata` reader reports
+for it (`src/clr/pdb/DumpPortablePdb.cs`), and is what `ClrPortablePdbTest` checks:
+
+```bash
+cd parsing/native-fixtures/src/clr
+T=$(cd ../../test-data/pe && pwd)
+cp "$T/sample.resources" /tmp/strings.resources
+csc -nologo -deterministic -optimize- -debug:portable -pathmap:"$PWD"=/src/clr,"$T"=/out/pe \
+  -resource:hello.txt,Hexana.Sample.hello.txt \
+  -resource:/tmp/strings.resources,Hexana.Sample.Strings.resources \
+  -out:"$T/sample-clr-portable.exe" -pdb:"$T/sample-clr-portable.pdb" Sample.cs
+dotnet run --project pdb -- "$T/sample-clr-portable.pdb" > "$T/sample-clr-portable.pdb.dump.txt"
+```
 
 ### .resources fixture
 

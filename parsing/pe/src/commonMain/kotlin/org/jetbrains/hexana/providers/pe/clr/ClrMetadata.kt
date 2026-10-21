@@ -36,6 +36,8 @@ data class ClrMetadata(
     val diagnostics: List<NativeParserDiagnostic>,
     /** Renders metadata tokens that IL instructions refer to; see [ClrTokenResolver]. */
     val tokens: ClrTokenResolver,
+    /** Debug metadata, when this is Portable PDB metadata rather than an assembly's own. */
+    val portablePdb: ClrPortablePdb? = null,
 ) {
     /** Fields grouped by the 1-based TypeDef row of their declaring type. */
     val fieldsByType: Map<Int, List<ClrField>> by lazy { fields.groupBy { it.declaringTypeRow } }
@@ -387,4 +389,14 @@ object ClrTableId {
     const val GENERIC_PARAM: Int = 0x2A
     const val METHOD_SPEC: Int = 0x2B
     const val GENERIC_PARAM_CONSTRAINT: Int = 0x2C
+
+    // Portable PDB debug tables.
+    const val DOCUMENT: Int = 0x30
+    const val METHOD_DEBUG_INFORMATION: Int = 0x31
+    const val LOCAL_SCOPE: Int = 0x32
+    const val LOCAL_VARIABLE: Int = 0x33
+    const val LOCAL_CONSTANT: Int = 0x34
+    const val IMPORT_SCOPE: Int = 0x35
+    const val STATE_MACHINE_METHOD: Int = 0x36
+    const val CUSTOM_DEBUG_INFORMATION: Int = 0x37
 }

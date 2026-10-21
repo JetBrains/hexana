@@ -482,6 +482,7 @@ object TableTabsProviderRegistry {
             DexTableTabsProvider(),
             ArscTableTabsProvider(),
             ClrResourcesTableTabsProvider(),
+            PdbTableTabsProvider(),
             PcapTableTabsProvider(),
             StringsTabProvider(),
             SizeTableTabsProvider(),

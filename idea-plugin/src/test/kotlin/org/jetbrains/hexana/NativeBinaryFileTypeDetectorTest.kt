@@ -65,4 +65,13 @@ class NativeBinaryFileTypeDetectorTest {
         assertNull(detect(byteArrayOf(0x00, 0x61)))
         assertNull(detect(byteArrayOf()))
     }
+
+    @Test
+    fun `windows and portable PDBs are detected by content, text PDB files are not`() {
+        val fixtures = java.io.File("../parsing/native-fixtures/test-data/pe")
+        assertSame(PdbFileType.INSTANCE, detect(fixtures.resolve("sample.pdb").readBytes().copyOf(0x100), "sample.pdb"))
+        assertSame(PdbFileType.INSTANCE, detect(fixtures.resolve("sample-clr-portable.pdb").readBytes().copyOf(0x100), "sample.pdb"))
+        // A Protein Data Bank entry shares the extension.
+        assertNull(detect("HEADER    PLANT PROTEIN                           30-APR-81   1CRN\n".encodeToByteArray(), "1crn.pdb"))
+    }
 }

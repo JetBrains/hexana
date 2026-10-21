@@ -174,7 +174,7 @@ private fun clrAssemblyRefsTab(metadata: ClrMetadata): TableTabDescriptor? {
     )
 }
 
-private fun clrStreamsTab(metadata: ClrMetadata): TableTabDescriptor? {
+internal fun clrStreamsTab(metadata: ClrMetadata): TableTabDescriptor? {
     val streams = metadata.streams.takeIf { it.isNotEmpty() } ?: return null
     return TableTabDescriptor(
         name = "Streams",
@@ -190,7 +190,7 @@ private fun clrStreamsTab(metadata: ClrMetadata): TableTabDescriptor? {
     )
 }
 
-private fun clrTablesTab(metadata: ClrMetadata): TableTabDescriptor? {
+internal fun clrTablesTab(metadata: ClrMetadata): TableTabDescriptor? {
     val tables = metadata.tables.takeIf { it.isNotEmpty() } ?: return null
     return TableTabDescriptor(
         name = "Tables",

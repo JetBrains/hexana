@@ -74,7 +74,15 @@ and one user type (`Margin, MakeResources, …`). **Resources** lists 19 entries
 value; selecting `Pixel` highlights only its 12 payload bytes. The paint.net file lists its translated strings. The
 embedded set expands to the same 19 entries.
 
-### 14.10 Malformed input
+### 14.10 PDB files
+**Steps:** Open `parsing/native-fixtures/test-data/pe/sample.pdb`, then `sample-clr-portable.pdb`; then a text file
+named `1crn.pdb` (any Protein Data Bank entry, or a line `HEADER    PLANT PROTEIN`).
+**Expected:** `sample.pdb` reads `Windows PDB`: **PDB** shows GUID `AEBD2BE3-8B00-6D1E-4C4C-44205044422E`, age 1,
+machine AMD64; **Streams** lists 15 streams (stream 3 = DBI, 11 = module `/tmp/sample-5bae4d.o`); **Source Files**
+lists `/src/src/sample.c`. `sample-clr-portable.pdb` reads `Portable PDB`: **Documents** lists `/src/clr/Sample.cs`
+(C#, SHA-256), **Tables** has 14 MethodDebugInformation rows. The text `.pdb` opens in the text editor, not Hexana.
+
+### 14.11 Malformed input
 **Steps:** Copy `sample-clr.exe`, truncate the copy to 3,400 bytes, and open it.
 **Expected:** The file opens; tabs that need missing data are empty or absent, **Top** shows `.text` with only the
 bytes present. No exception in `idea.log`.
