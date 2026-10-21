@@ -2,6 +2,7 @@ package org.jetbrains.hexana.shared
 
 import org.jetbrains.hexana.parsing.common.NativeByteRange
 import org.jetbrains.hexana.providers.PeBinaryProvider
+import org.jetbrains.hexana.providers.pe.clr.ClrPortablePdb
 import org.jetbrains.hexana.providers.pe.clr.ClrCliHeader
 import org.jetbrains.hexana.providers.pe.clr.ClrField
 import org.jetbrains.hexana.providers.pe.clr.ClrHeaderFlags
@@ -24,7 +25,7 @@ internal fun clrTab(name: String, provider: PeBinaryProvider): TableTabDescripto
     return when (name) {
         CLR_OVERVIEW_TAB_NAME -> clrOverviewTab(provider, metadata)
         "Types" -> clrTypesTab(metadata)
-        "Methods" -> clrMethodsTab(metadata)
+        "Methods" -> clrMethodsTab(metadata, provider.portablePdb)
         "Assembly Refs" -> clrAssemblyRefsTab(metadata)
         else -> null
     }
@@ -133,17 +134,28 @@ private fun clrTypeMembers(metadata: ClrMetadata, type: ClrTypeDef): TableTabChi
     )
 }
 
-private fun clrMethodsTab(metadata: ClrMetadata): TableTabDescriptor? {
+private fun clrMethodsTab(metadata: ClrMetadata, pdb: ClrPortablePdb?): TableTabDescriptor? {
     val methods = metadata.methods.takeIf { it.isNotEmpty() } ?: return null
     val typeNames = metadata.typeDefs.map(::clrTypeDisplayName)
+    // First visible sequence point of each method, decoded on first use per row.
+    val sources = HashMap<Int, Pair<String, String>?>()
+    fun source(index: Int): Pair<String, String>? = sources.getOrPut(index) {
+        val point = pdb?.sequencePoints(methods[index].row)?.firstOrNull { !it.isHidden } ?: return@getOrPut null
+        val path = pdb.document(point.document)?.name.orEmpty()
+        "${path.substringAfterLast('/').substringAfterLast('\\')}:${point.startLine}" to "$path:${point.startLine}:${point.startColumn}"
+    }
+    val sourceColumn = pdb?.let {
+        col("Source", ColumnWidth.Fill(0.16f)) { index -> source(index).let { CellValue(it?.first.orEmpty(), tooltip = it?.second) } }
+    }
     return TableTabDescriptor(
         name = "Methods",
-        columns = listOf(
+        columns = listOfNotNull(
             col("Token") { tokenCell(methods[it].token) },
             col("Type", ColumnWidth.Fill(0.28f)) { CellValue(typeNames.getOrNull(methods[it].declaringTypeRow - 1).orEmpty()) },
             col("Method", ColumnWidth.Fill(0.42f)) { CellValue(methods[it].signature) },
             col("Modifiers", ColumnWidth.MeasuredMin("protected internal abstract")) { CellValue(clrMethodModifiers(methods[it])) },
             col("RVA") { methods[it].rva.let { rva -> CellValue(rva.toLong(), if (rva == 0u) "" else hex(rva)) } },
+            sourceColumn,
             col("IL Size", ColumnWidth.Fill()) { methods[it].body?.codeSize.let { size -> CellValue(size ?: -1, size?.toString() ?: "") } },
         ),
         rowCount = methods.size,

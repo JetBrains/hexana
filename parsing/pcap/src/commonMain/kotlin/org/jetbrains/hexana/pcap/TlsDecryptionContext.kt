@@ -3,7 +3,7 @@ package org.jetbrains.hexana.pcap
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.pcap.crypto.Digest
 import org.jetbrains.hexana.pcap.crypto.Hmac
-import org.jetbrains.hexana.pcap.crypto.Inflate
+import org.jetbrains.hexana.codec.Inflate
 import org.jetbrains.hexana.pcap.crypto.Sha1Digest
 import org.jetbrains.hexana.pcap.crypto.Sha256Digest
 import org.jetbrains.hexana.pcap.crypto.Sha512Digest

@@ -375,45 +375,6 @@ interface NativeBinaryProvider extends BinaryProvider {
     version?: string;
   };
   nativeSourceLocationProvider?: {
-    bestLocations: {
-      offset: number;
-      sourceLocation: {
-        column: number;
-        file: string;
-        line: number;
-      };
-    }[];
-    buffer: {
-      indices: {
-        endExclusive: number;
-        endInclusive: number;
-        first: number;
-        last: number;
-        start: number;
-        step: number;
-      };
-      lastIndex: number;
-      size: number;
-    };
-    dwarfSourceLocationResolver: {
-      dwarfAccessor: DwarfAccessor;
-    };
-    lineTableLocations: {
-      offset: number;
-      sourceLocation: {
-        column: number;
-        file: string;
-        line: number;
-      };
-    }[];
-    locations: {
-      offset: number;
-      sourceLocation: {
-        column: number;
-        file: string;
-        line: number;
-      };
-    }[];
     summary: {
       fileCount: number;
       firstAddress?: number;
@@ -804,45 +765,6 @@ interface ElfBinaryProvider extends NativeBinaryProvider {
     version?: string;
   };
   nativeSourceLocationProvider?: {
-    bestLocations: {
-      offset: number;
-      sourceLocation: {
-        column: number;
-        file: string;
-        line: number;
-      };
-    }[];
-    buffer: {
-      indices: {
-        endExclusive: number;
-        endInclusive: number;
-        first: number;
-        last: number;
-        start: number;
-        step: number;
-      };
-      lastIndex: number;
-      size: number;
-    };
-    dwarfSourceLocationResolver: {
-      dwarfAccessor: DwarfAccessor;
-    };
-    lineTableLocations: {
-      offset: number;
-      sourceLocation: {
-        column: number;
-        file: string;
-        line: number;
-      };
-    }[];
-    locations: {
-      offset: number;
-      sourceLocation: {
-        column: number;
-        file: string;
-        line: number;
-      };
-    }[];
     summary: {
       fileCount: number;
       firstAddress?: number;
@@ -1155,45 +1077,6 @@ interface MachOBinaryProvider extends NativeBinaryProvider {
     version?: string;
   };
   nativeSourceLocationProvider?: {
-    bestLocations: {
-      offset: number;
-      sourceLocation: {
-        column: number;
-        file: string;
-        line: number;
-      };
-    }[];
-    buffer: {
-      indices: {
-        endExclusive: number;
-        endInclusive: number;
-        first: number;
-        last: number;
-        start: number;
-        step: number;
-      };
-      lastIndex: number;
-      size: number;
-    };
-    dwarfSourceLocationResolver: {
-      dwarfAccessor: DwarfAccessor;
-    };
-    lineTableLocations: {
-      offset: number;
-      sourceLocation: {
-        column: number;
-        file: string;
-        line: number;
-      };
-    }[];
-    locations: {
-      offset: number;
-      sourceLocation: {
-        column: number;
-        file: string;
-        line: number;
-      };
-    }[];
     summary: {
       fileCount: number;
       firstAddress?: number;
@@ -1382,6 +1265,51 @@ interface MachOBinaryProvider extends NativeBinaryProvider {
 }
 
 interface PeBinaryProvider extends NativeBinaryProvider {
+  attachment?: {
+    sourceLocations: {
+      value: T;
+    };
+    symbols: {
+      path?: string;
+      symbols: {
+        bytes: {
+          indices: {
+            endExclusive: number;
+            endInclusive: number;
+            first: number;
+            last: number;
+            start: number;
+            step: number;
+          };
+          lastIndex: number;
+          size: number;
+        };
+        nativeFormat?: {
+          displayName: string;
+        };
+        pdbGuid?: string;
+        sizeAnalysis?: {
+          children: BinarySizeNode[];
+          name: string;
+          offset: number;
+          size: number;
+        };
+        strings: {
+          index: number;
+          offset: number;
+          size: number;
+          tag?: string;
+          value: string;
+        }[];
+        structureRanges: {
+          label: string;
+          offset: number;
+          size: number;
+          tabName?: string;
+        }[];
+      };
+    };
+  };
   baseRelocations?: {
     blockIndex: number;
     entryIndex: number;
@@ -1666,6 +1594,7 @@ interface PeBinaryProvider extends NativeBinaryProvider {
         stamp: number;
       };
       methodDebugInformationCount: number;
+      sequencePointReader: Function1;
     };
     readyToRun: boolean;
     root?: {
@@ -1820,6 +1749,11 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     timeDateStamp: number;
     type: number;
   }[];
+  debugSymbols?: PeDebugSymbols;
+  debugSymbolsRejection?: {
+    path?: string;
+    reason: "Matches" | "NoReference" | "WrongKind" | "Unreadable" | "GuidMismatch" | "AgeMismatch" | "StampMismatch";
+  };
   dosHeader?: {
     mzRange: {
       endExclusive: number;
@@ -1837,6 +1771,33 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       offset: number;
       size: number;
     };
+  };
+  embeddedPortablePdb?: {
+    documents: {
+      hash: string;
+      hashAlgorithm?: string;
+      language?: string;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+    }[];
+    header: {
+      entryPointToken: number;
+      guid: string;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      referencedTableRows: Record<number, number>;
+      stamp: number;
+    };
+    methodDebugInformationCount: number;
+    sequencePointReader: Function1;
   };
   exports?: {
     directoryRange: {
@@ -1871,6 +1832,7 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     };
     ordinalBase: number;
   };
+  hasDebugSymbols: boolean;
   hasOnlyManagedCode: boolean;
   imports?: {
     descriptorRange: {
@@ -1924,6 +1886,15 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     svmSections: string[];
     version?: string;
   };
+  nativeSourceLocationProvider?: {
+    summary: {
+      fileCount: number;
+      firstAddress?: number;
+      lastAddress?: number;
+      lineRowCount: number;
+      sampleFiles: string[];
+    };
+  };
   optionalHeader?: {
     addressOfEntryPoint: number;
     dataDirectories: {
@@ -1963,6 +1934,38 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     };
     severity: "Info" | "Warning" | "Error";
   }[];
+  pdbReference?: {
+    guid: string;
+    label: string;
+    path?: string;
+  };
+  portablePdb?: {
+    documents: {
+      hash: string;
+      hashAlgorithm?: string;
+      language?: string;
+      name: string;
+      recordRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      row: number;
+    }[];
+    header: {
+      entryPointToken: number;
+      guid: string;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      referencedTableRows: Record<number, number>;
+      stamp: number;
+    };
+    methodDebugInformationCount: number;
+    sequencePointReader: Function1;
+  };
   readyToRunImage?: {
     codeSizesApproximate: boolean;
     diagnostics: {
@@ -4430,6 +4433,22 @@ interface PdbBinaryProvider extends PdbSymbolsBinaryProvider {
       typeRecordBytes: number;
       version: number;
     };
+    lineBlocks: {
+      codeSize: number;
+      file: string;
+      moduleIndex: number;
+      offset: number;
+      rows: {
+        column: number;
+        file: string;
+        isStatement: boolean;
+        line: number;
+        moduleIndex: number;
+        offset: number;
+        section: number;
+      }[];
+      section: number;
+    }[];
     streamRoles: Record<number, string>;
     streams: {
       blockSize: number;
@@ -4450,6 +4469,29 @@ interface PdbBinaryProvider extends PdbSymbolsBinaryProvider {
       isNil: boolean;
       size: number;
     }[];
+    stringTable?: {
+      bufferSize: number;
+      bufferStart: number;
+      stream: {
+        blockSize: number;
+        blocks: number[];
+        bytes: {
+          indices: {
+            endExclusive: number;
+            endInclusive: number;
+            first: number;
+            last: number;
+            start: number;
+            step: number;
+          };
+          lastIndex: number;
+          size: number;
+        };
+        index: number;
+        isNil: boolean;
+        size: number;
+      };
+    };
     superBlock: {
       blockCount: number;
       blockMapAddress: number;
@@ -4755,6 +4797,7 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
         stamp: number;
       };
       methodDebugInformationCount: number;
+      sequencePointReader: Function1;
     };
     readyToRun: boolean;
     root?: {
@@ -4861,27 +4904,6 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
     size: number;
     tabName?: string;
   }[];
-}
-
-interface AddressSourceLocation {
-  offset: number;
-  sourceLocation: {
-    column: number;
-    file: string;
-    line: number;
-  };
-  copy(offset: number, sourceLocation: {
-    column: number;
-    file: string;
-    line: number;
-  }): {
-    offset: number;
-    sourceLocation: {
-      column: number;
-      file: string;
-      line: number;
-    };
-  };
 }
 
 interface AdjacencyAccessor {
@@ -6388,6 +6410,52 @@ interface ArscValue {
   };
 }
 
+interface Attachment {
+  sourceLocations: {
+    value: T;
+  };
+  symbols: {
+    path?: string;
+    symbols: {
+      bytes: {
+        indices: {
+          endExclusive: number;
+          endInclusive: number;
+          first: number;
+          last: number;
+          start: number;
+          step: number;
+        };
+        lastIndex: number;
+        size: number;
+      };
+      nativeFormat?: {
+        displayName: string;
+      };
+      pdbGuid?: string;
+      sizeAnalysis?: {
+        children: BinarySizeNode[];
+        name: string;
+        offset: number;
+        size: number;
+      };
+      strings: {
+        index: number;
+        offset: number;
+        size: number;
+        tag?: string;
+        value: string;
+      }[];
+      structureRanges: {
+        label: string;
+        offset: number;
+        size: number;
+        tabName?: string;
+      }[];
+    };
+  };
+}
+
 interface AttributeRecord {
   byteOffset: number;
   info: number[];
@@ -7201,6 +7269,7 @@ interface ClrMetadata {
       stamp: number;
     };
     methodDebugInformationCount: number;
+    sequencePointReader: Function1;
   };
   readyToRun: boolean;
   root?: {
@@ -7586,6 +7655,7 @@ interface ClrMetadata {
       stamp: number;
     };
     methodDebugInformationCount: number;
+    sequencePointReader: Function1;
   } | null): {
     assembly?: {
       culture: string;
@@ -7858,6 +7928,7 @@ interface ClrMetadata {
         stamp: number;
       };
       methodDebugInformationCount: number;
+      sequencePointReader: Function1;
     };
     readyToRun: boolean;
     root?: {
@@ -8332,17 +8403,8 @@ interface ClrPortablePdb {
     stamp: number;
   };
   methodDebugInformationCount: number;
-  copy(header: {
-    entryPointToken: number;
-    guid: string;
-    range: {
-      endExclusive: number;
-      offset: number;
-      size: number;
-    };
-    referencedTableRows: Record<number, number>;
-    stamp: number;
-  }, documents: {
+  sequencePointReader: Function1;
+  document(row: number): {
     hash: string;
     hashAlgorithm?: string;
     language?: string;
@@ -8353,32 +8415,16 @@ interface ClrPortablePdb {
       size: number;
     };
     row: number;
-  }[], methodDebugInformationCount: number): {
-    documents: {
-      hash: string;
-      hashAlgorithm?: string;
-      language?: string;
-      name: string;
-      recordRange: {
-        endExclusive: number;
-        offset: number;
-        size: number;
-      };
-      row: number;
-    }[];
-    header: {
-      entryPointToken: number;
-      guid: string;
-      range: {
-        endExclusive: number;
-        offset: number;
-        size: number;
-      };
-      referencedTableRows: Record<number, number>;
-      stamp: number;
-    };
-    methodDebugInformationCount: number;
-  };
+  } | null;
+  sequencePoints(methodRow: number): {
+    document: number;
+    endColumn: number;
+    endLine: number;
+    ilOffset: number;
+    isHidden: boolean;
+    startColumn: number;
+    startLine: number;
+  }[];
 }
 
 interface ClrReadyToRunImage {
@@ -8957,6 +9003,25 @@ interface ClrRuntimeFunction {
     };
     index: number;
     unwindRva: number;
+  };
+}
+
+interface ClrSequencePoint {
+  document: number;
+  endColumn: number;
+  endLine: number;
+  ilOffset: number;
+  isHidden: boolean;
+  startColumn: number;
+  startLine: number;
+  copy(ilOffset: number, document: number, startLine: number, startColumn: number, endLine: number, endColumn: number): {
+    document: number;
+    endColumn: number;
+    endLine: number;
+    ilOffset: number;
+    isHidden: boolean;
+    startColumn: number;
+    startLine: number;
   };
 }
 
@@ -9982,85 +10047,6 @@ interface DominatorResult {
   subtree(nodeId: number): number[];
 }
 
-interface DwarfAccessor {
-  debugAbbrevSection(): {
-    accessor: DwarfAccessor;
-    contentOffset: number;
-    contentSize: number;
-    offset: number;
-    size: number;
-  } | null;
-  debugAddrSection(): {
-    accessor: DwarfAccessor;
-    contentOffset: number;
-    contentSize: number;
-    offset: number;
-    size: number;
-  } | null;
-  debugInfoSection(): {
-    abbrevCache?: Record<number, {
-      attributes: {
-        form: {
-          value: number;
-        };
-        name: {
-          value: number;
-        };
-        offset: number;
-        size: number;
-        value?: number;
-      }[];
-      hasChildren: boolean;
-      number: number;
-      offset: number;
-      size: number;
-      tag: "DW_TAG_null" | "DW_TAG_array_type" | "DW_TAG_class_type" | "DW_TAG_entry_point" | "DW_TAG_enumeration_type" | "DW_TAG_formal_parameter" | "DW_TAG_imported_declaration" | "DW_TAG_label" | "DW_TAG_lexical_block" | "DW_TAG_member" | "DW_TAG_pointer_type" | "DW_TAG_reference_type" | "DW_TAG_compile_unit" | "DW_TAG_string_type" | "DW_TAG_structure_type" | "DW_TAG_subroutine_type" | "DW_TAG_typedef" | "DW_TAG_union_type" | "DW_TAG_unspecified_parameters" | "DW_TAG_variant" | "DW_TAG_common_block" | "DW_TAG_common_inclusion" | "DW_TAG_inheritance" | "DW_TAG_inlined_subroutine" | "DW_TAG_module" | "DW_TAG_ptr_to_member_type" | "DW_TAG_set_type" | "DW_TAG_subrange_type" | "DW_TAG_with_stmt" | "DW_TAG_access_declaration" | "DW_TAG_base_type" | "DW_TAG_catch_block" | "DW_TAG_const_type" | "DW_TAG_constant" | "DW_TAG_enumerator" | "DW_TAG_file_type" | "DW_TAG_friend" | "DW_TAG_namelist" | "DW_TAG_namelist_item" | "DW_TAG_packed_type" | "DW_TAG_subprogram" | "DW_TAG_template_type_parameter" | "DW_TAG_template_value_parameter" | "DW_TAG_thrown_type" | "DW_TAG_try_block" | "DW_TAG_variant_part" | "DW_TAG_variable" | "DW_TAG_volatile_type" | "DW_TAG_dwarf_procedure" | "DW_TAG_restrict_type" | "DW_TAG_interface_type" | "DW_TAG_namespace" | "DW_TAG_imported_module" | "DW_TAG_unspecified_type" | "DW_TAG_partial_unit" | "DW_TAG_imported_unit" | "DW_TAG_condition" | "DW_TAG_shared_type" | "DW_TAG_type_unit" | "DW_TAG_rvalue_reference_type" | "DW_TAG_template_alias" | "DW_TAG_lo_user" | "DW_TAG_GNU_call_site" | "DW_TAG_GNU_call_site_parameter" | "DW_TAG_hi_user";
-    }[]>;
-    accessor: DwarfAccessor;
-    contentOffset: number;
-    contentSize: number;
-    offset: number;
-    size: number;
-    stringCache?: {
-      length: number;
-      offset: number;
-      originalOffset: number;
-    }[];
-  } | null;
-  debugLineSection(): {
-    accessor: DwarfAccessor;
-    contentOffset: number;
-    contentSize: number;
-    offset: number;
-    size: number;
-  } | null;
-  debugLocSection(): {
-    accessor: DwarfAccessor;
-    contentOffset: number;
-    contentSize: number;
-    offset: number;
-    size: number;
-  } | null;
-  debugStrSection(): {
-    accessor: DwarfAccessor;
-    contentOffset: number;
-    contentSize: number;
-    offset: number;
-    size: number;
-  } | null;
-  section(name: string): {
-    accessor: DwarfAccessor;
-    contentOffset: number;
-    contentSize: number;
-    offset: number;
-    size: number;
-  } | null;
-}
-
-interface DwarfSourceLocationResolver {
-  dwarfAccessor: DwarfAccessor;
-}
-
 interface Elf {
   displayName: string;
   endian: "Little" | "Big" | "Unknown";
@@ -10959,6 +10945,123 @@ interface FieldInfo {
   };
 }
 
+interface File {
+  path?: string;
+  symbols: {
+    bytes: {
+      indices: {
+        endExclusive: number;
+        endInclusive: number;
+        first: number;
+        last: number;
+        start: number;
+        step: number;
+      };
+      lastIndex: number;
+      size: number;
+    };
+    nativeFormat?: {
+      displayName: string;
+    };
+    pdbGuid?: string;
+    sizeAnalysis?: {
+      children: BinarySizeNode[];
+      name: string;
+      offset: number;
+      size: number;
+    };
+    strings: {
+      index: number;
+      offset: number;
+      size: number;
+      tag?: string;
+      value: string;
+    }[];
+    structureRanges: {
+      label: string;
+      offset: number;
+      size: number;
+      tabName?: string;
+    }[];
+  };
+  copy(symbols: {
+    bytes: {
+      indices: {
+        endExclusive: number;
+        endInclusive: number;
+        first: number;
+        last: number;
+        start: number;
+        step: number;
+      };
+      lastIndex: number;
+      size: number;
+    };
+    nativeFormat?: {
+      displayName: string;
+    };
+    pdbGuid?: string;
+    sizeAnalysis?: {
+      children: BinarySizeNode[];
+      name: string;
+      offset: number;
+      size: number;
+    };
+    strings: {
+      index: number;
+      offset: number;
+      size: number;
+      tag?: string;
+      value: string;
+    }[];
+    structureRanges: {
+      label: string;
+      offset: number;
+      size: number;
+      tabName?: string;
+    }[];
+  }, path: string | null): {
+    path?: string;
+    symbols: {
+      bytes: {
+        indices: {
+          endExclusive: number;
+          endInclusive: number;
+          first: number;
+          last: number;
+          start: number;
+          step: number;
+        };
+        lastIndex: number;
+        size: number;
+      };
+      nativeFormat?: {
+        displayName: string;
+      };
+      pdbGuid?: string;
+      sizeAnalysis?: {
+        children: BinarySizeNode[];
+        name: string;
+        offset: number;
+        size: number;
+      };
+      strings: {
+        index: number;
+        offset: number;
+        size: number;
+        tag?: string;
+        value: string;
+      }[];
+      structureRanges: {
+        label: string;
+        offset: number;
+        size: number;
+        tabName?: string;
+      }[];
+    };
+  };
+}
+
 interface FileMetaData {
   createdBy?: string;
   numRows: number;
@@ -11143,6 +11246,10 @@ interface FlatBufferVector {
     };
     pos: number;
   };
+}
+
+interface Function1 {
+  invoke(arg: P1): R;
 }
 
 interface GarbageDataSegmentEntry {
@@ -11487,6 +11594,11 @@ interface KotlinWasmInfo {
     hasNameSection: boolean;
     isKotlinWasm: boolean;
   };
+}
+
+interface Lazy {
+  value: T;
+  isInitialized(): boolean;
 }
 
 interface MachO {
@@ -12349,61 +12461,6 @@ interface NativeDebugInfoSummary {
   };
 }
 
-interface NativeDwarfSourceLocationProvider {
-  bestLocations: {
-    offset: number;
-    sourceLocation: {
-      column: number;
-      file: string;
-      line: number;
-    };
-  }[];
-  buffer: {
-    indices: {
-      endExclusive: number;
-      endInclusive: number;
-      first: number;
-      last: number;
-      start: number;
-      step: number;
-    };
-    lastIndex: number;
-    size: number;
-  };
-  dwarfSourceLocationResolver: {
-    dwarfAccessor: DwarfAccessor;
-  };
-  lineTableLocations: {
-    offset: number;
-    sourceLocation: {
-      column: number;
-      file: string;
-      line: number;
-    };
-  }[];
-  locations: {
-    offset: number;
-    sourceLocation: {
-      column: number;
-      file: string;
-      line: number;
-    };
-  }[];
-  summary: {
-    fileCount: number;
-    firstAddress?: number;
-    lastAddress?: number;
-    lineRowCount: number;
-    sampleFiles: string[];
-  };
-  getSourceLocationForVirtualAddress(virtualAddress: number): {
-    column: number;
-    filePath: string;
-    line: number;
-  } | null;
-  getVirtualAddressesForSourceLocation(filePath: string, line: number): number[];
-}
-
 interface NativeFunctionRecord {
   binding: number;
   demangledName?: string;
@@ -12505,6 +12562,22 @@ interface NativeParserDiagnostic {
     };
     severity: "Info" | "Warning" | "Error";
   };
+}
+
+interface NativeSourceLocationProvider {
+  summary: {
+    fileCount: number;
+    firstAddress?: number;
+    lastAddress?: number;
+    lineRowCount: number;
+    sampleFiles: string[];
+  };
+  getSourceLocationForVirtualAddress(virtualAddress: number): {
+    column: number;
+    filePath: string;
+    line: number;
+  } | null;
+  getVirtualAddressesForSourceLocation(filePath: string, line: number): number[];
 }
 
 interface NativeUnresolvedRecord {
@@ -13280,6 +13353,22 @@ interface PdbFile {
     typeRecordBytes: number;
     version: number;
   };
+  lineBlocks: {
+    codeSize: number;
+    file: string;
+    moduleIndex: number;
+    offset: number;
+    rows: {
+      column: number;
+      file: string;
+      isStatement: boolean;
+      line: number;
+      moduleIndex: number;
+      offset: number;
+      section: number;
+    }[];
+    section: number;
+  }[];
   streamRoles: Record<number, string>;
   streams: {
     blockSize: number;
@@ -13300,6 +13389,29 @@ interface PdbFile {
     isNil: boolean;
     size: number;
   }[];
+  stringTable?: {
+    bufferSize: number;
+    bufferStart: number;
+    stream: {
+      blockSize: number;
+      blocks: number[];
+      bytes: {
+        indices: {
+          endExclusive: number;
+          endInclusive: number;
+          first: number;
+          last: number;
+          start: number;
+          step: number;
+        };
+        lastIndex: number;
+        size: number;
+      };
+      index: number;
+      isNil: boolean;
+      size: number;
+    };
+  };
   superBlock: {
     blockCount: number;
     blockMapAddress: number;
@@ -13322,6 +13434,91 @@ interface PdbFile {
     typeRecordBytes: number;
     version: number;
   };
+  lineBlocks(module: {
+    c11ByteSize: number;
+    c13ByteSize: number;
+    contribution: {
+      characteristics: number;
+      dataCrc: number;
+      fileRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      moduleIndex: number;
+      offset: number;
+      relocCrc: number;
+      section: number;
+      size: number;
+    };
+    fileRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    flags: number;
+    index: number;
+    moduleName: string;
+    objectFileName: string;
+    recordSize: number;
+    sourceFileCount: number;
+    sourceFiles: string[];
+    streamOffset: number;
+    symbolByteSize: number;
+    symbolStream?: number;
+  }): {
+    codeSize: number;
+    file: string;
+    moduleIndex: number;
+    offset: number;
+    rows: {
+      column: number;
+      file: string;
+      isStatement: boolean;
+      line: number;
+      moduleIndex: number;
+      offset: number;
+      section: number;
+    }[];
+    section: number;
+  }[];
+  sourceFileChecksums(module: {
+    c11ByteSize: number;
+    c13ByteSize: number;
+    contribution: {
+      characteristics: number;
+      dataCrc: number;
+      fileRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      moduleIndex: number;
+      offset: number;
+      relocCrc: number;
+      section: number;
+      size: number;
+    };
+    fileRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    flags: number;
+    index: number;
+    moduleName: string;
+    objectFileName: string;
+    recordSize: number;
+    sourceFileCount: number;
+    sourceFiles: string[];
+    streamOffset: number;
+    symbolByteSize: number;
+    symbolStream?: number;
+  }): {
+    checksum: string;
+    file: string;
+    kind: "None" | "Md5" | "Sha1" | "Sha256" | "Unknown";
+  }[];
   stream(index: number): {
     blockSize: number;
     blocks: number[];
@@ -13366,6 +13563,66 @@ interface PdbInfoStream {
     namedStreams: Record<string, number>;
     signature: number;
     version: number;
+  };
+}
+
+interface PdbLineBlock {
+  codeSize: number;
+  file: string;
+  moduleIndex: number;
+  offset: number;
+  rows: {
+    column: number;
+    file: string;
+    isStatement: boolean;
+    line: number;
+    moduleIndex: number;
+    offset: number;
+    section: number;
+  }[];
+  section: number;
+  copy(section: number, offset: number, codeSize: number, file: string, moduleIndex: number, rows: {
+    column: number;
+    file: string;
+    isStatement: boolean;
+    line: number;
+    moduleIndex: number;
+    offset: number;
+    section: number;
+  }[]): {
+    codeSize: number;
+    file: string;
+    moduleIndex: number;
+    offset: number;
+    rows: {
+      column: number;
+      file: string;
+      isStatement: boolean;
+      line: number;
+      moduleIndex: number;
+      offset: number;
+      section: number;
+    }[];
+    section: number;
+  };
+}
+
+interface PdbLineRow {
+  column: number;
+  file: string;
+  isStatement: boolean;
+  line: number;
+  moduleIndex: number;
+  offset: number;
+  section: number;
+  copy(section: number, offset: number, file: string, line: number, column: number, isStatement: boolean, moduleIndex: number): {
+    column: number;
+    file: string;
+    isStatement: boolean;
+    line: number;
+    moduleIndex: number;
+    offset: number;
+    section: number;
   };
 }
 
@@ -13484,6 +13741,31 @@ interface PdbSectionContribution {
     section: number;
     size: number;
   };
+}
+
+interface PdbStringTable {
+  bufferSize: number;
+  bufferStart: number;
+  stream: {
+    blockSize: number;
+    blocks: number[];
+    bytes: {
+      indices: {
+        endExclusive: number;
+        endInclusive: number;
+        first: number;
+        last: number;
+        start: number;
+        step: number;
+      };
+      lastIndex: number;
+      size: number;
+    };
+    index: number;
+    isNil: boolean;
+    size: number;
+  };
+  string(offset: number): string | null;
 }
 
 interface PdbTypeStreamHeader {
@@ -13924,6 +14206,19 @@ interface PeDebugEntry {
   };
 }
 
+interface PeDebugSymbols {
+  // (unable to inspect)
+}
+
+interface PeDebugSymbolsRejection {
+  path?: string;
+  reason: "Matches" | "NoReference" | "WrongKind" | "Unreadable" | "GuidMismatch" | "AgeMismatch" | "StampMismatch";
+  copy(path: string | null, reason: "Matches" | "NoReference" | "WrongKind" | "Unreadable" | "GuidMismatch" | "AgeMismatch" | "StampMismatch"): {
+    path?: string;
+    reason: "Matches" | "NoReference" | "WrongKind" | "Unreadable" | "GuidMismatch" | "AgeMismatch" | "StampMismatch";
+  };
+}
+
 interface PeDosHeader {
   mzRange: {
     endExclusive: number;
@@ -14314,6 +14609,12 @@ interface PeOptionalHeader {
   };
 }
 
+interface PePdbReference {
+  guid: string;
+  label: string;
+  path?: string;
+}
+
 interface PeSection {
   characteristics: number;
   contentRange?: {
@@ -14630,17 +14931,6 @@ interface SizeAnalysisBuilder {
     name: string;
     offset: number;
     size: number;
-  };
-}
-
-interface SourceLocation {
-  column: number;
-  file: string;
-  line: number;
-  copy(file: string, line: number, column: number): {
-    column: number;
-    file: string;
-    line: number;
   };
 }
 

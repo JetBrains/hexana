@@ -7,7 +7,9 @@ import org.jetbrains.hexana.providers.ElfBinaryProvider
 import org.jetbrains.hexana.providers.FatMachOBinaryProvider
 import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
+import org.jetbrains.hexana.providers.PdbBinaryProvider
 import org.jetbrains.hexana.providers.PeBinaryProvider
+import org.jetbrains.hexana.providers.PeDebugSymbols
 import org.jetbrains.hexana.providers.NativeDebugInfoSummary
 import org.jetbrains.hexana.providers.macho.MachOParser
 
@@ -62,15 +64,18 @@ class NativeTableTabsProvider : TableTabsProvider {
     override fun availableTabNames(provider: BinaryProvider, context: TableTabsContext): Pair<List<String>, List<String>>? {
         if (provider !is PeBinaryProvider) return null
         val grouped = if (provider.isManaged) listOf(CLR_METADATA_GROUP_NAME) else emptyList()
-        return (peTabBuilders(provider).map { it.first } + DEBUG_CONTEXT_TAB_NAME) to grouped
+        // A companion PDB is attached before tabs are built; an embedded one is only looked up here.
+        val debugInfo = if (provider.hasDebugSymbols) listOf(DEBUG_INFO_TAB_NAME) else emptyList()
+        return (peTabBuilders(provider).map { it.first } + DEBUG_CONTEXT_TAB_NAME + debugInfo) to grouped
     }
 
     override fun tabPriority(name: String, provider: BinaryProvider): TabPriority =
-        if (name == DEBUG_CONTEXT_TAB_NAME) TabPriority.Low else TabPriority.High
+        if (name == DEBUG_CONTEXT_TAB_NAME || name == DEBUG_INFO_TAB_NAME) TabPriority.Low else TabPriority.High
 
     override fun singleTab(name: String, provider: BinaryProvider, context: TableTabsContext): TableTabDescriptor? {
         if (provider !is PeBinaryProvider) return super.singleTab(name, provider, context)
         if (name == DEBUG_CONTEXT_TAB_NAME) return debugContextTab(provider, context.nativeDebugData)
+        if (name == DEBUG_INFO_TAB_NAME) return peDebugInfoTab(provider, context.nativeDebugData)
         return peTabBuilders(provider).firstOrNull { it.first == name }?.second?.invoke()
     }
 
@@ -78,7 +83,10 @@ class NativeTableTabsProvider : TableTabsProvider {
         is ElfBinaryProvider -> elfTabs(provider) + debugTabs(provider, context.nativeDebugData)
         is MachOBinaryProvider -> machOTabs(provider) + debugTabs(provider, context.nativeDebugData)
         is FatMachOBinaryProvider -> fatMachOTabs(provider)
-        is PeBinaryProvider -> peTabs(provider) + listOf(debugContextTab(provider, context.nativeDebugData))
+        is PeBinaryProvider -> peTabs(provider) + listOfNotNull(
+            debugContextTab(provider, context.nativeDebugData),
+            peDebugInfoTab(provider, context.nativeDebugData),
+        )
         is CoffBinaryProvider -> coffTabs(provider)
         else -> emptyList()
     }
@@ -127,6 +135,39 @@ class NativeTableTabsProvider : TableTabsProvider {
             },
             prologueText = buildDebugContextPrologueText(data.debugContext),
             emptyMessage = "No debug companion information is available.",
+            priority = TabPriority.Low,
+        )
+    }
+
+    /**
+     * PE "Debug Info": which PDB is in use, then the native line table summary of a Windows PDB or
+     * the documents of a Portable PDB. Null without debug symbols.
+     */
+    private fun peDebugInfoTab(provider: PeBinaryProvider, debugData: NativeDebugTabData?): TableTabDescriptor? {
+        val symbols = provider.debugSymbols ?: return null
+        val rows = buildList {
+            add("Symbols" to when (symbols) {
+                is PeDebugSymbols.File -> (if (symbols.symbols is PdbBinaryProvider) "Windows PDB" else "Portable PDB") + (symbols.path?.let { ": $it" } ?: "")
+                is PeDebugSymbols.Embedded -> "Portable PDB embedded in the image"
+            })
+            provider.pdbReference?.let { add("Identity" to it.label) }
+            if (provider.nativeSourceLocationProvider != null) {
+                addAll(resolveDebugData(provider, debugData).debugInfoRows.orEmpty())
+            }
+            provider.portablePdb?.let { pdb ->
+                val methods = (1..pdb.methodDebugInformationCount).count { pdb.sequencePoints(it).any { point -> !point.isHidden } }
+                add("Methods with source lines" to "$methods of ${pdb.methodDebugInformationCount}")
+                add("Source files" to pdb.documents.size.toString())
+                pdb.documents.take(50).forEachIndexed { index, document -> add("File ${index + 1}" to document.name) }
+            }
+        }
+        return TableTabDescriptor(
+            name = DEBUG_INFO_TAB_NAME,
+            columns = listOf(
+                col("Field", ColumnWidth.Fill(0.24f)) { CellValue(rows[it].first) },
+                col("Value", ColumnWidth.Fill()) { CellValue(rows[it].second) },
+            ),
+            rowCount = rows.size,
             priority = TabPriority.Low,
         )
     }
@@ -191,6 +232,7 @@ private fun coffSymbolsTab(provider: CoffBinaryProvider): TableTabDescriptor? {
 }
 
 private const val DEBUG_CONTEXT_TAB_NAME = "Debug Context"
+private const val DEBUG_INFO_TAB_NAME = "Debug Info"
 
 private fun peTabs(provider: PeBinaryProvider): List<TableTabDescriptor> =
     peTabBuilders(provider).mapNotNull { (_, build) -> build() }

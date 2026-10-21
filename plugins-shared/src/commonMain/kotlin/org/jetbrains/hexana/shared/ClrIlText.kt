@@ -8,6 +8,8 @@ import org.jetbrains.hexana.document.format.RenderTokenKind
 import org.jetbrains.hexana.document.format.SectionKind
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.parsing.common.NativeByteRange
+import org.jetbrains.hexana.providers.pe.clr.ClrPortablePdb
+import org.jetbrains.hexana.providers.pe.clr.ClrSequencePoint
 import org.jetbrains.hexana.providers.pe.clr.ClrExceptionClause
 import org.jetbrains.hexana.providers.pe.clr.ClrExceptionClauseKind
 import org.jetbrains.hexana.providers.pe.clr.ClrIlDecoder
@@ -127,8 +129,10 @@ fun clrIlSearchIndex(metadata: ClrMetadata, types: List<ClrIlType>, limit: Int =
  * per type, and never concurrently with another call over the same [metadata].
  *
  * A method whose body cannot be read degrades to an error row instead of taking the listing down.
+ * With a Portable PDB ([pdb]), instructions that start a sequence point are preceded by an
+ * ILDasm-style `.line` directive.
  */
-fun clrIlTypeRows(metadata: ClrMetadata, bytes: CommonByteBuffer, type: ClrIlType): List<ClrIlRow> {
+fun clrIlTypeRows(metadata: ClrMetadata, bytes: CommonByteBuffer, type: ClrIlType, pdb: ClrPortablePdb? = null): List<ClrIlRow> {
     val typeDef = metadata.typeDefs.getOrNull(type.index) ?: return listOf(ilErrorRow("type #${type.index} is not in this assembly"))
     val buffer = bytes.duplicate()
     val rows = ArrayList<ClrIlRow>()
@@ -149,7 +153,7 @@ fun clrIlTypeRows(metadata: ClrMetadata, bytes: CommonByteBuffer, type: ClrIlTyp
     }
     for (method in metadata.methodsByType[typeDef.row].orEmpty()) {
         rows += ilBlankRow()
-        appendMethod(metadata, buffer, method, rows)
+        appendMethod(metadata, buffer, method, rows, pdb)
     }
     return rows
 }
@@ -189,7 +193,7 @@ private fun appendTypeHeader(metadata: ClrMetadata, typeDef: ClrTypeDef, type: C
     }
 }
 
-private fun appendMethod(metadata: ClrMetadata, buffer: CommonByteBuffer, method: ClrMethodDef, rows: MutableList<ClrIlRow>) {
+private fun appendMethod(metadata: ClrMetadata, buffer: CommonByteBuffer, method: ClrMethodDef, rows: MutableList<ClrIlRow>, pdb: ClrPortablePdb?) {
     val body = method.body
     rows += ilRow(body?.range ?: method.recordRange) {
         directive(".method")
@@ -246,7 +250,13 @@ private fun appendMethod(metadata: ClrMetadata, buffer: CommonByteBuffer, method
     }
 
     val listing = ClrIlDecoder.decode(buffer, body.codeRange)
+    val sequencePoints = pdb?.sequencePoints(method.row).orEmpty().associateBy { it.ilOffset }
+    var lastDocument = -1
     for (instruction in listing.instructions) {
+        sequencePoints[instruction.offset]?.let { point ->
+            rows += lineDirectiveRow(point, pdb?.document(point.document)?.name?.takeIf { point.document != lastDocument })
+            lastDocument = point.document
+        }
         rows += instructionRow(metadata, method, instruction)
     }
     listing.truncatedAt?.let { offset ->
@@ -256,6 +266,23 @@ private fun appendMethod(metadata: ClrMetadata, buffer: CommonByteBuffer, method
         rows += exceptionClauseRow(clause)
     }
     rows += ilRow(null) { punctuation("}") }
+}
+
+/**
+ * `.line 19,19 : 9,38 'Sample.cs'`, as ILDasm writes it: lines and columns of the sequence point,
+ * and the document only where it changes. Hidden points cover compiler-generated IL.
+ */
+private fun lineDirectiveRow(point: ClrSequencePoint, document: String?): ClrIlRow = ilRow(null) {
+    indent()
+    if (point.isHidden) {
+        comment("// hidden sequence point (compiler-generated, no source)")
+        return@ilRow
+    }
+    directive(".line")
+    number("${point.startLine},${point.endLine}")
+    punctuation(" : ")
+    number("${point.startColumn},${point.endColumn}")
+    document?.let { comment(" '$it'") }
 }
 
 private fun instructionRow(metadata: ClrMetadata, method: ClrMethodDef, instruction: ClrIlInstruction): ClrIlRow =

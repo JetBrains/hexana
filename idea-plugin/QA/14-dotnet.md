@@ -82,7 +82,18 @@ machine AMD64; **Streams** lists 15 streams (stream 3 = DBI, 11 = module `/tmp/s
 lists `/src/src/sample.c`. `sample-clr-portable.pdb` reads `Portable PDB`: **Documents** lists `/src/clr/Sample.cs`
 (C#, SHA-256), **Tables** has 14 MethodDebugInformation rows. The text `.pdb` opens in the text editor, not Hexana.
 
-### 14.11 Malformed input
+### 14.11 Source lines from PDBs
+**Steps:** Open `sample.exe` (its `sample.pdb` is next to it) and open **Disassembly**, **Debug Context** and **Debug Info**.
+Then open `sample-clr-portable.exe` and `sample-clr-embedded.exe`: **IL Disassembly** (expand `Hexana.Sample.Greeter`),
+**Methods**, **Debug Info**. Finally copy `sample.exe` alone to an empty directory with an unrelated `sample.pdb`
+(for example `sample-clr-portable.pdb` renamed) and open it.
+**Expected:** `sample.exe`: instructions show `/src/src/sample.c` lines; **Debug Context** PDB row is `found`,
+"Loaded: the PDB matches the image (AEBD2BE3-…, age 1)"; **Debug Info** shows 12 line rows. Both managed samples:
+`.line 19,19 : 9,38 '/src/clr/Sample.cs'` before the first instruction of the `Greeter` constructor, whose **Methods → Source** reads
+`Sample.cs:19`; the embedded one's **Debug Info** says "Portable PDB embedded in the image". The copy with the wrong
+PDB: status `does not match`, "Not loaded: the image expects the other kind of PDB"; no **Debug Info** tab.
+
+### 14.12 Malformed input
 **Steps:** Copy `sample-clr.exe`, truncate the copy to 3,400 bytes, and open it.
 **Expected:** The file opens; tabs that need missing data are empty or absent, **Top** shows `.text` with only the
 bytes present. No exception in `idea.log`.

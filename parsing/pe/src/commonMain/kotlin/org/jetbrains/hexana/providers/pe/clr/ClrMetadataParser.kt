@@ -362,7 +362,56 @@ object ClrMetadataParser {
                     recordRange = t.rowRange(T.DOCUMENT, row),
                 )
             }
-            return ClrPortablePdb(header, documents, t.rowCount(T.METHOD_DEBUG_INFORMATION))
+            return ClrPortablePdb(header, documents, t.rowCount(T.METHOD_DEBUG_INFORMATION)) { row -> decodeSequencePoints(t, row) }
+        }
+
+        /**
+         * MethodDebugInformation.SequencePoints: a header (local signature, plus the initial document
+         * when the row names none), then records — document changes (`δIL = 0` after the first record)
+         * and sequence points, whose lines and columns are deltas from the previous non-hidden point.
+         */
+        private fun decodeSequencePoints(t: Tables, row: Int): List<ClrSequencePoint> {
+            val range = heaps.blob(t.cell(T.METHOD_DEBUG_INFORMATION, row, 1)) ?: return emptyList()
+            if (range.size == 0) return emptyList()
+            val end = range.offset + range.size
+            var position = range.offset
+            fun unsigned(): Int? = readCompressed(bytes, position, end)?.let { (value, size) -> position += size; value }
+            fun signed(): Int? = readCompressedSigned(bytes, position, end)?.let { (value, size) -> position += size; value }
+
+            unsigned() ?: return emptyList() // local signature
+            var document = t.cell(T.METHOD_DEBUG_INFORMATION, row, 0)
+            if (document == 0) document = unsigned() ?: return emptyList()
+            val points = mutableListOf<ClrSequencePoint>()
+            var ilOffset = 0
+            var startLine = 0
+            var startColumn = 0
+            var first = true
+            var firstVisible = true
+            while (position < end && points.size < MAX_SEQUENCE_POINTS) {
+                val deltaIl = unsigned() ?: break
+                if (deltaIl == 0 && !first) {
+                    document = unsigned() ?: break
+                    continue
+                }
+                ilOffset = if (first) deltaIl else ilOffset + deltaIl
+                first = false
+                val deltaLines = unsigned() ?: break
+                val deltaColumns = (if (deltaLines == 0) unsigned() else signed()) ?: break
+                if (deltaLines == 0 && deltaColumns == 0) {
+                    points.add(ClrSequencePoint(ilOffset, document, 0, 0, 0, 0))
+                    continue
+                }
+                if (firstVisible) {
+                    startLine = unsigned() ?: break
+                    startColumn = unsigned() ?: break
+                    firstVisible = false
+                } else {
+                    startLine += signed() ?: break
+                    startColumn += signed() ?: break
+                }
+                points.add(ClrSequencePoint(ilOffset, document, startLine, startColumn, startLine + deltaLines, startColumn + deltaColumns))
+            }
+            return points
         }
 
         /**
@@ -1145,6 +1194,23 @@ object ClrMetadataParser {
 }
 
 /** Reads an ECMA-335 II.23.2 compressed unsigned integer; returns the value and its encoded size. */
+/**
+ * II.23.2 compressed signed integer: the unsigned encoding of the value rotated left by one bit,
+ * so the sign sits in bit 0 and is extended from 6, 13 or 28 bits by encoded size.
+ */
+private fun readCompressedSigned(bytes: CommonByteBuffer, offset: Int, end: Int): Pair<Int, Int>? {
+    val (raw, size) = readCompressed(bytes, offset, end) ?: return null
+    var value = raw ushr 1
+    if (raw and 1 != 0) {
+        value = value or when (size) {
+            1 -> 0xFFFFFFC0.toInt()
+            2 -> 0xFFFFE000.toInt()
+            else -> 0xF0000000.toInt()
+        }
+    }
+    return value to size
+}
+
 private fun readCompressed(bytes: CommonByteBuffer, offset: Int, end: Int): Pair<Int, Int>? {
     if (offset >= end) return null
     val first = bytes.byteOrNull(offset) ?: return null
@@ -1176,6 +1242,7 @@ private fun shortTypeName(fullName: String): String {
 
 private const val CLI_HEADER_SIZE = 72
 private const val PDB_STREAM_FIXED_SIZE = 32
+private const val MAX_SEQUENCE_POINTS = 1_000_000
 private const val MAX_PDB_DOCUMENTS = 1_000_000
 private const val MAX_DOCUMENT_NAME_PARTS = 4096
 private const val MAX_DOCUMENT_NAME_LENGTH = 32768

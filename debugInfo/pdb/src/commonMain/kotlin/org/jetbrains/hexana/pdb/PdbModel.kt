@@ -26,6 +26,18 @@ class PdbFile internal constructor(
      * debuggers match, and they are equal in a freshly linked PDB).
      */
     val identity: PdbIdentity? get() = info?.guid?.let { PdbIdentity(it, dbi?.age ?: info.age) }
+
+    /** The `/names` string table that C13 file checksums name their files through. */
+    val stringTable: PdbStringTable? by lazy { info?.namedStreams?.get("/names")?.let(::stream)?.takeIf { it.isFullyReadable() }?.let(::readStringTable) }
+
+    /** C13 line blocks of every module, in module order; decoded on first use. */
+    val lineBlocks: List<PdbLineBlock> by lazy { dbi?.modules.orEmpty().flatMap { readModuleLines(this, it, stringTable) } }
+
+    /** Line blocks of one module. */
+    fun lineBlocks(module: PdbModule): List<PdbLineBlock> = readModuleLines(this, module, stringTable)
+
+    /** Source files with checksums, as the module's C13 checksum subsection lists them. */
+    fun sourceFileChecksums(module: PdbModule): List<PdbSourceFileChecksum> = readModuleChecksums(this, module, stringTable)
 }
 
 data class PdbIdentity(val guid: String, val age: UInt)

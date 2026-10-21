@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 
 /**
  * Checks the lld-link fixture against `sample.pdb.llvm-pdbutil.txt`
- * (`llvm-pdbutil dump -summary -streams -modules -files -section-contribs -types -ids`).
+ * (`llvm-pdbutil dump -summary -streams -modules -files -section-contribs -types -ids -l -xme -string-table`).
  */
 class PdbFixtureTest {
     private val bytes = Files.readAllBytes(fixture("sample.pdb"))
@@ -113,6 +113,8 @@ class PdbFixtureTest {
             pdb.streamRoles
             pdb.identity
             pdb.streams.forEach { it.blockRanges() }
+            pdb.lineBlocks
+            pdb.dbi?.modules?.forEach { pdb.sourceFileChecksums(it) }
         }
     }
 
@@ -122,5 +124,52 @@ class PdbFixtureTest {
         var dir = Path.of("").toAbsolutePath()
         while (!Files.exists(dir.resolve("settings.gradle.kts"))) dir = dir.parent
         return dir
+    }
+}
+
+/** C13 lines against the `Lines` section of `sample.pdb.llvm-pdbutil.txt`. */
+class PdbLinesFixtureTest {
+    private val dir = Path.of(System.getProperty("user.dir")).resolve("../../parsing/native-fixtures/test-data/pe").normalize()
+    private val pdb = assertNotNull(PdbParser.parse(Files.readAllBytes(dir.resolve("sample.pdb")).toCommonByteBuffer()))
+    private val dump = Files.readAllLines(dir.resolve("sample.pdb.llvm-pdbutil.txt"))
+
+    /** `  0001:00000020-00000092, line/addr entries = 6` followed by `    20 00000020 !   21 00000028 ! …`. */
+    private val expectedBlocks: List<Triple<String, Int, List<Pair<Int, UInt>>>> = run {
+        val lines = dump.dropWhile { !it.contains("Lines") }.takeWhile { !it.contains("Cross Module Exports") }
+        val header = Regex("""^\s+([0-9A-F]{4}):([0-9A-F]{8})-([0-9A-F]{8}), line/addr entries = (\d+)""")
+        val entry = Regex("""(\d+) ([0-9A-F]{8}) !""")
+        lines.mapIndexedNotNull { index, line ->
+            val match = header.find(line) ?: return@mapIndexedNotNull null
+            val (section, start) = match.destructured
+            val entries = entry.findAll(lines[index + 1]).map { it.groupValues[1].toInt() to it.groupValues[2].toUInt(16) }.toList()
+            Triple("$section:$start", section.toInt(16), entries)
+        }
+    }
+
+    @Test
+    fun `string table and checksums`() {
+        val module = pdb.dbi!!.modules.first()
+        assertEquals("/src/src/sample.c", pdb.stringTable?.string(2u))
+        val checksum = pdb.sourceFileChecksums(module).single()
+        assertEquals("/src/src/sample.c", checksum.file)
+        assertEquals(PdbChecksumKind.Md5, checksum.kind)
+        assertEquals("4719A2F6022504F833D7D57F95641C28", checksum.checksum)
+    }
+
+    @Test
+    fun `line blocks match llvm-pdbutil`() {
+        assertEquals(4, expectedBlocks.size)
+        val blocks = pdb.lineBlocks
+        assertEquals(expectedBlocks.size, blocks.size)
+        for ((block, expected) in blocks.zip(expectedBlocks)) {
+            val (label, section, entries) = expected
+            assertEquals(label, "${block.section.toString(16).padStart(4, '0')}:${block.offset.toString(16).uppercase().padStart(8, '0')}")
+            assertEquals(section, block.section)
+            assertEquals("/src/src/sample.c", block.file)
+            assertEquals(entries, block.rows.map { it.line to it.offset })
+            // llvm-pdbutil prints `!` after a row whose is-statement bit is clear, which clang leaves clear.
+            assertTrue(block.rows.none { it.isStatement } && block.rows.all { it.column == 0 && it.moduleIndex == 0 }, block.rows.toString())
+        }
+        assertEquals(0x19u, blocks.first().codeSize)
     }
 }

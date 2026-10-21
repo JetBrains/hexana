@@ -1,8 +1,9 @@
-package org.jetbrains.hexana.pcap.crypto
+package org.jetbrains.hexana.codec
 
 /**
  * Streaming raw-DEFLATE decompressor (RFC 1951), used for TLS-level record
- * compression (RFC 3749). Pure Kotlin on every target: the JVM has
+ * compression (RFC 3749) and for Portable PDBs embedded in .NET assemblies.
+ * Pure Kotlin on every target: the JVM has
  * `java.util.zip.Inflater`, but the browser has no synchronous inflate at all
  * — `DecompressionStream` is async — and a TLS record is small enough that one
  * shared implementation costs nothing and is the same code the tests cover.
@@ -22,7 +23,7 @@ package org.jetbrains.hexana.pcap.crypto
  * default wrapper, so real captures put `78 9c` in front of the first record's
  * fragment and nothing in front of the rest.
  */
-internal class Inflate(private val maxOutput: Int = DEFAULT_MAX_OUTPUT) {
+class Inflate(private val maxOutput: Int = DEFAULT_MAX_OUTPUT) {
 
     private var input = ByteArray(0)
     /** Bit offset into [input]; the low three bits are the offset within a byte. */
@@ -30,6 +31,9 @@ internal class Inflate(private val maxOutput: Int = DEFAULT_MAX_OUTPUT) {
     private var output = ByteArray(INITIAL_OUTPUT)
     private var outLen = 0
     private var finished = false
+
+    /** True once the final DEFLATE block has been decoded. */
+    val isFinished: Boolean get() = finished
 
     /** Set once the stream is corrupt, after which every [push] returns null. */
     private var failed = false
@@ -233,16 +237,16 @@ internal class Inflate(private val maxOutput: Int = DEFAULT_MAX_OUTPUT) {
     /** The stream does not decode; nothing later in it can be trusted either. */
     private class Corrupt : Exception(null, null)
 
-    private companion object {
-        const val INITIAL_OUTPUT = 8 * 1024
-        const val ZLIB_HEADER_SIZE = 2
-        const val DEFLATE_COMPRESSION_METHOD = 8
-        const val MAX_CODE_BITS = 15
-        const val MAX_LITERAL_CODES = 286
-        const val MAX_DISTANCE_CODES = 30
+    companion object {
+        private const val INITIAL_OUTPUT = 8 * 1024
+        private const val ZLIB_HEADER_SIZE = 2
+        private const val DEFLATE_COMPRESSION_METHOD = 8
+        private const val MAX_CODE_BITS = 15
+        private const val MAX_LITERAL_CODES = 286
+        private const val MAX_DISTANCE_CODES = 30
 
         /**
-         * 16 MiB of plaintext per direction. TLS compression is decompressed
+         * Default output ceiling: 16 MiB of plaintext per direction. TLS compression is decompressed
          * eagerly — a DEFLATE stream cannot be entered halfway — so unlike the
          * AEAD path there is no way to defer the work to the rows a user
          * actually looks at. The ceiling keeps a compressed capture from
@@ -250,21 +254,21 @@ internal class Inflate(private val maxOutput: Int = DEFAULT_MAX_OUTPUT) {
          */
         const val DEFAULT_MAX_OUTPUT = 16 * 1024 * 1024
 
-        val CODE_LENGTH_ORDER = intArrayOf(16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15)
+        private val CODE_LENGTH_ORDER = intArrayOf(16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15)
 
-        val LENGTH_BASE = intArrayOf(
+        private val LENGTH_BASE = intArrayOf(
             3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31,
             35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258,
         )
-        val LENGTH_EXTRA = intArrayOf(
+        private val LENGTH_EXTRA = intArrayOf(
             0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2,
             3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0,
         )
-        val DISTANCE_BASE = intArrayOf(
+        private val DISTANCE_BASE = intArrayOf(
             1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193,
             257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577,
         )
-        val DISTANCE_EXTRA = intArrayOf(
+        private val DISTANCE_EXTRA = intArrayOf(
             0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6,
             7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13,
         )
@@ -275,7 +279,7 @@ internal class Inflate(private val maxOutput: Int = DEFAULT_MAX_OUTPUT) {
          * only collide with that by starting with a stored block whose length
          * field then has to match, which no real encoder emits.
          */
-        fun looksLikeZlibHeader(input: ByteArray): Boolean {
+        private fun looksLikeZlibHeader(input: ByteArray): Boolean {
             val cmf = input[0].toInt() and 0xFF
             val flg = input[1].toInt() and 0xFF
             if (cmf and 0x0F != DEFLATE_COMPRESSION_METHOD) return false
@@ -284,7 +288,7 @@ internal class Inflate(private val maxOutput: Int = DEFAULT_MAX_OUTPUT) {
         }
 
         /** The fixed literal/length code of RFC 1951 §3.2.6. */
-        fun fixedLiteralTable(): Huffman {
+        private fun fixedLiteralTable(): Huffman {
             val lengths = IntArray(288)
             for (i in 0..143) lengths[i] = 8
             for (i in 144..255) lengths[i] = 9
@@ -294,6 +298,16 @@ internal class Inflate(private val maxOutput: Int = DEFAULT_MAX_OUTPUT) {
         }
 
         /** The fixed distance code: thirty-two 5-bit codes. */
-        fun fixedDistanceTable(): Huffman = Huffman(IntArray(32) { 5 }, 32)
+        private fun fixedDistanceTable(): Huffman = Huffman(IntArray(32) { 5 }, 32)
     }
+}
+
+/**
+ * Inflates one complete raw-DEFLATE (or zlib-wrapped) stream, or returns null when it is corrupt,
+ * truncated or would exceed [maxOutput] bytes.
+ */
+fun inflateComplete(data: ByteArray, maxOutput: Int = Inflate.DEFAULT_MAX_OUTPUT): ByteArray? {
+    val inflate = Inflate(maxOutput)
+    val output = inflate.push(data) ?: return null
+    return output.takeIf { inflate.isFinished }
 }

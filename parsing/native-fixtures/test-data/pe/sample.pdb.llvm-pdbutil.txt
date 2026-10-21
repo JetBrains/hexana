@@ -38,6 +38,12 @@
   Stream 14 (  48 bytes): [IPI Hash]
 
 
+                        String Table                        
+============================================================
+  ID | String
+  2 | '/src/src/sample.c'
+
+
                           Modules                           
 ============================================================
   Mod 0000 | `/tmp/sample-5bae4d.o`: 
@@ -58,6 +64,29 @@ pdb file ni: 1 `/out/pe/sample.pdb`, src file ni: 0 ``
 ============================================================
 Mod 0000 | `/tmp/sample-5bae4d.o`: 
 - (MD5: 4719A2F6022504F833D7D57F95641C28) /src/src/sample.c
+Mod 0001 | `* Linker *`: 
+
+                           Lines                            
+============================================================
+Mod 0000 | `/tmp/sample-5bae4d.o`: 
+/src/src/sample.c (MD5: 4719A2F6022504F833D7D57F95641C28)
+  0001:00000000-00000019, line/addr entries = 2
+    10 00000000 !   11 00000008 ! 
+  
+  0001:00000020-00000092, line/addr entries = 6
+    20 00000020 !   21 00000028 !   23 0000004F !   25 00000067 !   27 0000007A !   29 00000089 ! 
+  
+  0001:000000A0-000000B0, line/addr entries = 2
+    14 000000A0 !   15 000000A5 ! 
+  
+  0001:000000B0-000000C4, line/addr entries = 2
+    32 000000B0 !   33 000000B4 ! 
+  
+Mod 0001 | `* Linker *`: 
+
+                    Cross Module Exports                    
+============================================================
+Mod 0000 | `/tmp/sample-5bae4d.o`: 
 Mod 0001 | `* Linker *`: 
 
                      Types (TPI Stream)                     

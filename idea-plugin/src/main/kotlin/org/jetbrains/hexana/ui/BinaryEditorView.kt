@@ -73,6 +73,7 @@ import org.jetbrains.hexana.shared.CLR_IL_TAB_NAME
 import org.jetbrains.hexana.shared.DEX_SMALI_TAB_NAME
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
 import org.jetbrains.hexana.shared.NativeDebugTabData
+import org.jetbrains.hexana.shared.PdbCompanionLoader
 import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.shared.TableTabsContext
 import org.jetbrains.hexana.shared.TabPriority
@@ -410,6 +411,17 @@ internal fun BinaryEditorView(
                 }
                 pcapHasTls = hasTls
                 if (restored) sslKeyLogGeneration++
+            }
+            // Same for a PE image's PDB: attached before the tabs are built, so the disassembly,
+            // IL view, Methods and Debug Info tabs show its source lines on first render.
+            (binaryProvider as? PeBinaryProvider)?.let { pe ->
+                withContext(Dispatchers.IO) {
+                    try {
+                        PdbCompanionLoader.load(pe, JVM_FILE_SYSTEM)
+                    } catch (e: Exception) {
+                        HexanaLog.LOG.warn("Failed to load the PDB of ${pe.sourcePath}", e)
+                    }
+                }
             }
             state.setPanelsResolved(false)
             state.clearResolvedTableTabs()

@@ -6,10 +6,15 @@ import org.jetbrains.hexana.parsing.common.NativeByteRange
 import org.jetbrains.hexana.providers.ElfBinaryProvider
 import org.jetbrains.hexana.providers.MachOBinaryProvider
 import org.jetbrains.hexana.providers.NativeBinaryProvider
+import org.jetbrains.hexana.providers.PdbMatch
 import org.jetbrains.hexana.providers.PeBinaryProvider
+import org.jetbrains.hexana.providers.PeDebugSymbols
+import org.jetbrains.hexana.providers.PeDebugSymbolsRejection
+import org.jetbrains.hexana.providers.PePdbReference
 import org.jetbrains.hexana.providers.elf.ElfSectionHeader
 import org.jetbrains.hexana.providers.macho.MachOSection
 import org.jetbrains.hexana.providers.pe.PeDebugEntry
+import org.jetbrains.hexana.providers.pe.PeDebugType
 
 data class NativeDebugContext(
     val binaryPath: String?,
@@ -48,6 +53,7 @@ enum class NativeDebugCompanionStatus(val label: String) {
     Candidate("candidate"),
     Missing("missing"),
     Unverified("unverified"),
+    Mismatch("does not match"),
 }
 
 
@@ -65,6 +71,9 @@ object NativeDebugCompanionScanner {
             machOUuidRange = machO?.uuid?.uuidRange,
             peDebugEntries = pe?.debugEntries.orEmpty(),
             fs = fs,
+            peDebugSymbols = pe?.debugSymbols,
+            peRejection = pe?.debugSymbolsRejection,
+            pePdbReference = pe?.pdbReference,
         )
     }
 
@@ -77,10 +86,14 @@ object NativeDebugCompanionScanner {
         machOUuidRange: NativeByteRange? = null,
         peDebugEntries: List<PeDebugEntry> = emptyList(),
         fs: FileSystem? = null,
+        peDebugSymbols: PeDebugSymbols? = null,
+        peRejection: PeDebugSymbolsRejection? = null,
+        pePdbReference: PePdbReference? = null,
     ): NativeDebugContext {
         val embeddedElfDebug = sections.filter { it.isDebugSection() }
         val embeddedMachODebug = machOSections.filter { it.isMachOdebugSection() }
-        val embeddedDebugInfoPresent = embeddedElfDebug.isNotEmpty() || embeddedMachODebug.isNotEmpty()
+        val embeddedPortablePdb = peDebugSymbols is PeDebugSymbols.Embedded
+        val embeddedDebugInfoPresent = embeddedElfDebug.isNotEmpty() || embeddedMachODebug.isNotEmpty() || embeddedPortablePdb
         val buildId = parseElfBuildId(bytes, sections.firstOrNull { it.name == ".note.gnu.build-id" })
         val debugLink = parseGnuDebugLink(bytes, sections.firstOrNull { it.name == ".gnu_debuglink" })
         val codeView = peDebugEntries.firstNotNullOfOrNull { it.codeView }
@@ -90,7 +103,18 @@ object NativeDebugCompanionScanner {
         }
 
         val companions = buildList {
-            if (embeddedDebugInfoPresent) {
+            if (embeddedPortablePdb) {
+                add(
+                    NativeDebugCompanion(
+                        kind = NativeDebugCompanionKind.EmbeddedDebugInfo,
+                        status = NativeDebugCompanionStatus.Found,
+                        name = "Embedded Portable PDB",
+                        location = null,
+                        description = "A Portable PDB is embedded in the debug directory; it supplies the source lines of managed methods.",
+                        range = peDebugEntries.firstOrNull { it.type == PeDebugType.EMBEDDED_PORTABLE_PDB }?.dataRange,
+                    )
+                )
+            } else if (embeddedDebugInfoPresent) {
                 val names = (embeddedElfDebug.map { it.name } + embeddedMachODebug.map { it.name }).joinToString()
                 val range = embeddedElfDebug.firstOrNull()?.headerRange ?: embeddedMachODebug.firstOrNull()?.headerRange
                 add(
@@ -141,18 +165,48 @@ object NativeDebugCompanionScanner {
                 )
             }
 
-            if (pePdbPath != null || peCodeViewId != null) {
+            if ((pePdbPath != null || peCodeViewId != null) && !embeddedPortablePdb) {
+                val identity = pePdbReference?.label ?: peCodeViewId
+                val kindLabel = if (pePdbReference is PePdbReference.Portable) "Portable PDB" else "PDB"
+                val attached = peDebugSymbols as? PeDebugSymbols.File
+                val status: NativeDebugCompanionStatus
+                val location: String?
+                val description: String
+                when {
+                    attached != null -> {
+                        status = NativeDebugCompanionStatus.Found
+                        location = attached.path
+                        description = "Loaded: the $kindLabel ${PdbMatch.Matches.description}${identity?.let { " ($it)" }.orEmpty()}."
+                    }
+                    peRejection != null -> {
+                        status = NativeDebugCompanionStatus.Mismatch
+                        location = peRejection.path
+                        description = "Not loaded: ${peRejection.reason.description}${identity?.let { ". The image expects $it" }.orEmpty()}."
+                    }
+                    else -> {
+                        location = pePdbPath?.let { resolvePdbPath(it, binaryPath, fs) }
+                        val searched = fs != null && binaryPath != null
+                        status = if (location != null || !searched) NativeDebugCompanionStatus.Unverified else NativeDebugCompanionStatus.Missing
+                        description = buildString {
+                            append("PE CodeView debug identity is embedded")
+                            identity?.let { append(": $it") }
+                            append(
+                                when {
+                                    location != null -> ". The file has not been loaded."
+                                    searched -> ". No $kindLabel was found next to the image."
+                                    else -> ". Nearby files were not searched."
+                                },
+                            )
+                        }
+                    }
+                }
                 add(
                     NativeDebugCompanion(
                         kind = NativeDebugCompanionKind.PdbFile,
-                        status = NativeDebugCompanionStatus.Unverified,
+                        status = status,
                         name = pePdbPath ?: "CodeView debug record",
-                        location = pePdbPath?.let { resolvePdbPath(it, binaryPath, fs) },
-                        description = buildString {
-                            append("PE CodeView debug identity is embedded")
-                            peCodeViewId?.let { append(": $it") }
-                            append(". Matching PDB contents are not verified yet.")
-                        },
+                        location = location,
+                        description = description,
                         range = peDebugEntries.firstOrNull { it.codeView != null }?.dataRange,
                     )
                 )
@@ -178,7 +232,9 @@ object NativeDebugCompanionScanner {
             }
 
             if (fs != null && binaryPath != null) {
-                addAll(findNearbyCompanions(binaryPath, debugLink, fs))
+                // The CodeView row above already reports the image's own PDB, found or not.
+                val codeViewRow = pePdbPath != null || peCodeViewId != null
+                addAll(findNearbyCompanions(binaryPath, debugLink, fs).filterNot { codeViewRow && it.kind == NativeDebugCompanionKind.PdbFile })
             } else if (binaryPath == null) {
                 add(
                     NativeDebugCompanion(

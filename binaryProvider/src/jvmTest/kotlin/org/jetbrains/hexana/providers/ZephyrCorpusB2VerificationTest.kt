@@ -52,8 +52,8 @@ class ZephyrCorpusB2VerificationTest {
         return target.toString()
     }
 
-    /** Load an ELF from disk and return its NativeDwarfSourceLocationProvider. Fails immediately if the file is absent. */
-    private fun providerFor(path: String): NativeDwarfSourceLocationProvider {
+    /** Load an ELF from disk and return its native source-location provider. Fails immediately if the file is absent. */
+    private fun providerFor(path: String): NativeSourceLocationProvider {
         val file = File(path)
         assertTrue(file.exists(), "ELF absent: $path")
         val bytes = file.readBytes().toCommonByteBuffer()
@@ -68,7 +68,7 @@ class ZephyrCorpusB2VerificationTest {
     /** Asserts that addr resolves to a source location whose filename ends with expectedFileBasename
      *  and whose line matches exactly. Reports path and addr in the failure message. */
     private fun assertResolvesTo(
-        dwarfProvider: NativeDwarfSourceLocationProvider,
+        dwarfProvider: NativeSourceLocationProvider,
         elfPath: String,
         addr: ULong,
         expectedFileBasename: String,

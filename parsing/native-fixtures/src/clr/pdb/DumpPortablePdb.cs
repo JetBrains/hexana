@@ -1,16 +1,22 @@
 // Dumps what Hexana's portable PDB tests check, through the runtime's own System.Reflection.Metadata reader.
+// The argument is a standalone .pdb, or an assembly whose debug directory embeds its Portable PDB.
 using System;
 using System.IO;
 using System.Linq;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
+using System.Reflection.PortableExecutable;
 
 static class DumpPortablePdb
 {
     static void Main(string[] args)
     {
         using var stream = File.OpenRead(args[0]);
-        using var provider = MetadataReaderProvider.FromPortablePdbStream(stream);
+        using var peReader = args[0].EndsWith(".pdb") ? null : new PEReader(stream);
+        using var provider = peReader == null
+            ? MetadataReaderProvider.FromPortablePdbStream(stream)
+            : peReader.ReadEmbeddedPortablePdbDebugDirectoryData(
+                peReader.ReadDebugDirectory().Single(entry => entry.Type == DebugDirectoryEntryType.EmbeddedPortablePdb));
         var reader = provider.GetMetadataReader();
         var id = new BlobContentId(reader.DebugMetadataHeader.Id);
         Console.WriteLine($"metadata version: {reader.MetadataVersion}");
@@ -34,6 +40,14 @@ static class DumpPortablePdb
             var info = reader.GetMethodDebugInformation(handle);
             var points = info.SequencePointsBlob.IsNil ? 0 : info.GetSequencePoints().Count();
             Console.WriteLine($"method 0x{MetadataTokens.GetToken(handle.ToDefinitionHandle()):X8}: document={(info.Document.IsNil ? 0 : MetadataTokens.GetRowNumber(info.Document))} sequence points={points}");
+            if (info.SequencePointsBlob.IsNil) continue;
+            foreach (var point in info.GetSequencePoints())
+            {
+                var document = MetadataTokens.GetRowNumber(point.Document);
+                Console.WriteLine(point.IsHidden
+                    ? $"  IL_{point.Offset:X4} document={document} hidden"
+                    : $"  IL_{point.Offset:X4} document={document} ({point.StartLine},{point.StartColumn})-({point.EndLine},{point.EndColumn})");
+            }
         }
     }
 }

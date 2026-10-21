@@ -7,7 +7,10 @@ import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.compose.web.renderComposable
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
+import org.jetbrains.hexana.shared.PdbCompanionLoader
 import org.jetbrains.hexana.shared.diff.BinaryDiffInput
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.await
 
 fun main() {
     renderComposable(rootElementId = "root") {
@@ -197,6 +200,34 @@ fun BinaryEditorApp() {
             // file on disk.
             val provider = remember(bytes, filePath, fileName) {
                 createBinaryProvider(buffer, sourcePath = filePath, fileName = fileName)
+            }
+
+            // A PE image's PDB lives next to it. Load it before any tab is built, so the IL view,
+            // Methods and Debug Info show its source lines on first paint instead of rebuilding.
+            val pdbCandidates = remember(provider) {
+                (provider as? PeBinaryProvider)?.let { PdbCompanionLoader.candidatePaths(it) }.orEmpty()
+            }
+            var debugSymbolsPending by remember(provider) { mutableStateOf(pdbCandidates.isNotEmpty()) }
+            LaunchedEffect(provider) {
+                val pe = provider as? PeBinaryProvider ?: return@LaunchedEffect
+                for (path in pdbCandidates) {
+                    // A missing file is answered with a failure at once; only a slow disk waits.
+                    val pdbBytes = try {
+                        host.readBinaryFile(path).await()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Throwable) {
+                        continue
+                    }
+                    if (PdbCompanionLoader.attach(pe, path, pdbBytes) == PdbMatch.Matches) break
+                }
+                debugSymbolsPending = false
+            }
+            if (debugSymbolsPending) {
+                Div({ classes("loading") }) {
+                    Text("Loading debug symbols…")
+                }
+                return@CompositionLocalProvider
             }
 
             val extraTabs = remember(bytes, provider) {

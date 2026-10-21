@@ -29,6 +29,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.jetbrains.hexana.providers.pe.clr.ClrPortablePdb
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaLog
 import org.jetbrains.hexana.document.format.BinaryChunk
@@ -74,6 +75,8 @@ private val clrIlRenderDispatcher: CoroutineDispatcher = Dispatchers.IO.limitedP
 private class ClrIlModel(
     val metadata: ClrMetadata,
     val bytes: CommonByteBuffer,
+    /** Sequence points for `.line` directives, when the assembly has a Portable PDB. */
+    val pdb: ClrPortablePdb?,
     val types: List<ClrIlType>,
     val tree: ChunkTree,
     val searchIndex: List<ClrIlSearchEntry>,
@@ -130,6 +133,7 @@ private fun buildClrIlModel(provider: PeBinaryProvider): ClrIlModel {
     return ClrIlModel(
         metadata = metadata,
         bytes = provider.bytes,
+        pdb = provider.portablePdb,
         types = types,
         tree = clrIlChunkTree(metadata, types),
         searchIndex = clrIlSearchIndex(metadata, types),
@@ -243,7 +247,7 @@ private fun ClrTypePlaceholderRow(
         }
         rowCache[chunk.id] = withContext(clrIlRenderDispatcher) {
             try {
-                clrIlTypeRows(model.metadata, model.bytes, type).also { rows ->
+                clrIlTypeRows(model.metadata, model.bytes, type, model.pdb).also { rows ->
                     synchronized(model.rowSizes) {
                         for (row in rows) {
                             val offset = row.fileOffset ?: continue

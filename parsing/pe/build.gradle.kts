@@ -19,6 +19,7 @@ kotlin {
         commonMain {
             dependencies {
                 api(project(":parsing:common"))
+                implementation(project(":parsing:codec"))
             }
         }
 

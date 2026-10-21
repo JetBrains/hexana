@@ -33,6 +33,7 @@ Expected outputs include:
 - `test-data/pe/sample_cpp.coff`
 - `test-data/pe/sample-clr.exe` (see below; not built by the Docker image)
 - `test-data/pe/sample-clr-portable.exe` + `sample-clr-portable.pdb` (see below; not built by the Docker image)
+- `test-data/pe/sample-clr-embedded.exe` (see below; not built by the Docker image)
 - `test-data/manifest.txt`
 
 When LLVM inspection tools are available, the build also writes `*.llvm-readobj.txt` reference dumps next to the generated binaries.
@@ -76,7 +77,7 @@ is checked against:
 
 ```bash
 cd parsing/native-fixtures/test-data/pe
-llvm-pdbutil dump -summary -streams -modules -files -section-contribs -types -ids sample.pdb > sample.pdb.llvm-pdbutil.txt
+llvm-pdbutil dump -summary -streams -modules -files -section-contribs -types -ids -l -xme -string-table sample.pdb > sample.pdb.llvm-pdbutil.txt
 ```
 
 ### Portable PDB fixture
@@ -84,7 +85,10 @@ llvm-pdbutil dump -summary -streams -modules -files -section-contribs -types -id
 `test-data/pe/sample-clr-portable.exe` and `sample-clr-portable.pdb` are a debug build of the same
 `src/clr/Sample.cs` with a Portable PDB (the assembly's CodeView record names the PDB's id).
 `sample-clr-portable.pdb.dump.txt` is what the runtime's own `System.Reflection.Metadata` reader reports
-for it (`src/clr/pdb/DumpPortablePdb.cs`), and is what `ClrPortablePdbTest` checks:
+for it (`src/clr/pdb/DumpPortablePdb.cs`: PDB id, tables, documents and every sequence point), and is what
+`ClrPortablePdbTest` checks. `sample-clr-embedded.exe` is the same build with `-debug:embedded` (the PDB
+deflated into debug directory entry 17); its dump comes from the same tool given the `.exe`. Deterministic
+builds give both variants the same PDB id.
 
 ```bash
 cd parsing/native-fixtures/src/clr
@@ -94,7 +98,12 @@ csc -nologo -deterministic -optimize- -debug:portable -pathmap:"$PWD"=/src/clr,"
   -resource:hello.txt,Hexana.Sample.hello.txt \
   -resource:/tmp/strings.resources,Hexana.Sample.Strings.resources \
   -out:"$T/sample-clr-portable.exe" -pdb:"$T/sample-clr-portable.pdb" Sample.cs
+csc -nologo -deterministic -optimize- -debug:embedded -pathmap:"$PWD"=/src/clr,"$T"=/out/pe \
+  -resource:hello.txt,Hexana.Sample.hello.txt \
+  -resource:/tmp/strings.resources,Hexana.Sample.Strings.resources \
+  -out:"$T/sample-clr-embedded.exe" Sample.cs
 dotnet run --project pdb -- "$T/sample-clr-portable.pdb" > "$T/sample-clr-portable.pdb.dump.txt"
+dotnet run --project pdb -- "$T/sample-clr-embedded.exe" > "$T/sample-clr-embedded.exe.dump.txt"
 ```
 
 ### .resources fixture

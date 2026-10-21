@@ -117,7 +117,7 @@ fun computeExtraTabs(
     // isManaged reads only the data directory; the metadata itself is decoded here, once, and
     // shared with the provider's table tabs.
     if (provider is PeBinaryProvider && provider.isManaged) {
-        return provider.clrMetadata?.let { clrIlExtraTabs(it, provider.bytes) }.orEmpty()
+        return provider.clrMetadata?.let { clrIlExtraTabs(it, provider.bytes, provider.portablePdb) }.orEmpty()
     }
     return dwarfExtraTabs(provider ?: return emptyList())
 }

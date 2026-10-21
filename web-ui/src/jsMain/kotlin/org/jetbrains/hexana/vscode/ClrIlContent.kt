@@ -7,6 +7,7 @@ import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Input
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
+import org.jetbrains.hexana.providers.pe.clr.ClrPortablePdb
 import org.jetbrains.hexana.document.format.RenderTokenKind
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.pe.clr.ClrMetadata
@@ -22,8 +23,8 @@ import org.jetbrains.hexana.shared.clrIlTypes
  * operand resolution and exception clauses all come from `plugins-shared`'s `ClrIlText.kt`;
  * this file only draws them, the same way [dexSmaliExtraTabs] draws smali.
  */
-internal fun clrIlExtraTabs(metadata: ClrMetadata, bytes: CommonByteBuffer): List<PanelTab> = listOf(
-    PanelTab(CLR_IL_TAB_NAME, padding = false) { selection -> ClrIlTab(metadata, bytes, selection) },
+internal fun clrIlExtraTabs(metadata: ClrMetadata, bytes: CommonByteBuffer, pdb: ClrPortablePdb? = null): List<PanelTab> = listOf(
+    PanelTab(CLR_IL_TAB_NAME, padding = false) { selection -> ClrIlTab(metadata, bytes, pdb, selection) },
 )
 
 /** Height of one IL line, in px. [VirtualizedList] needs it fixed and exact. */
@@ -81,7 +82,7 @@ internal class ClrIlItemIndex(
 }
 
 @Composable
-private fun ClrIlTab(metadata: ClrMetadata, bytes: CommonByteBuffer, selection: HexSelectionState) {
+private fun ClrIlTab(metadata: ClrMetadata, bytes: CommonByteBuffer, pdb: ClrPortablePdb?, selection: HexSelectionState) {
     val types = remember(metadata) { clrIlTypes(metadata) }
 
     var searchQuery by remember(metadata) { mutableStateOf("") }
@@ -106,13 +107,13 @@ private fun ClrIlTab(metadata: ClrMetadata, bytes: CommonByteBuffer, selection: 
 
     // Collapsed initially, so opening the tab decodes no IL — same as the IntelliJ panel.
     var expanded by remember(metadata) { mutableStateOf(emptySet<Int>()) }
-    val rowCache = remember(metadata) { HashMap<Int, List<ClrIlRow>>() }
+    val rowCache = remember(metadata, pdb) { HashMap<Int, List<ClrIlRow>>() }
 
     val itemIndex = remember(visibleTypes, expanded) {
         val rows = HashMap<Int, List<ClrIlRow>>(expanded.size)
         for (type in visibleTypes) {
             if (type.index !in expanded) continue
-            rows[type.index] = rowCache.getOrPut(type.index) { clrIlTypeRows(metadata, bytes, type) }
+            rows[type.index] = rowCache.getOrPut(type.index) { clrIlTypeRows(metadata, bytes, type, pdb) }
         }
         ClrIlItemIndex(visibleTypes, rows)
     }

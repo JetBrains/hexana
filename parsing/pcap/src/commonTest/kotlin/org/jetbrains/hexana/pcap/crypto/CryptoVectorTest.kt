@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.pcap.crypto
 
+import org.jetbrains.hexana.codec.Inflate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals

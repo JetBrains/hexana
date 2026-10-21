@@ -41,10 +41,13 @@ import org.jetbrains.hexana.providers.pe.PeImportLibrary
 import org.jetbrains.hexana.providers.pe.PeOptionalHeader
 import org.jetbrains.hexana.providers.pe.PeParser
 import org.jetbrains.hexana.providers.pe.PeSection
+import org.jetbrains.hexana.providers.pe.clr.ClrEmbeddedPortablePdb
 import org.jetbrains.hexana.providers.pe.clr.ClrMetadata
 import org.jetbrains.hexana.providers.pe.clr.ClrMetadataParser
 import org.jetbrains.hexana.providers.pe.clr.ClrReadyToRunImage
+import org.jetbrains.hexana.providers.pe.clr.ClrPortablePdb
 import org.jetbrains.hexana.providers.pe.clr.ClrReadyToRunParser
+import kotlin.concurrent.Volatile
 import org.jetbrains.hexana.tar.TarEntry
 import org.jetbrains.hexana.tar.TarParser
 import org.jetbrains.hexana.zip.ZipEntry
@@ -316,7 +319,7 @@ sealed class NativeBinaryProvider(
     }
 
     open val nativeFunctions: List<NativeFunctionRecord>? get() = null
-    open val nativeSourceLocationProvider: NativeDwarfSourceLocationProvider? get() = null
+    open val nativeSourceLocationProvider: NativeSourceLocationProvider? get() = null
 
     /**
      * GraalVM Native Image fingerprint for this binary, or `null` when it is not
@@ -381,7 +384,7 @@ class ElfBinaryProvider(
         NativeFunctionDiscovery.fromElf(sym, sec, ph, machine = nativeFormat.machine)
     }
 
-    override val nativeSourceLocationProvider: NativeDwarfSourceLocationProvider? by lazy {
+    override val nativeSourceLocationProvider: NativeSourceLocationProvider? by lazy {
         val sec = sections ?: return@lazy null
         if (sec.none { it.name == ".debug_line" } || sec.none { it.name == ".debug_info" }) return@lazy null
         NativeDwarfSourceLocationProvider(bytes, ElfDwarfAccessor(sec))
@@ -504,7 +507,7 @@ class MachOBinaryProvider(
         NativeFunctionDiscovery.fromMachO(sym, sec)
     }
 
-    override val nativeSourceLocationProvider: NativeDwarfSourceLocationProvider? by lazy {
+    override val nativeSourceLocationProvider: NativeSourceLocationProvider? by lazy {
         val sec = sections ?: return@lazy null
         if (sec.none { it.name == "__debug_line" } || sec.none { it.name == "__debug_info" }) return@lazy null
         NativeDwarfSourceLocationProvider(bytes, MachODwarfAccessor(sec))
@@ -663,6 +666,69 @@ class PeBinaryProvider(
         val c = coffHeader ?: return@lazy null
         PeParser.parseCoffSymbols(bytes, c)
     }
+
+    /** The PDB the image's CodeView record names, if any. */
+    val pdbReference: PePdbReference? by lazy { PePdbReference.of(debugEntries.orEmpty()) }
+
+    /** The Portable PDB embedded in the debug directory (`-debug:embedded`), inflated on first use. */
+    val embeddedPortablePdb: ClrPortablePdb? by lazy {
+        ClrEmbeddedPortablePdb.entry(debugEntries.orEmpty())?.let { ClrEmbeddedPortablePdb.decode(bytes, it)?.portablePdb }
+    }
+
+    private class Attachment(val symbols: PeDebugSymbols.File, val sourceLocations: Lazy<NativeSourceLocationProvider?>)
+
+    @Volatile
+    private var attachment: Attachment? = null
+
+    /**
+     * Uses [symbols] for this image when they match its CodeView record; hosts call this with a
+     * `.pdb` found next to the image, before building the tabs. Returns why it was or was not accepted.
+     */
+    fun attachDebugSymbols(symbols: PdbSymbolsBinaryProvider, path: String?): PdbMatch {
+        val match = pdbMatch(pdbReference, symbols)
+        if (match != PdbMatch.Matches) {
+            debugSymbolsRejection = PeDebugSymbolsRejection(path, match)
+            return match
+        }
+        val windows = (symbols as? PdbBinaryProvider)?.parsedPdb
+        attachment = Attachment(
+            PeDebugSymbols.File(symbols, path),
+            lazy {
+                val o = optionalHeader ?: return@lazy null
+                val s = sections ?: return@lazy null
+                windows?.let { pdbNativeSourceLocations(it, o.imageBase, s) }
+            },
+        )
+        return match
+    }
+
+    /** The last `.pdb` that [attachDebugSymbols] turned down, so debug tabs can say why. */
+    @Volatile
+    var debugSymbolsRejection: PeDebugSymbolsRejection? = null
+        private set
+
+    /**
+     * Whether [debugSymbols] is non-null, without inflating an embedded PDB: reads only the debug
+     * directory, so tab discovery can ask.
+     */
+    val hasDebugSymbols: Boolean
+        get() = attachment != null || ClrEmbeddedPortablePdb.entry(debugEntries.orEmpty()) != null
+
+    /** The debug symbols in use: an attached `.pdb` file, else an embedded Portable PDB. */
+    val debugSymbols: PeDebugSymbols?
+        get() = attachment?.symbols ?: embeddedPortablePdb?.let { PeDebugSymbols.Embedded(it) }
+
+    /** Sequence points of managed methods, from an attached or embedded Portable PDB. */
+    val portablePdb: ClrPortablePdb?
+        get() = when (val symbols = debugSymbols) {
+            is PeDebugSymbols.File -> (symbols.symbols as? PortablePdbBinaryProvider)?.metadata?.portablePdb
+            is PeDebugSymbols.Embedded -> symbols.pdb
+            null -> null
+        }
+
+    /** Native code line info, from an attached Windows PDB. */
+    override val nativeSourceLocationProvider: NativeSourceLocationProvider?
+        get() = attachment?.sourceLocations?.value
 
     /** Managed (.NET) metadata; null for native images without a CLR runtime header. */
     val clrMetadata: ClrMetadata? by lazy {

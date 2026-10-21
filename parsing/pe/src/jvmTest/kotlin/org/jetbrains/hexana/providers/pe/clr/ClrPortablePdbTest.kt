@@ -11,6 +11,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -84,6 +85,53 @@ class ClrPortablePdbTest {
         assertTrue(entry.isPortablePdbCodeView)
     }
 
+    /** `method 0x06000002: …` followed by `  IL_0007 document=1 (19,39)-(19,40)` or `  IL_0010 document=1 hidden`. */
+    private fun expectedSequencePoints(lines: List<String>): Map<Int, List<String>> {
+        val result = LinkedHashMap<Int, MutableList<String>>()
+        var method = 0
+        for (line in lines) {
+            Regex("^method 0x06([0-9A-F]{6}):").find(line)?.let { method = it.groupValues[1].toInt(16); result[method] = mutableListOf() }
+            if (line.startsWith("  IL_")) result.getValue(method).add(line.trim())
+        }
+        return result
+    }
+
+    private fun ClrSequencePoint.render(): String {
+        val il = "IL_" + ilOffset.toString(16).uppercase().padStart(4, '0')
+        return if (isHidden) "$il document=$document hidden" else "$il document=$document ($startLine,$startColumn)-($endLine,$endColumn)"
+    }
+
+    @Test
+    fun `sequence points match System Reflection Metadata`() {
+        val expected = expectedSequencePoints(dump)
+        assertEquals(14, expected.size)
+        assertTrue(expected.values.sumOf { it.size } > 30)
+        for ((method, points) in expected) {
+            assertEquals(points, pdb.sequencePoints(method).map { it.render() }, "method $method")
+        }
+        assertEquals(emptyList(), pdb.sequencePoints(0))
+        assertEquals(emptyList(), pdb.sequencePoints(15))
+    }
+
+    @Test
+    fun `embedded portable PDB decodes to the same debug information`() {
+        val exe = dir.resolve("sample-clr-embedded.exe").readBytes().toCommonByteBuffer()
+        val image = assertNotNull(PeParser.parse(exe).valueOrNull as? PeImageFile)
+        val entry = assertNotNull(ClrEmbeddedPortablePdb.entry(image.debugEntries))
+        val embedded = assertNotNull(ClrEmbeddedPortablePdb.decode(exe, entry)?.portablePdb)
+        val embeddedDump = dir.resolve("sample-clr-embedded.exe.dump.txt").readLines()
+        val (guid, stamp) = Regex("guid=(\\S+) stamp=0x(\\S+)").find(embeddedDump.single { it.startsWith("pdb id: ") })!!.destructured
+        assertEquals(guid.uppercase(), embedded.header.guid)
+        assertEquals(stamp.toUInt(16), embedded.header.stamp)
+        assertEquals(image.debugEntries.firstNotNullOf { it.codeView }.guid, embedded.header.guid)
+        assertEquals("/src/clr/Sample.cs", embedded.documents.single().name)
+        for ((method, points) in expectedSequencePoints(embeddedDump)) {
+            assertEquals(points, embedded.sequencePoints(method).map { it.render() }, "method $method")
+        }
+        // Corrupt compressed data and an oversized declared size are rejected, not thrown.
+        assertNull(ClrEmbeddedPortablePdb.decode(exe, entry, maxSize = 16))
+    }
+
     @Test
     fun `corrupted copies never throw`() {
         val random = Random(4321)
@@ -91,7 +139,11 @@ class ClrPortablePdbTest {
             val copy = bytes.copyOf()
             repeat(1 + random.nextInt(6)) { copy[random.nextInt(copy.size)] = random.nextInt(256).toByte() }
             val buffer = copy.toCommonByteBuffer()
-            if (ClrMetadataParser.isPortablePdb(buffer)) ClrMetadataParser.parsePortablePdb(buffer).portablePdb?.documents
+            if (ClrMetadataParser.isPortablePdb(buffer)) {
+                val corrupted = ClrMetadataParser.parsePortablePdb(buffer).portablePdb
+                corrupted?.documents
+                for (row in 1..(corrupted?.methodDebugInformationCount ?: 0)) corrupted?.sequencePoints(row)
+            }
         }
     }
 }

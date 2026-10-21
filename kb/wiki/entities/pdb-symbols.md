@@ -1,7 +1,7 @@
 # PDB debug symbols (Windows PDB + Portable PDB)
 
-Step 1 of the plan in [[entities/pdb-support-feasibility]]: open both kinds of `.pdb` directly.
-Line info, PE ↔ PDB matching and companion loading are the next steps.
+Plan: [[entities/pdb-support-feasibility]]. Step 1 opened both kinds of `.pdb` directly; step 2
+(below, "Source lines") matches a PDB to its PE image and uses its line info.
 
 ## Two formats, one extension
 
@@ -52,12 +52,50 @@ uniformly. Format ids: `pdb`, `portable-pdb` (`binaryFormatId`, webapp worker, s
   `System.Reflection.Metadata`; it also prints per-method sequence-point counts for step 2).
 - Both parser tests include random-mutation "never throws" loops.
 
-## Next (step 2)
+## Source lines (step 2)
 
-C13 `DEBUG_S_LINES`/`FILECHKSMS` + `/names` for Windows; `MethodDebugInformation` sequence points for
-Portable; embedded Portable PDB (type 17, `MPDB` + deflate — common code has no sync inflate on
-`wasmJs`); a neutral `NativeSourceLocationProvider` interface replacing the DWARF-typed
-`nativeSourceLocationProvider`; host-side companion loading verified by GUID+age / GUID+stamp.
+```
+PE image ──CodeView RSDS──► PePdbReference.Windows(guid, age) | .Portable(guid, stamp)   (entry minor 0x504D)
+   │                                     ▲
+   │  host, before tabs:                 │ pdbMatch(): GUID + DBI age / GUID + #Pdb stamp
+   │  PdbCompanionLoader.candidatePaths ─┴─ attach(bytes) ─► PeBinaryProvider.attachDebugSymbols
+   │      IntelliJ: load(pe, JVM_FILE_SYSTEM) in BinaryEditorView (next to the pcap key-log restore)
+   │      VS Code webview: host.readBinaryFile (script open() channel), "Loading debug symbols…" gate
+   │      webapp: none (no file access) — embedded PDBs still work
+   ▼
+debugSymbols = File(symbols, path) | Embedded(type 17, MPDB + deflate)   rejection → debugSymbolsRejection
+   ├─ nativeSourceLocationProvider (Windows PDB): C13 rows at imageBase + section RVA + offset
+   │      → Disassembly source lines, PE "Debug Info" tab
+   └─ portablePdb: sequencePoints(methodRow)
+          → IL view `.line a,b : c,d 'doc'` (doc only when it changes), Methods "Source" column
+```
+
+- **`NativeSourceLocationProvider` is the neutral interface** (`NativeDwarfSourceLocationProvider` is
+  one implementation). `AddressLineTable` does the lookups by binary search — the DWARF provider used a
+  linear `findLast` per instruction before, so it got faster too.
+- **Candidate order:** recorded file name next to the image, `<stem>.pdb`, `<name>.pdb`, then the
+  recorded absolute path (a local build). Skipped entirely when the PDB is embedded or already attached.
+- **Attach before tabs, never after.** Tab discovery is cheap (`availableTabNames` checks
+  `debugSymbols != null`, which reads only the debug directory), and tabs are not rebuilt later. IntelliJ
+  inserts tabs without placeholders before the script panels, so "Debug Info" appears anyway.
+- **Debug Context** PDB row: `found` (loaded, with identity), `does not match` (reason from `PdbMatch`),
+  `unverified` (not searched / not loaded), `missing`. The nearby-file scan no longer adds a second PDB row.
+- **Inflate moved** from `parsing/pcap` (internal) to `parsing/codec` (`Inflate`, `inflateComplete`), now
+  shared by TLS decompression and embedded Portable PDBs on every target.
+- `!` in `llvm-pdbutil dump -l` marks rows **without** the is-statement bit; clang never sets it.
+- Deterministic Roslyn builds give `-debug:portable` and `-debug:embedded` variants of the same source the
+  **same PDB id** — they legitimately match each other.
+- Sequence point blob: δIL (0 after the first record = document change), ΔLines, ΔColumns (unsigned if
+  ΔLines is 0, else signed); both 0 = hidden; start line/column absolute for the first visible point, then
+  signed deltas. Compressed signed ints sign-extend from 6/13/28 bits.
+
+## Not done yet
+
+- Native function names from PDB symbols (`S_PUB32`, `S_GPROC32`) for PE disassembly; CodeView in COFF
+  `.debug$S`; TPI types / locals.
+- ReadyToRun native code → IL offset (R2R DebugInfo section) to show source lines in R2R disassembly.
+- VS Code reads go through the 100 MiB script-`open()` cap, so larger PDBs are not loaded there.
+- MCP/CLI do not attach PDBs (`resolve_source_locations` is Wasm-only).
 
 ## Files
 
@@ -65,3 +103,8 @@ Portable; embedded Portable PDB (type 17, `MPDB` + deflate — common code has n
 - `parsing/pe/.../clr/{ClrPortablePdb,ClrTableSchema,ClrMetadataParser}.kt`, test `jvmTest/.../ClrPortablePdbTest.kt`
 - `binaryProvider/.../PdbBinaryProvider.kt`; `plugins-shared/.../PdbTableTabs.kt` (+ `PdbTableTabsTest`)
 - `idea-plugin/.../PdbFileType.kt`, `NativeBinaryFileTypeDetector.kt`; `vscode-plugin/src/NativeBinaryFileTypeDetector.ts`
+- Step 2: `debugInfo/pdb/.../PdbLines.kt` (`PdbLinesFixtureTest`), `parsing/pe/.../clr/ClrPortablePdb.kt`
+  (sequence points, `ClrEmbeddedPortablePdb`), `binaryProvider/.../PeDebugSymbols.kt` (`PeDebugSymbolsTest`),
+  `NativeDwarfSourceLocationProvider.kt` (interface + `AddressLineTable`), `plugins-shared/.../PdbCompanionLoader.kt`
+  (`PdbCompanionLoaderTest`), `NativeDebugCompanionScanner.kt`, `NativeTableTabs.kt` (PE Debug Info),
+  `ClrIlText.kt` / `ClrTableTabs.kt`, `idea-plugin/.../BinaryEditorView.kt`, `vscode-plugin/webview/.../Main.kt`
