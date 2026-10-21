@@ -378,7 +378,7 @@
   "overrides": {
     "form-data": "4.0.6",
     "js-yaml": "5.4.1",
-    "markdown-it": "14.3.1",
+    "markdown-it": "14.3.3",
     "secretlint": "13.0.7"
   }
 }
