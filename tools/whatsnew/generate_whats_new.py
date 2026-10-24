@@ -302,7 +302,9 @@ def note_continuation(excerpt: NoteExcerpt, limit: int = 180) -> str:
         return ""
     sentence = re.split(r"(?<=[.!?])\s+", tail, maxsplit=1)[0].strip()
     detail = sentence or tail
-    if len(detail) > limit:
+    # A paired em-dash aside can precede the predicate. Cutting at its closing
+    # dash turns a sentence into a subject fragment; keep that sentence intact.
+    if len(detail) > limit and detail.count(" — ") < 2:
         detail = compact_clause(detail, limit)
     if detail and not detail.endswith((".", "!", "?")):
         detail = f"{detail}."

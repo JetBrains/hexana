@@ -2,6 +2,9 @@ package org.jetbrains.hexana.ui
 
 import com.intellij.ide.starter.community.PublicIdeDownloader
 import com.intellij.ide.starter.community.model.BuildType
+import com.intellij.ide.starter.ide.DefaultIdeDistributionFactory
+import com.intellij.ide.starter.ide.IdeInstaller
+import com.intellij.ide.starter.ide.InstalledIde
 import com.intellij.ide.starter.ide.IDETestContext
 import com.intellij.ide.starter.ide.IdeProductProvider
 import com.intellij.ide.starter.ide.installer.StandardInstaller
@@ -224,6 +227,21 @@ internal object HexanaUiDriverTestSupport {
     }
 
     private fun resolveIdeInfo(): IdeInfo = when {
+        // Opt-in artifact generation may reuse an already unpacked IDE with its matching JBR.
+        // This avoids downloading a second full distribution in constrained capture workspaces.
+        !System.getenv("HEXANA_CAPTURE_IDE_HOME").isNullOrBlank() -> {
+            val home = Path.of(System.getenv("HEXANA_CAPTURE_IDE_HOME")).toAbsolutePath().normalize()
+            require(home.resolve("jbr/bin/java").exists()) { "Capture IDE must include its matching JBR: $home" }
+            ideProduct.copy(getInstaller = {
+                object : IdeInstaller {
+                    override suspend fun install(ideInfo: IdeInfo): Pair<String, InstalledIde> {
+                        val installed = DefaultIdeDistributionFactory.installIDE(home.toFile(), ideInfo.executableFileName)
+                        require(installed.productCode == ideInfo.productCode) { "Capture IDE product mismatch" }
+                        return installed.build to installed
+                    }
+                }
+            })
+        }
         ideVersion != null && ideBuildNumber != null -> {
             error("Set only one of $ideVersionEnv or $ideBuildNumberEnv.")
         }

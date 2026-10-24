@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "default_release": "0.21",
+  "default_release": "0.22",
   "asset_root": ".",
   "capture_policy": {
     "preferred_source": "ui-driver",
@@ -847,6 +847,90 @@
         "Send anonymous usage analytics",
         "tens of thousands of symbols",
         "gzipped file"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [],
+      "presentation": "text"
+    },
+    "managed-code-022": {
+      "release": "0.22",
+      "eyebrow": ".NET",
+      "title": "Read managed code, from metadata to IL",
+      "summary": "Inspect .NET assembly identity, types and methods, expand resolved IL instructions, and trace code back to matching Portable PDB source lines. The Top tab attributes IL, metadata and ReadyToRun bytes.",
+      "recipe": "managed-code-022",
+      "keywords": [
+        ".NET assemblies.",
+        "IL Disassembly",
+        "Top tab for .NET",
+        "Source lines from PDBs"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.22/managed-il.png"
+      ]
+    },
+    "apk-classes-022": {
+      "release": "0.22",
+      "eyebrow": "Android",
+      "title": "Browse every class in an APK",
+      "summary": "Open one Classes tab across all DEX files, filter by DEX, and reveal a class in its original DEX editor.",
+      "recipe": "apk-classes-022",
+      "keywords": [
+        "Classes tab for .apk"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.22/apk-classes.png"
+      ]
+    },
+    "http-replay-022": {
+      "release": "0.22",
+      "eyebrow": "Network captures",
+      "title": "Turn captured requests into live requests",
+      "summary": "Edit a captured HTTP request and resend it from the Packets tab. Inspect the response in the same window, or export the request to the bundled HTTP Client when available.",
+      "recipe": "http-replay-022",
+      "keywords": [
+        "Replay HTTP requests from a PCAP"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.22/http-replay.png"
+      ]
+    },
+    "managed-resources-022": {
+      "release": "0.22",
+      "eyebrow": ".NET resources",
+      "title": "Decode managed resource sets",
+      "summary": "Inspect standalone .resources files and embedded resource sets, including decoded values and byte or stream content types.",
+      "recipe": "managed-resources-022",
+      "keywords": [
+        ".NET .resources files"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [],
+      "presentation": "text"
+    },
+    "pdb-symbols-022": {
+      "release": "0.22",
+      "eyebrow": "Debug symbols",
+      "title": "Inspect Windows and Portable PDBs",
+      "summary": "Browse symbol metadata, streams and source files. Matching symbols beside a PE image add source lines to disassembly and explain their match in Debug Context.",
+      "recipe": "pdb-symbols-022",
+      "keywords": [
+        "PDB debug symbols"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [],
+      "presentation": "text"
+    },
+    "apk-run-022": {
+      "release": "0.22",
+      "eyebrow": "Android emulator",
+      "title": "Run APKs with an existing Android SDK",
+      "summary": "Launch an on-disk APK on a running emulator or an existing AVD when the local Android SDK has the emulator package.",
+      "recipe": "apk-run-022",
+      "keywords": [
+        "Run button for on-disk .apk"
       ],
       "doc_candidates": [],
       "image_candidates": [],

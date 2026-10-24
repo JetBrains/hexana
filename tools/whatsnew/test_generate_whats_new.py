@@ -289,6 +289,16 @@ class GenerateWhatsNewTest(unittest.TestCase):
         self.assertEqual("Second sentence with focused detail.", continuation)
         self.assertNotIn("Third sentence", continuation)
 
+    def test_note_continuation_keeps_predicate_after_paired_dash_aside(self):
+        sentence = (
+            "For .NET assemblies a matching Portable PDB — or one embedded in the assembly "
+            "with `-debug:embedded` — adds ILDasm-style `.line` directives to **IL Disassembly** "
+            "and a **Source** column (`Program.cs:42`) to **Methods**."
+        )
+        excerpt = gen.NoteExcerpt(preview="Preview.", full="Preview. " + sentence, has_more=True)
+
+        self.assertEqual(sentence, gen.note_continuation(excerpt, limit=180))
+
     def test_note_continuation_prefers_clause_boundary(self):
         excerpt = gen.NoteExcerpt(
             preview="Preview.",
