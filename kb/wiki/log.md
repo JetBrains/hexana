@@ -157,3 +157,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-10-21 — `entities/binary-opened-format-analytics` — how to break down `format=generic` in PostHog; IDE misreports archive/dex/aar-like zips/protobuf/pdb as generic.
 - 2026-10-21 — `entities/binary-opened-format-analytics` — fixed generic misreporting on IDE/VS Code/webapp; zip family → zip (jar/war/apk kept); new pdb/portable_pdb/arsc/dotnet_resources formats; GenericExt firmware/object buckets.
 - 2026-10-21 — `entities/binary-opened-format-analytics` — review fixes: IDE format by logical (.gz-stripped) name incl. tab events; VS Code no extension fallback after failed content checks.
+- 2026-10-27 — `entities/dependency-security-audit` — security audit of external deps; bumped jackson 2.21.8, logback 1.5.38, vscode-plugin/test npm overrides.

@@ -43,6 +43,8 @@ consult-first / write-back rules.
   only), the seams, MSF/DBI/C13 work breakdown, matched `sample.exe`/`sample.pdb` fixture, risks.
 - [[entities/pdb-symbols]] — Windows PDB (`debugInfo/pdb`, MSF) and Portable PDB (CLR metadata + `#Pdb`):
   providers, content-only routing, tabs; PE ↔ PDB matching, companion loading, source lines in disassembly/IL.
+- [[entities/dependency-security-audit]] — where external dependency versions live, how to
+  audit them (npm audit + OSV batch API), and the 2026-10-27 audit results.
 
 ## Sources
 
