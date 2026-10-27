@@ -1,7 +1,7 @@
+import org.jetbrains.kotlin.gradle.targets.js.nodejs.NodeJsEnvSpec
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
-import java.util.Properties
-import org.gradle.api.artifacts.component.ProjectComponentIdentifier
+import java.util.*
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
@@ -75,6 +75,7 @@ val parserWorkerBrowserProductionWebpack by tasks.registering(Exec::class) {
     dependsOn(parserWorkerCompileSync, rootProject.tasks.named("kotlinNpmInstall"))
 
     val rootJsDir = rootProject.layout.buildDirectory.dir("js")
+    val nodeExecutable = rootProject.extensions.getByType<NodeJsEnvSpec>().executable
     val workerEntry = rootJsDir.map {
         it.file("packages/hexana-webapp-parserWorker/kotlin/hexana-webapp-parserWorker.js")
     }
@@ -83,7 +84,7 @@ val parserWorkerBrowserProductionWebpack by tasks.registering(Exec::class) {
     workingDir(rootJsDir)
     doFirst {
         commandLine(
-            "node",
+            nodeExecutable.get(),
             rootJsDir.get().file("node_modules/webpack/bin/webpack.js").asFile,
             "--mode", "production",
             "--entry", workerEntry.get().asFile.absolutePath,
