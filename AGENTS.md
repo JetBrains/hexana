@@ -96,6 +96,7 @@ All agents — the main session and every subagent it dispatches — MUST treat 
 - Build JDK: 25 for `idea-plugin`; emitted plugin bytecode remains Java 21 compatible.
 - Build tool: Gradle wrapper (`./gradlew`).
 - Kotlin: 2.4.0.
+- Kotlin JS/Wasm managed Node: 22.23.4, pinned in root `build.gradle.kts`.
 - IntelliJ Platform Gradle Plugin: 2.18.1.
 - Main plugin target: IntelliJ IDEA `2026.2`.
 - Root dependency coordinates live in `gradle/libs.versions.toml`.
@@ -296,3 +297,4 @@ Docker build instructions for the Rust modules already exist in `wasm-modules/RE
 ## Known Project Quirks
 
 - `README.md` is mostly publishing-oriented and does not describe the implementation in enough detail. Trust code, build files, and nested `AGENTS.md` files over the README for architecture.
+- JVM TLS is not uniformly routed through PostHog/OkHttp: CLI telemetry uses `HttpURLConnection`, and IDEA also uses Ktor and platform HTTP clients. See `kb/wiki/sources/emudhra-certificate-impact-2026-10.md` for runtime trust-store requirements and native-release rebuild implications.

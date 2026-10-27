@@ -88,7 +88,7 @@ internal class PostHogJvmClient(
             posthog.get()?.let { return it }
             if (retired) return null
             val created = PostHog.with(
-                PostHogConfig(apiKey = config.apiKey, host = config.resolvedHost()).apply {
+                PostHogConfig(projectToken = config.apiKey, host = config.resolvedHost()).apply {
                     flushAt = config.resolvedFlushAt()
                     flushIntervalSeconds = config.flushIntervalSeconds()
                     // Hexana uses neither feature flags nor experiments. Both

@@ -8,14 +8,6 @@ import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsEnvSpec
 import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsPlugin
 import org.jetbrains.kotlin.gradle.targets.wasm.nodejs.WasmNodeJsRootPlugin
 import org.jetbrains.kotlin.gradle.testing.internal.KotlinTestReport
-import org.gradle.api.artifacts.ProjectDependency
-import org.gradle.api.file.RegularFileProperty
-import org.gradle.api.provider.ListProperty
-import org.gradle.api.tasks.Input
-import org.gradle.api.tasks.Exec
-import org.gradle.api.tasks.OutputFile
-import org.gradle.api.tasks.TaskAction
-import org.gradle.api.tasks.testing.Test
 
 plugins {
     alias(libs.plugins.graalvm.native) apply(false)
@@ -26,7 +18,7 @@ plugins {
     alias(libs.plugins.detekt) apply(false)
 }
 
-val kotlinNodeVersion = "22.22.0"
+val kotlinNodeVersion = "22.23.4"
 val graalVmVersion = libs.versions.graalvm.get()
 val requiredGraalVmMajorVersion = graalVmVersion.substringBefore('.').toInt()
 
