@@ -1,4 +1,4 @@
-# Unreleased
+# 0.14.0 - 27.10.2026
 - **replay HTTP requests from a PCAP**: right-click an HTTP request in a capture's "Packets" tab and choose "Replay HTTP Request…" to edit the method, URL, headers and body, send it again, and see the response below; the dialog stays open for the next attempt. Cleartext requests are reassembled across TCP segments; HTTPS requests work once an SSL key log decrypts them. Redirects are reported rather than followed, and connection headers and `Content-Length` are recomputed
 - "Open Request as .http File" (in the menu and the replay dialog) writes the request to an `.http` file for the **REST Client** extension, with a binary body in a file next to it read with `<`; without REST Client installed the file opens as text and the extension is offered
 - **Run** button for on-disk `.apk` files when a local Android SDK has the emulator (as installed by Android Studio): reuses a running emulator or boots an existing virtual device (pick one if there are several), installs the APK with `adb` and launches it. Without a virtual device it points you to Android Studio's Device Manager
