@@ -43,11 +43,15 @@ File format (keys sorted, layout fixed so re-saves are byte-stable):
   `NativeBinaryFormatDetector` to report their own format (no header → no format object to build
   from); any other parser is refused only if its constructor throws. Lazy parse failures surface
   in tabs like they do for corrupt files.
-- **IntelliJ reopens the editor on change; VS Code re-keys the provider.** An IntelliJ editor wires
-  tabs, structure view and the WAT document once, so a changed association closes and reopens the
-  file (what the platform does on a file-type change). The VS Code webview simply recomposes:
-  the provider is `remember`ed on the chosen parser, so an association added for *another* file
-  does not reparse this one.
+- **Both editors swap the provider in place.** IntelliJ keeps the provider and the badge's
+  `ParserChoice` in Compose state inside `HexanaFileEditor.initPanel`; a changed association
+  re-runs `resolveProvider` on the EDT, resets the tab index, retires the WAT text editor, and the
+  view recomposes under `key(provider)`. The first cut closed and reopened the file instead
+  (`closeFile` + `openFile` in one EDT turn); in 2026.2 that only took effect on the *second*
+  switch — the reopen could land before the close completed and keep the old editor. The platform
+  has a `FileEditorManagerImpl.CLOSING_TO_REOPEN` flag for its own reopen path, a hint that the
+  naive pair is not safe. The VS Code webview `remember`s the provider on the chosen parser, so an
+  association added for *another* file does not reparse this one.
 - **The VS Code host only moves text.** The webview renders both JSON and schema (shared Kotlin);
   `WasmEditorProvider.ts` reads, watches (one watcher per folder, alongside the runtimes one) and
   writes with read-compare-write, and sends `fileAssociationKey` with `load-wasm`. Messages:
@@ -60,6 +64,12 @@ File format (keys sorted, layout fixed so re-saves are byte-stable):
   stays a label there.
 
 ## Traps
+
+- A plain `GenericBinaryProvider` labels itself with the native header it sniffs
+  (`nativeFormat`), so a forced "Generic binary" on an ELF read "ELF64". Both badges call the
+  3-arg `fileTypeDescription(provider, fileName, chosenParser)`, which labels it "Generic binary".
+  Match it through `binaryParserOf`, never the exact class: IntelliJ hands over a
+  `GenericBinaryVirtualFileProvider` subclass (the first fix missed exactly that).
 
 - `HexanaFileEditor.parserOverride` / `parserOverrideFailed` must be declared **before** `init`:
   `initPanel()` runs from `init` and a later initializer would reset them.

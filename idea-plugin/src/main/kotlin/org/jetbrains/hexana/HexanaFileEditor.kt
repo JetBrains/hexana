@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,7 +38,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.breakpoints.BinaryBreakpointRegistry
@@ -295,26 +296,43 @@ class HexanaFileEditor(
 
         binaryProvider = resolveProvider(myFile.name, inMemoryBuffer, commonBuffer, sourcePath)
 
-        // A different parser means different tabs, a different structure view and a
-        // different WAT document, all wired once per editor — so a changed association
-        // reopens the file rather than patching this editor in place. That is also what the
-        // platform does when a file's type changes.
-        if (associationKey != null) {
-            editorScope.launch {
-                associations.changes.drop(1).collect {
-                    if (associations.associations.parserFor(associationKey) != parserOverride) {
-                        withContext(Dispatchers.EDT) { reopenWithCurrentParser() }
-                    }
-                }
-            }
-        }
-        val parserChoice = associationKey?.let {
+        fun parserChoice(): ParserChoice? = associationKey?.let {
             ParserChoice(
                 chosen = parserOverride,
                 failed = parserOverrideFailed,
                 // Off the EDT: the save writes two files and refreshes VFS synchronously.
                 onChoose = { parser -> editorScope.launch { associations.setParser(myFile, parser) } },
             )
+        }
+        // Compose state, so a changed association swaps the provider under the same editor:
+        // the tab, its position and any splits stay where they are. Closing and reopening the
+        // file instead proved unreliable — the reopen could land before the close finished
+        // and keep the old editor, so a choice only took effect on the next attempt.
+        val providerState = mutableStateOf(binaryProvider!!)
+        val parserChoiceState = mutableStateOf(parserChoice())
+        if (associationKey != null) {
+            editorScope.launch {
+                associations.changes.collect {
+                    val chosen = associations.associations.parserFor(associationKey)
+                    if (chosen == parserOverride) return@collect
+                    withContext(Dispatchers.EDT) {
+                        // Re-checked on the EDT: two changes in quick succession must not
+                        // rebuild twice, or rebuild to a choice already superseded.
+                        val latest = associations.associations.parserFor(associationKey)
+                        if (latest == parserOverride) return@withContext
+                        parserOverride = latest
+                        parserOverrideFailed = false
+                        // A WAT document belongs to the provider it was printed from.
+                        myTextEditor?.let { myClosedTextEditors.add(it) }
+                        myTextEditor = null
+                        binaryProvider = resolveProvider(myFile.name, inMemoryBuffer, commonBuffer, sourcePath)
+                        // The old tab list's index means nothing in the new one.
+                        stateHolder.setSelectedTab(0)
+                        providerState.value = binaryProvider!!
+                        parserChoiceState.value = parserChoice()
+                    }
+                }
+            }
         }
 
         // Compute binary identity and wire up the gutter model asynchronously.
@@ -358,16 +376,19 @@ class HexanaFileEditor(
 
         val hexView = createComposePanel {
             val hexFocusRequester = remember { FocusRequester() }
-            Column {
+            val currentProvider = providerState.value
+            // Keyed on the provider so a parser change starts every panel from scratch rather
+            // than carrying remembered state across two unrelated tab lists.
+            key(currentProvider) { Column {
                 if (stateHolder.showSearchDialog.value) {
-                    HexSearchField(binaryProvider!!, stateHolder, hexFocusRequester)
+                    HexSearchField(currentProvider, stateHolder, hexFocusRequester)
                 }
                 val editor = this@HexanaFileEditor
                 BinaryEditorView(
-                    binaryProvider!!, stateHolder, hexFocusRequester,
+                    currentProvider, stateHolder, hexFocusRequester,
                     fileName = myFile.name,
                     filePath = binarySourcePath,
-                    parserChoice = parserChoice,
+                    parserChoice = parserChoiceState.value,
                     parentFileName = parentFile?.name,
                     onNavigateToParent = parentFile?.let { pf ->
                         { FileEditorManager.getInstance(myProject).openFile(pf, true) }
@@ -420,7 +441,7 @@ class HexanaFileEditor(
                         BinaryBreakpointRegistry.getInstance(myProject).remove(id)
                     },
                 )
-            }
+            } }
         }
         panel.add(hexView)
 
@@ -883,20 +904,6 @@ class HexanaFileEditor(
         } else {
             provider
         }
-
-    /**
-     * Closes and reopens this file so its editor is rebuilt with the parser the
-     * associations now name. Selection is kept: a file reopened in the background stays
-     * in the background.
-     */
-    private fun reopenWithCurrentParser() {
-        if (myProject.isDisposed || !myFile.isValid) return
-        val manager = FileEditorManager.getInstance(myProject)
-        if (!manager.isFileOpen(myFile)) return
-        val wasSelected = myFile in manager.selectedFiles
-        manager.closeFile(myFile)
-        manager.openFile(myFile, wasSelected)
-    }
 
 
 

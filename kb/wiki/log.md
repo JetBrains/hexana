@@ -159,3 +159,5 @@ Append one line per write-back: date, page, what changed.
 - 2026-10-21 — `entities/binary-opened-format-analytics` — review fixes: IDE format by logical (.gz-stripped) name incl. tab events; VS Code no extension fallback after failed content checks.
 - 2026-10-27 — `entities/dependency-security-audit` — security audit of external deps; bumped jackson 2.21.8, logback 1.5.38, vscode-plugin/test npm overrides.
 - 2026-10-28 — `entities/file-parser-associations` — new: per-file parser choice from the format badge, stored in `.hexana/file_associations.json` (+schema), IntelliJ settings page, VS Code dialog/command, live tracking.
+- 2026-10-28 — `entities/file-parser-associations` — fix: forced generic was labelled by the sniffed native header; 3-arg `fileTypeDescription` honours the chosen parser.
+- 2026-10-28 — `entities/file-parser-associations` — IntelliJ: replaced close+reopen (took effect only on the second switch) with an in-place provider swap via Compose state.

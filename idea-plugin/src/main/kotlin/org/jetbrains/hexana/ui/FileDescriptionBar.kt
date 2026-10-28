@@ -288,7 +288,7 @@ private fun NormalModeContent(
     filePath: String? = null,
     parserChoice: ParserChoice? = null,
 ) {
-    val moduleType = fileTypeDescription(binaryProvider, fileName)
+    val moduleType = fileTypeDescription(binaryProvider, fileName, parserChoice?.chosen)
 
     val badgeBackground = if (JewelTheme.isDark) Color(0xFF4D4D4D) else Color(0xFFE0E0E0)
     val badgeForeground = if (JewelTheme.isDark) Color.White else Color.Black

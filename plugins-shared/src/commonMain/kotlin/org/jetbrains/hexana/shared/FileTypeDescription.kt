@@ -3,7 +3,9 @@ package org.jetbrains.hexana.shared
 import org.jetbrains.hexana.providers.ArchiveBinaryProvider
 import org.jetbrains.hexana.providers.ArrowBinaryProvider
 import org.jetbrains.hexana.providers.ArscBinaryProvider
+import org.jetbrains.hexana.providers.BinaryParser
 import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.binaryParserOf
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.providers.ClrResourcesBinaryProvider
 import org.jetbrains.hexana.providers.PdbBinaryProvider
@@ -23,6 +25,28 @@ import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.TarBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
+
+/**
+ * The format badge's label for [binaryProvider] when the user chose [chosenParser] for the
+ * file (`null` when it was detected automatically).
+ *
+ * Differs from [fileTypeDescription] in one case: a plain [GenericBinaryProvider] labels
+ * itself with whatever native header it sniffs, which is right for a file detection gave up
+ * on but wrong for one the user asked to see unparsed — a forced "Generic binary" on an ELF
+ * would otherwise still read "ELF64" and look as if the choice had not taken.
+ */
+fun fileTypeDescription(
+    binaryProvider: BinaryProvider,
+    fileName: String?,
+    chosenParser: BinaryParser?,
+): String =
+    // Matched through binaryParserOf rather than on the exact class: the IntelliJ editor
+    // hands over a GenericBinaryVirtualFileProvider subclass, which must count too.
+    if (chosenParser == BinaryParser.GENERIC && binaryParserOf(binaryProvider) == BinaryParser.GENERIC) {
+        BinaryParser.GENERIC.displayName
+    } else {
+        fileTypeDescription(binaryProvider, fileName)
+    }
 
 fun fileTypeDescription(
     binaryProvider: BinaryProvider,

@@ -320,7 +320,7 @@ fun EditorToolbar(
 
         if (showNormalContent) {
             FormatBadge(
-                label = fileTypeLabelOverride ?: fileTypeDescription(provider, fileName),
+                label = fileTypeLabelOverride ?: fileTypeDescription(provider, fileName, parserChoice?.chosen),
                 choice = parserChoice,
             )
 
