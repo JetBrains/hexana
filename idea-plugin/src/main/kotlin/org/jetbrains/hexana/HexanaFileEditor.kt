@@ -36,11 +36,13 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.breakpoints.BinaryBreakpointRegistry
 import org.jetbrains.hexana.breakpoints.BinaryIdentityProvider
 import org.jetbrains.hexana.breakpoints.BreakpointMaterializationCoordinator
+import org.jetbrains.hexana.features.FileAssociationsService
 import org.jetbrains.hexana.shared.BinaryAnchor
 import org.jetbrains.hexana.shared.DEX_CLASSES_TAB_NAME
 import org.jetbrains.hexana.ui.panel.GutterMarksModel
@@ -54,6 +56,7 @@ import org.jetbrains.hexana.ui.BinaryEditorView
 import org.jetbrains.hexana.ui.CLASS_FILE_NAV_TARGET_KEY
 import org.jetbrains.hexana.ui.ClassFileNavTarget
 import org.jetbrains.hexana.ui.HexSearchField
+import org.jetbrains.hexana.ui.ParserChoice
 import org.jetbrains.hexana.ui.WASM_FUNCTION_NAV_TARGET_KEY
 import org.jetbrains.hexana.ui.WasmFunctionNavTarget
 import org.jetbrains.hexana.ui.createComposePanel
@@ -219,6 +222,16 @@ class HexanaFileEditor(
     /** Separate scope for identity resolution and gutter-model lifetime. Cancelled in [dispose]. */
     private val editorScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /**
+     * The parser `.hexana/file_associations.json` chose for this file when the editor was
+     * built, or `null` for automatic detection. Declared before [init] for the reason
+     * [wasmDiffScope] is: [initPanel] assigns it during construction.
+     */
+    private var parserOverride: BinaryParser? = null
+
+    /** Whether [parserOverride] could not read the bytes, so detection was used instead. */
+    private var parserOverrideFailed: Boolean = false
+
     /** Gutter model; null until identity is resolved (async, off-EDT). */
     val gutterMarksModelFlow: MutableStateFlow<GutterMarksModel?> = MutableStateFlow(null)
 
@@ -274,7 +287,35 @@ class HexanaFileEditor(
         // because there is no file for a script to reach a sibling of.
         binarySourcePath = sourcePath
 
+        // "Open As Protobuf Message" already says what the file is; an association recorded
+        // for the file on disk must not overrule the action.
+        val associations = FileAssociationsService.getInstance(myProject)
+        val associationKey = if (myFile is HexanaProtobufMessageVirtualFile) null else associations.keyFor(myFile)
+        parserOverride = associations.associations.parserFor(associationKey)
+
         binaryProvider = resolveProvider(myFile.name, inMemoryBuffer, commonBuffer, sourcePath)
+
+        // A different parser means different tabs, a different structure view and a
+        // different WAT document, all wired once per editor — so a changed association
+        // reopens the file rather than patching this editor in place. That is also what the
+        // platform does when a file's type changes.
+        if (associationKey != null) {
+            editorScope.launch {
+                associations.changes.drop(1).collect {
+                    if (associations.associations.parserFor(associationKey) != parserOverride) {
+                        withContext(Dispatchers.EDT) { reopenWithCurrentParser() }
+                    }
+                }
+            }
+        }
+        val parserChoice = associationKey?.let {
+            ParserChoice(
+                chosen = parserOverride,
+                failed = parserOverrideFailed,
+                // Off the EDT: the save writes two files and refreshes VFS synchronously.
+                onChoose = { parser -> editorScope.launch { associations.setParser(myFile, parser) } },
+            )
+        }
 
         // Compute binary identity and wire up the gutter model asynchronously.
         // In-memory buffers (HexanaBinaryVirtualFile) have no backing file to hash.
@@ -326,6 +367,7 @@ class HexanaFileEditor(
                     binaryProvider!!, stateHolder, hexFocusRequester,
                     fileName = myFile.name,
                     filePath = binarySourcePath,
+                    parserChoice = parserChoice,
                     parentFileName = parentFile?.name,
                     onNavigateToParent = parentFile?.let { pf ->
                         { FileEditorManager.getInstance(myProject).openFile(pf, true) }
@@ -704,7 +746,9 @@ class HexanaFileEditor(
             return ProtobufMessageBinaryProvider(commonBuffer)
         }
 
-        if (ext == "tgz" || fileName.endsWith(".tar.gz", ignoreCase = true)) {
+        // A `.tgz` with a parser chosen for it falls through to the generic gzip branch
+        // below, so the choice applies to the inflated tar like it does for any `.gz`.
+        if ((ext == "tgz" || fileName.endsWith(".tar.gz", ignoreCase = true)) && parserOverride == null) {
             val decompressed = decompressGzip(commonBuffer)
             return if (decompressed != null) {
                 TarBinaryProvider(decompressed)
@@ -715,20 +759,36 @@ class HexanaFileEditor(
 
         // Generic gzip: decompress and resolve the inner content by the
         // stripped extension (e.g. "foo.wasm.gz" → ext "wasm").
-        if (ext == "gz") {
+        if (ext == "gz" || ext == "tgz") {
             val decompressed = decompressGzip(commonBuffer)
                 ?: return nativeOrGenericBinaryProvider(commonBuffer, sourcePath)
             // Store the decompressed bytes on the virtual file so that
             // VirtualFile-backed providers (WasmBinaryVirtualFileProvider etc.)
             // read the decompressed content instead of the raw gzip stream.
             myFile.putUserData(HexanaBinaryVirtualFile.BUFFER_KEY, decompressed)
-            val innerName = fileName.removeSuffix(".gz").removeSuffix(".GZ")
+            val innerName = if (ext == "tgz") {
+                fileName.dropLast(".tgz".length) + ".tar"
+            } else {
+                fileName.removeSuffix(".gz").removeSuffix(".GZ")
+            }
             return resolveProvider(innerName, decompressed, decompressed, sourcePath)
         }
 
         val ref = AtomicReference(HexanaSourceLocationProvider.EMPTY)
 
-        val kind = resolveIdeBinaryProviderKind(commonBuffer, fileName, myFile.fileType)
+        // A parser chosen in `.hexana/file_associations.json` beats every signal below. The
+        // two Wasm parsers still go through the `VirtualFile`-backed providers further down,
+        // which the WAT view needs; any other choice is built by the shared factory. One that
+        // cannot read the bytes at all falls back to detection, and the toolbar says so.
+        val override = parserOverride
+        val overrideKind = override?.providerKindOrNull()
+        if (override != null && overrideKind == null) {
+            val forced = createBinaryProvider(override, commonBuffer, sourcePath)
+            if (forced != null) return withVirtualFile(forced, inMemoryBuffer)
+            parserOverrideFailed = true
+        }
+
+        val kind = overrideKind ?: resolveIdeBinaryProviderKind(commonBuffer, fileName, myFile.fileType)
 
         return when (kind) {
             BinaryProviderKind.Wasm -> {
@@ -806,20 +866,36 @@ class HexanaFileEditor(
                 }.also { initSourceLocationProvider(ref, null) }
             }
 
-            else -> {
-                val provider = createBinaryProvider(kind, commonBuffer, sourcePath)
-                // A file nothing recognized keeps its VirtualFile: the description bar's
-                // reveal-in-files action and the structure view read it back off the
-                // provider, and a plain GenericBinaryProvider has nowhere to carry one.
-                // In-memory buffers (a nested module sliced out of a parent) are excluded
-                // — there is no file of their own to point at.
-                if (inMemoryBuffer == null && provider.javaClass == GenericBinaryProvider::class.java) {
-                    GenericBinaryVirtualFileProvider(myFile)
-                } else {
-                    provider
-                }
-            }
+            else -> withVirtualFile(createBinaryProvider(kind, commonBuffer, sourcePath), inMemoryBuffer)
         }
+    }
+
+    /**
+     * A file nothing recognized keeps its VirtualFile: the description bar's
+     * reveal-in-files action and the structure view read it back off the
+     * provider, and a plain GenericBinaryProvider has nowhere to carry one.
+     * In-memory buffers (a nested module sliced out of a parent) are excluded
+     * — there is no file of their own to point at.
+     */
+    private fun withVirtualFile(provider: BinaryProvider, inMemoryBuffer: CommonByteBuffer?): BinaryProvider =
+        if (inMemoryBuffer == null && provider.javaClass == GenericBinaryProvider::class.java) {
+            GenericBinaryVirtualFileProvider(myFile)
+        } else {
+            provider
+        }
+
+    /**
+     * Closes and reopens this file so its editor is rebuilt with the parser the
+     * associations now name. Selection is kept: a file reopened in the background stays
+     * in the background.
+     */
+    private fun reopenWithCurrentParser() {
+        if (myProject.isDisposed || !myFile.isValid) return
+        val manager = FileEditorManager.getInstance(myProject)
+        if (!manager.isFileOpen(myFile)) return
+        val wasSelected = myFile in manager.selectedFiles
+        manager.closeFile(myFile)
+        manager.openFile(myFile, wasSelected)
     }
 
 

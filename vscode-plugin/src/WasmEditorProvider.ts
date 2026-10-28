@@ -84,6 +84,17 @@ const RUNTIME_TARGETS_FILE = "runtimes.json";
 const RUNTIME_TARGETS_SCHEMA_FILE = "runtimes.schema.json";
 
 /**
+ * File inside [HEXANA_PROJECT_DIR] holding the parser chosen by hand for individual files,
+ * and its generated JSON Schema. Mirrors `FILE_ASSOCIATIONS_FILE` /
+ * `FILE_ASSOCIATIONS_SCHEMA_FILE` in
+ * `plugins-shared/src/commonMain/kotlin/org/jetbrains/hexana/shared/features/FileAssociations.kt`,
+ * the source of truth for the format; the webview renders both, so this side only moves
+ * text. Governed by the same folder as the runtime targets ([runtimeTargetsFolder]).
+ */
+const FILE_ASSOCIATIONS_FILE = "file_associations.json";
+const FILE_ASSOCIATIONS_SCHEMA_FILE = "file_associations.schema.json";
+
+/**
  * The workspace folder whose `.hexana/runtimes.json` governs the binary at [scope].
  *
  * A multi-root workspace holds one settings file per folder, so the folder the *file* lives
@@ -116,6 +127,47 @@ function originatingFile(uri: vscode.Uri): vscode.Uri {
         }
     }
     return current;
+}
+
+/**
+ * Reads `.hexana/file_associations.json` from the workspace folder that governs [scope], or
+ * an empty string when there is none - which the webview reads as "detect every file".
+ */
+async function readFileAssociationsJson(scope?: vscode.Uri): Promise<string> {
+    const folder = runtimeTargetsFolder(scope);
+    if (!folder) {
+        return "";
+    }
+    const file = vscode.Uri.joinPath(folder.uri, HEXANA_PROJECT_DIR, FILE_ASSOCIATIONS_FILE);
+    try {
+        return new TextDecoder("utf-8").decode(await vscode.workspace.fs.readFile(file));
+    } catch {
+        return "";
+    }
+}
+
+/**
+ * The key [uri] is stored under in `.hexana/file_associations.json`: its path relative to
+ * the workspace folder that contains it, with `/` separators. Empty when the file cannot
+ * carry a choice - not on disk (an archive entry, a nested module), or outside every
+ * folder - and the webview then shows a plain format label.
+ *
+ * Unlike [runtimeTargetsFolder] there is no fallback to the first folder: a path relative
+ * to a folder the file is not in would name some other file.
+ */
+function fileAssociationKey(uri: vscode.Uri): string {
+    if (uri.scheme !== "file") {
+        return "";
+    }
+    const folder = vscode.workspace.getWorkspaceFolder(uri);
+    if (!folder) {
+        return "";
+    }
+    const relative = path.relative(folder.uri.fsPath, uri.fsPath);
+    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+        return "";
+    }
+    return relative.split(path.sep).join("/");
 }
 
 /**
@@ -440,6 +492,24 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
     }
 
     /**
+     * Registers `hexana.configureFileAssociations`, which opens the file-parser
+     * associations dialog in the active Hexana editor - inside the webview for the reason
+     * the runtimes dialog is: the list is `.hexana/file_associations.json`, and the webview
+     * owns its format.
+     */
+    public static registerConfigureFileAssociationsCommand(provider: WasmEditorProvider): vscode.Disposable {
+        return vscode.commands.registerCommand("hexana.configureFileAssociations", () => {
+            if (!provider.openWebviews.size) {
+                void vscode.window.showInformationMessage(
+                    "Open a binary file in Hexana first: file parser associations are configured from its editor.",
+                );
+                return;
+            }
+            provider.broadcast({ type: "open-file-associations-dialog" });
+        });
+    }
+
+    /**
      * Registers `hexana.compareFiles`: pick two binaries of any supported format and open
      * a diff view in a new custom editor tab. The webview picks the comparison from the
      * bytes (core WASM, Component Model, native), and reports a pair that is not the same
@@ -626,6 +696,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
 
         const provider = new WasmEditorProvider(context);
         context.subscriptions.push(WasmEditorProvider.registerConfigureRuntimesCommand(provider));
+        context.subscriptions.push(WasmEditorProvider.registerConfigureFileAssociationsCommand(provider));
 
         // One provider instance behind both view types: which one VS Code resolved
         // through only decides whether the editor was picked automatically or by hand,
@@ -685,6 +756,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             vscode.workspace.onDidChangeWorkspaceFolders(() => {
                 this.watchRuntimeTargets();
                 void this.pushRuntimeTargets();
+                void this.pushFileAssociations();
             }),
         );
         // Registered once, rather than per rebuild, so repeated folder changes do not pile up
@@ -707,6 +779,17 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             // has to drop the warnings rather than keep showing the last declaration it saw.
             watcher.onDidDelete(push);
             this.runtimeTargetsWatchers.push(watcher);
+
+            // Same lifecycle for the per-file parser choices: an edit by hand or a checkout
+            // reparses every open editor the change affects.
+            const associationsWatcher = vscode.workspace.createFileSystemWatcher(
+                new vscode.RelativePattern(folder, `${HEXANA_PROJECT_DIR}/${FILE_ASSOCIATIONS_FILE}`),
+            );
+            const pushAssociations = () => void this.pushFileAssociations();
+            associationsWatcher.onDidCreate(pushAssociations);
+            associationsWatcher.onDidChange(pushAssociations);
+            associationsWatcher.onDidDelete(pushAssociations);
+            this.runtimeTargetsWatchers.push(associationsWatcher);
         }
     }
 
@@ -735,6 +818,23 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             void panel.webview.postMessage({
                 type: "runtime-targets-loaded",
                 runtimeTargetsJson: await json,
+            });
+        }
+    }
+
+    /** Sends every open webview the file associations that govern its own file. */
+    private async pushFileAssociations(): Promise<void> {
+        const byFolder = new Map<string, Promise<string>>();
+        for (const [panel, uri] of this.openWebviews) {
+            const key = runtimeTargetsFolder(uri)?.uri.toString() ?? "";
+            let json = byFolder.get(key);
+            if (json === undefined) {
+                json = readFileAssociationsJson(uri);
+                byFolder.set(key, json);
+            }
+            void panel.webview.postMessage({
+                type: "file-associations-loaded",
+                fileAssociationsJson: await json,
             });
         }
     }
@@ -907,6 +1007,8 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     showSemanticHighlighting: vscode.workspace.getConfiguration("hexana").get<boolean>("showSemanticHighlighting", true),
                     featureCatalogJson: this.featureCatalog.get(),
                     runtimeTargetsJson: await readRuntimeTargetsJson(document.uri),
+                    fileAssociationsJson: await readFileAssociationsJson(document.uri),
+                    fileAssociationKey: fileAssociationKey(document.uri),
                 };
                 if (document.displayName && document.displayName !== path.basename(document.uri.fsPath)) {
                     loadMsg.decompressed = true;
@@ -954,6 +1056,12 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 }
             } else if (message.type === "save-runtime-targets") {
                 await this.saveRuntimeTargets(
+                    webviewPanel,
+                    message.json as string,
+                    message.schema as string | undefined,
+                );
+            } else if (message.type === "save-file-associations") {
+                await this.saveFileAssociations(
                     webviewPanel,
                     message.json as string,
                     message.schema as string | undefined,
@@ -1902,6 +2010,47 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         } catch (error) {
             void vscode.window.showErrorMessage(
                 `Failed to save target runtimes: ${error instanceof Error ? error.message : String(error)}`,
+            );
+        }
+    }
+
+    /**
+     * Writes the file associations rendered by the webview to `.hexana/file_associations.json`
+     * (and the schema next to it), then pushes the result to every open editor so each one
+     * reparses if its own file's parser changed. Same folder choice and read-compare-write
+     * discipline as [saveRuntimeTargets].
+     */
+    private async saveFileAssociations(
+        webviewPanel: vscode.WebviewPanel,
+        json: string,
+        schema?: string,
+    ): Promise<void> {
+        const folder = runtimeTargetsFolder(this.openWebviews.get(webviewPanel));
+        if (!folder) {
+            void vscode.window.showWarningMessage(
+                "Open a folder before choosing a parser: the choice is saved to " +
+                `${HEXANA_PROJECT_DIR}/${FILE_ASSOCIATIONS_FILE} in the workspace.`,
+            );
+            return;
+        }
+        try {
+            const directory = vscode.Uri.joinPath(folder.uri, HEXANA_PROJECT_DIR);
+            await vscode.workspace.fs.createDirectory(directory);
+            const encoder = new TextEncoder();
+            if (schema) {
+                const schemaFile = vscode.Uri.joinPath(directory, FILE_ASSOCIATIONS_SCHEMA_FILE);
+                if (await this.needsWrite(schemaFile, schema)) {
+                    await vscode.workspace.fs.writeFile(schemaFile, encoder.encode(schema));
+                }
+            }
+            const file = vscode.Uri.joinPath(directory, FILE_ASSOCIATIONS_FILE);
+            if (await this.needsWrite(file, json)) {
+                await vscode.workspace.fs.writeFile(file, encoder.encode(json));
+            }
+            await this.pushFileAssociations();
+        } catch (error) {
+            void vscode.window.showErrorMessage(
+                `Failed to save file parser associations: ${error instanceof Error ? error.message : String(error)}`,
             );
         }
     }

@@ -111,6 +111,20 @@ interface Host {
     fun saveRuntimeTargets(json: String, schema: String) {}
 
     /**
+     * Whether the host can persist per-file parser choices to
+     * `.hexana/file_associations.json`. False where there is no project directory — the
+     * browser webapp — and the format badge then stays a plain label.
+     */
+    val canEditFileAssociations: Boolean get() = false
+
+    /**
+     * Asks the host to write [json] to `.hexana/file_associations.json` and [schema] to
+     * `.hexana/file_associations.schema.json`. The host replies with
+     * `file-associations-loaded`, which is also how an edit made outside the editor arrives.
+     */
+    fun saveFileAssociations(json: String, schema: String) {}
+
+    /**
      * Creates a runnable script and selects it, so the user never starts from an
      * empty file. The host replies with `script-file-picked`.
      *

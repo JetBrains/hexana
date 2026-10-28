@@ -18,6 +18,10 @@ import org.jetbrains.hexana.shared.features.WasmRuntimeCompatibility
 import org.jetbrains.hexana.shared.features.parseRuntimeTargets
 import org.jetbrains.hexana.shared.features.serializeRuntimeTargets
 import org.jetbrains.hexana.shared.features.serializeRuntimeTargetsSchema
+import org.jetbrains.hexana.shared.features.FileAssociations
+import org.jetbrains.hexana.shared.features.parseFileAssociations
+import org.jetbrains.hexana.shared.features.serializeFileAssociations
+import org.jetbrains.hexana.shared.features.serializeFileAssociationsSchema
 
 /**
  * Extracts nested module bytes from a parent binary at the given member index.
@@ -170,6 +174,20 @@ fun BinaryEditorContent(
      * invocations reopen it without the caller having to reset a flag.
      */
     openRuntimeTargetsRequest: Int = 0,
+    /** Raw `.hexana/file_associations.json` pushed by the host; blank means none. */
+    fileAssociationsJson: String = "",
+    /**
+     * The key this file is stored under in [fileAssociationsJson], or blank when it cannot
+     * carry a parser choice. Blank leaves the format badge a plain label.
+     */
+    fileAssociationKey: String = "",
+    /**
+     * Whether the parser the associations name for this file could not read it, so
+     * [provider] is the automatic choice instead. The caller built [provider], so it knows.
+     */
+    parserOverrideFailed: Boolean = false,
+    /** Bumped by the host to open the file-associations dialog; see [openRuntimeTargetsRequest]. */
+    openFileAssociationsRequest: Int = 0,
     /** Latest host request to select a table row; see [HexanaPanel]'s parameter of that name. */
     tableRowSelection: TableRowSelectionRequest? = null,
 ) {
@@ -195,6 +213,28 @@ fun BinaryEditorContent(
     LaunchedEffect(openRuntimeTargetsRequest) {
         if (openRuntimeTargetsRequest > 0 && host.canEditRuntimeTargets) {
             showRuntimeTargetsDialog = true
+        }
+    }
+
+    val fileAssociations = remember(fileAssociationsJson) { parseFileAssociations(fileAssociationsJson) }
+    // The host owns the write and replies with `file-associations-loaded`; the caller then
+    // rebuilds the provider with the new parser, so nothing changes here until the file has.
+    val saveFileAssociations = { associations: FileAssociations ->
+        host.saveFileAssociations(serializeFileAssociations(associations), serializeFileAssociationsSchema())
+    }
+    val parserChoice = if (host.canEditFileAssociations && fileAssociationKey.isNotBlank()) {
+        ParserChoice(
+            chosen = fileAssociations.parserFor(fileAssociationKey),
+            failed = parserOverrideFailed,
+            onChoose = { parser -> saveFileAssociations(fileAssociations.with(fileAssociationKey, parser)) },
+        )
+    } else {
+        null
+    }
+    var showFileAssociationsDialog by remember { mutableStateOf(false) }
+    LaunchedEffect(openFileAssociationsRequest) {
+        if (openFileAssociationsRequest > 0 && host.canEditFileAssociations) {
+            showFileAssociationsDialog = true
         }
     }
     var panelHeight by remember { mutableStateOf(DEFAULT_PANEL_HEIGHT) }
@@ -316,6 +356,7 @@ fun BinaryEditorContent(
             workerSizeTooltip = workerSizeTooltip,
             isDecompressed = isDecompressed,
             sslKeyLogSessionCount = sslKeyLogSessionCount,
+            parserChoice = parserChoice,
         )
         Div({
             style {
@@ -398,6 +439,17 @@ fun BinaryEditorContent(
                 showRuntimeTargetsDialog = false
             },
             onCancel = { showRuntimeTargetsDialog = false },
+        )
+    }
+
+    if (showFileAssociationsDialog) {
+        FileAssociationsDialog(
+            current = fileAssociations,
+            onConfirm = { associations ->
+                saveFileAssociations(associations)
+                showFileAssociationsDialog = false
+            },
+            onCancel = { showFileAssociationsDialog = false },
         )
     }
 }

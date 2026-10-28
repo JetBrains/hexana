@@ -113,6 +113,8 @@ internal fun BinaryEditorView(
      * `binary.path`.
      */
     filePath: String? = null,
+    /** Turns the format badge into a parser picker; see [ParserChoice]. */
+    parserChoice: ParserChoice? = null,
     parentFileName: String? = null,
     onNavigateToParent: (() -> Unit)? = null,
     wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?> = remember { MutableStateFlow(null) },
@@ -685,6 +687,7 @@ internal fun BinaryEditorView(
                     binaryProvider = liveProvider,
                     state = state,
                     filePath = filePath,
+                    parserChoice = parserChoice,
                     onSizeClick = topTabIndex?.let { idx -> {
                         state.setSelectedTab(idx)
                         if (state.topFraction > 0.9f) {

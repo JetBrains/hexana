@@ -9,6 +9,7 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.shared.PdbCompanionLoader
 import org.jetbrains.hexana.shared.diff.BinaryDiffInput
+import org.jetbrains.hexana.shared.features.parseFileAssociations
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.await
 
@@ -36,6 +37,9 @@ fun BinaryEditorApp() {
     var featureCatalogJson by remember { mutableStateOf("") }
     var runtimeTargetsJson by remember { mutableStateOf("") }
     var openRuntimeTargetsRequest by remember { mutableStateOf(0) }
+    var fileAssociationsJson by remember { mutableStateOf("") }
+    var fileAssociationKey by remember { mutableStateOf("") }
+    var openFileAssociationsRequest by remember { mutableStateOf(0) }
     // Row the host asked to select, e.g. for "Reveal in DEX" from an APK's editor.
     var tableRowSelection by remember { mutableStateOf<TableRowSelectionRequest?>(null) }
 
@@ -66,6 +70,18 @@ fun BinaryEditorApp() {
                         featureCatalogJson = message.featureCatalogJson
                     }
                     runtimeTargetsJson = message.runtimeTargetsJson
+                    fileAssociationsJson = message.fileAssociationsJson
+                    fileAssociationKey = message.fileAssociationKey
+                }
+                // Sent after a parser is chosen from the format badge or the dialog, and
+                // whenever the file changes on disk. The provider below re-keys on the
+                // parser it names for this file, so only the editors it affects reparse.
+                "file-associations-loaded" -> {
+                    fileAssociationsJson = message.fileAssociationsJson
+                }
+                // The `hexana.configureFileAssociations` command.
+                "open-file-associations-dialog" -> {
+                    openFileAssociationsRequest++
                 }
                 // Sent after a save from the settings dialog, and whenever the file changes
                 // on disk (an edit by hand, a git pull, a teammate's commit).
@@ -121,6 +137,8 @@ fun BinaryEditorApp() {
                         if (extracted != null) {
                             fileName = message.fileName
                             filePath = ""
+                            // A member re-extracted from its parent has no file of its own.
+                            fileAssociationKey = ""
                             wasmBytes = extracted
                             configuredRuntimeId = message.wasmRuntime
                         } else {
@@ -198,8 +216,17 @@ fun BinaryEditorApp() {
             // format decision: the host inflates a `.gz` before pushing it and reports
             // the stripped name there, while `filePath` still points at the compressed
             // file on disk.
-            val provider = remember(bytes, filePath, fileName) {
-                createBinaryProvider(buffer, sourcePath = filePath, fileName = fileName)
+            // A parser chosen in `.hexana/file_associations.json` beats detection; one that
+            // cannot read the bytes falls back to it, and the badge says so. Keyed on the
+            // parser rather than the whole JSON, so an association added for another file
+            // does not reparse this one.
+            val associations = remember(fileAssociationsJson) { parseFileAssociations(fileAssociationsJson) }
+            val chosenParser = associations.parserFor(fileAssociationKey.ifBlank { null })
+            val forcedProvider = remember(bytes, filePath, chosenParser) {
+                chosenParser?.let { createBinaryProvider(it, buffer, sourcePath = filePath) }
+            }
+            val provider = remember(bytes, filePath, fileName, forcedProvider) {
+                forcedProvider ?: createBinaryProvider(buffer, sourcePath = filePath, fileName = fileName)
             }
 
             // A PE image's PDB lives next to it. Load it before any tab is built, so the IL view,
@@ -275,6 +302,10 @@ fun BinaryEditorApp() {
                 featureCatalogJson = featureCatalogJson,
                 runtimeTargetsJson = runtimeTargetsJson,
                 openRuntimeTargetsRequest = openRuntimeTargetsRequest,
+                fileAssociationsJson = fileAssociationsJson,
+                fileAssociationKey = fileAssociationKey,
+                parserOverrideFailed = chosenParser != null && forcedProvider == null,
+                openFileAssociationsRequest = openFileAssociationsRequest,
                 tableRowSelection = tableRowSelection,
             )
         }

@@ -153,6 +153,14 @@
                              key="wasm.runtime.compatibility.displayName"
                              instance="org.jetbrains.hexana.features.WasmRuntimeCompatibilityConfigurable"/>
 
+        <!-- Project-level for the same reason: the parsers chosen per file live in
+             .hexana/file_associations.json, which the VS Code extension shares. -->
+        <projectConfigurable parentId="hexana.settings"
+                             id="hexana.file.associations"
+                             bundle="messages.HexanaBundle"
+                             key="file.associations.displayName"
+                             instance="org.jetbrains.hexana.features.FileAssociationsConfigurable"/>
+
         <applicationService serviceImplementation="org.jetbrains.hexana.run.WasmRuntimeSettings"/>
 
         <!-- Remembers the SSL key log paired with each pcap capture.

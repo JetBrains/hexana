@@ -158,3 +158,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-10-21 — `entities/binary-opened-format-analytics` — fixed generic misreporting on IDE/VS Code/webapp; zip family → zip (jar/war/apk kept); new pdb/portable_pdb/arsc/dotnet_resources formats; GenericExt firmware/object buckets.
 - 2026-10-21 — `entities/binary-opened-format-analytics` — review fixes: IDE format by logical (.gz-stripped) name incl. tab events; VS Code no extension fallback after failed content checks.
 - 2026-10-27 — `entities/dependency-security-audit` — security audit of external deps; bumped jackson 2.21.8, logback 1.5.38, vscode-plugin/test npm overrides.
+- 2026-10-28 — `entities/file-parser-associations` — new: per-file parser choice from the format badge, stored in `.hexana/file_associations.json` (+schema), IntelliJ settings page, VS Code dialog/command, live tracking.

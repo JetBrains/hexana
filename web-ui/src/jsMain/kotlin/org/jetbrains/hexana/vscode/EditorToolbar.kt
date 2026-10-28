@@ -95,6 +95,8 @@ fun EditorToolbar(
      * only to label the button, never by touching the provider.
      */
     sslKeyLogSessionCount: Int = 0,
+    /** Turns the format badge into a parser picker; see [ParserChoice]. */
+    parserChoice: ParserChoice? = null,
 ) {
     val isSubmodule = parentFileName != null || isSubmoduleFileName(fileName)
 
@@ -317,18 +319,10 @@ fun EditorToolbar(
         }
 
         if (showNormalContent) {
-            Span({
-                classes("hexana-badge")
-                style {
-                    property("padding", "2px 8px")
-                    property("border-radius", "4px")
-                    property("font-size", "11px")
-                    property("background", "var(--vscode-badge-background, #4D4D4D)")
-                    property("color", "var(--vscode-badge-foreground, #FFF)")
-                }
-            }) {
-                Text(fileTypeLabelOverride ?: fileTypeDescription(provider, fileName))
-            }
+            FormatBadge(
+                label = fileTypeLabelOverride ?: fileTypeDescription(provider, fileName),
+                choice = parserChoice,
+            )
 
             if (isSubmodule) {
                 val parentName = parentFileName ?: parentFileNameOf(fileName) ?: "component"

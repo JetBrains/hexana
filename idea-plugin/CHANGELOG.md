@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- **Choose the parser for a file.** Click the format badge at the top of the editor to open a file with any of Hexana's parsers instead of the detected one, or as a generic binary with no parsing. The choice is saved per file in `.hexana/file_associations.json` (with a JSON schema next to it for hand-editing), shared with the VS Code extension, listed under **Settings | Tools | Hexana | File Parser Associations**, and followed live: editing the file or checking out a different version reopens the affected editors. A parser that cannot read the file falls back to detection, and the badge says so.
 
 ### Changed
 

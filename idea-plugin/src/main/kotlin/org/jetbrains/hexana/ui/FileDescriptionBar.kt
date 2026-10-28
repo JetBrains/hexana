@@ -123,6 +123,8 @@ internal fun FileDescriptionBar(
     onSslKeyLogLoaded: () -> Unit = {},
     pcapHasTls: Boolean = false,
     sslKeyLogGeneration: Int = 0,
+    /** Makes the format badge a parser picker; `null` for files that cannot carry a choice. */
+    parserChoice: ParserChoice? = null,
 ) {
     val size = binaryProvider.bytes.limit()
 
@@ -188,6 +190,7 @@ internal fun FileDescriptionBar(
                     pcapHasTls = pcapHasTls,
                     sslKeyLogGeneration = sslKeyLogGeneration,
                     filePath = filePath,
+                    parserChoice = parserChoice,
                 )
             }
         } else {
@@ -202,6 +205,7 @@ internal fun FileDescriptionBar(
                 pcapHasTls = pcapHasTls,
                 sslKeyLogGeneration = sslKeyLogGeneration,
                 filePath = filePath,
+                parserChoice = parserChoice,
             )
         }
     }
@@ -282,18 +286,18 @@ private fun NormalModeContent(
     pcapHasTls: Boolean = false,
     sslKeyLogGeneration: Int = 0,
     filePath: String? = null,
+    parserChoice: ParserChoice? = null,
 ) {
     val moduleType = fileTypeDescription(binaryProvider, fileName)
 
     val badgeBackground = if (JewelTheme.isDark) Color(0xFF4D4D4D) else Color(0xFFE0E0E0)
     val badgeForeground = if (JewelTheme.isDark) Color.White else Color.Black
 
-    Text(
-        text = moduleType,
-        modifier = Modifier
-            .background(badgeBackground, RoundedCornerShape(4.dp))
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-        style = TextStyle(fontSize = 11.sp, color = badgeForeground),
+    FormatBadge(
+        label = moduleType,
+        choice = parserChoice,
+        background = badgeBackground,
+        foreground = badgeForeground,
     )
 
     val nativeImage = remember(binaryProvider) {
@@ -862,10 +866,10 @@ private fun ProposalBadges(
 
 /** Warning badge colours, shared by the problems badge and a proposal badge with a problem. */
 @Composable
-private fun warningBadgeBackground(): Color = if (JewelTheme.isDark) Color(0xFF5A4A2A) else Color(0xFFFFF3CD)
+internal fun warningBadgeBackground(): Color = if (JewelTheme.isDark) Color(0xFF5A4A2A) else Color(0xFFFFF3CD)
 
 @Composable
-private fun warningBadgeForeground(): Color = if (JewelTheme.isDark) Color(0xFFE0C070) else Color(0xFF7A5C00)
+internal fun warningBadgeForeground(): Color = if (JewelTheme.isDark) Color(0xFFE0C070) else Color(0xFF7A5C00)
 
 /**
  * Tooltip for one badge: the proposal, then one line per configured runtime. A proposal with

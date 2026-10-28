@@ -805,6 +805,117 @@ html, body {
     background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground, rgba(0, 0, 0, 0.06)));
 }
 
+/* --- Format badge / parser picker ----------------------------------------- */
+
+.hexana-format-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    background: var(--vscode-badge-background, #4D4D4D);
+    color: var(--vscode-badge-foreground, #FFF);
+    white-space: nowrap;
+}
+
+.hexana-format-badge-clickable {
+    cursor: pointer;
+}
+
+.hexana-format-badge-warning {
+    background: var(--vscode-inputValidation-warningBackground, #5A4A2A);
+    color: var(--vscode-inputValidation-warningForeground, var(--vscode-editorWarning-foreground, #E0C070));
+}
+
+.hexana-format-picker {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+}
+
+.hexana-format-menu-dismiss {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 999;
+}
+
+/* Same look as the Share Feedback dropdown, opening below the badge. */
+.hexana-format-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 1000;
+    margin-top: 4px;
+    min-width: 220px;
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: 4px;
+    border-radius: 6px;
+    font-size: 12px;
+    background: var(--vscode-menu-background, var(--vscode-editorHoverWidget-background, #2d2d30));
+    border: 1px solid var(--vscode-menu-border, var(--vscode-editorHoverWidget-border, #454545));
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+.vscode-light .hexana-format-menu {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.hexana-format-menu-title {
+    padding: 4px 8px;
+    font-size: 11px;
+    opacity: 0.7;
+}
+
+.hexana-format-menu-item {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    color: var(--vscode-menu-foreground, var(--vscode-editor-foreground, #ccc));
+}
+.hexana-format-menu-item:hover {
+    background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.08)));
+    color: var(--vscode-menu-selectionForeground, var(--vscode-editor-foreground, #fff));
+}
+.vscode-light .hexana-format-menu-item:hover {
+    background: var(--vscode-menu-selectionBackground, var(--vscode-list-hoverBackground, rgba(0, 0, 0, 0.06)));
+}
+
+.hexana-format-menu-check {
+    display: inline-block;
+    width: 16px;
+}
+
+.hexana-format-menu-separator {
+    height: 1px;
+    margin: 4px 0;
+    background: var(--vscode-menu-separatorBackground, rgba(128, 128, 128, 0.35));
+}
+
+/* File parser associations dialog: one row per file. */
+.hexana-file-associations-dialog {
+    min-width: 520px;
+    max-width: 760px;
+}
+
+.hexana-file-associations-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+}
+
+.hexana-file-associations-path {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--vscode-editor-font-family, monospace);
+}
+
 /* --- Runtime compatibility ------------------------------------------------ */
 
 /* Wider than the default dialog: one row per runtime, with a version column. */

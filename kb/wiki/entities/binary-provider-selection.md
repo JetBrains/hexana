@@ -48,6 +48,9 @@ module builds for two of the kinds: the WAT side view needs `WasmBinaryVirtualFi
 over. It takes the kind and builds its own, or hands an adjusted one back to the
 `createBinaryProvider(kind, bytes, sourcePath)` overload.
 
+Above all of this sits a user's explicit choice for the file, from `.hexana/file_associations.json`
+(`createBinaryProvider(parser, …)`); see [[entities/file-parser-associations]].
+
 IntelliJ layers one more signal on top, in `resolveIdeBinaryProviderKind`:
 
 ```

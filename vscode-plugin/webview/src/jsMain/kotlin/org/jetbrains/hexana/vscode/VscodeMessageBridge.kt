@@ -49,6 +49,13 @@ data class VscodeMessage(
     val featureCatalogJson: String = "",
     /** Raw `.hexana/runtimes.json`; blank when the workspace declares no runtimes. */
     val runtimeTargetsJson: String = "",
+    /** Raw `.hexana/file_associations.json`; blank when no file has a parser chosen. */
+    val fileAssociationsJson: String = "",
+    /**
+     * `load-wasm`: the key the open file is stored under in [fileAssociationsJson], or blank
+     * when it cannot carry a parser choice (not on disk, or outside the workspace).
+     */
+    val fileAssociationKey: String = "",
     /** `select-table-row`: the table tab to select a row of. */
     val tabName: String = "",
     /** `select-table-row`: the top-level descriptor row to select. */
@@ -431,6 +438,18 @@ fun postSaveRuntimeTargetsToHost(json: String, schema: String) {
 }
 
 /**
+ * Asks the extension host to write [json] to `.hexana/file_associations.json` in the
+ * workspace, and [schema] next to it. The host replies with `file-associations-loaded`.
+ */
+fun postSaveFileAssociationsToHost(json: String, schema: String) {
+    val msg = js("{}")
+    msg.type = "save-file-associations"
+    msg.json = json
+    msg.schema = schema
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Asks the extension host to open a text document in a new VS Code editor tab.
  *
  * [fileName] is used as the suggested file name (e.g. "foo.cdx.json").
@@ -721,6 +740,9 @@ class VscodeHost(override val canRunApk: Boolean = false) : Host {
     override val canEditRuntimeTargets: Boolean get() = true
     override fun saveRuntimeTargets(json: String, schema: String) =
         postSaveRuntimeTargetsToHost(json, schema)
+    override val canEditFileAssociations: Boolean get() = true
+    override fun saveFileAssociations(json: String, schema: String) =
+        postSaveFileAssociationsToHost(json, schema)
     override fun createScriptFromTemplate(fileName: String, template: String?, jsConfigContent: String?) =
         postCreateScriptFromTemplateToHost(fileName, template, jsConfigContent)
     override fun openScriptForEditing(scriptPath: String, jsConfigContent: String?) =
@@ -760,6 +782,8 @@ internal fun decodeVscodeMessage(type: String, data: dynamic): VscodeMessage =
                 canRunApk = (data.canRunApk as? Boolean) ?: false,
                 featureCatalogJson = (data.featureCatalogJson as? String) ?: "",
                 runtimeTargetsJson = (data.runtimeTargetsJson as? String) ?: "",
+                fileAssociationsJson = (data.fileAssociationsJson as? String) ?: "",
+                fileAssociationKey = (data.fileAssociationKey as? String) ?: "",
             )
         }
         "select-table-row" -> {
@@ -858,7 +882,14 @@ internal fun decodeVscodeMessage(type: String, data: dynamic): VscodeMessage =
                 featureCatalogJson = (data.featureCatalogJson as? String) ?: "",
             )
         }
+        "file-associations-loaded" -> {
+            VscodeMessage(
+                type = type,
+                fileAssociationsJson = (data.fileAssociationsJson as? String) ?: "",
+            )
+        }
         "open-runtime-targets-dialog" -> VscodeMessage(type = type)
+        "open-file-associations-dialog" -> VscodeMessage(type = type)
         "restore-script-tabs" -> {
             val jsPaths = data.scriptPaths
             val paths = if (jsPaths != null) {

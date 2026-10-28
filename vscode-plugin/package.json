@@ -104,6 +104,10 @@
       {
         "command": "hexana.configureWasmRuntimes",
         "title": "Hexana: Configure Target Runtimes"
+      },
+      {
+        "command": "hexana.configureFileAssociations",
+        "title": "Hexana: Configure File Parser Associations"
       }
     ],
     "menus": {
