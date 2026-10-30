@@ -822,7 +822,12 @@ internal fun BinaryEditorView(
                     state.setSelectedTab(panels.size - 1)
                 }
             })
-        })
+        },
+            // A generic binary has no tabs at all, and TabsPanel then draws nothing: the
+            // hex view gets the whole editor instead of sharing it with empty space. The
+            // list is observable, so a late decompiled panel still brings the split back.
+            showSouthPanel = panels.isNotEmpty(),
+        )
     }
 }
 

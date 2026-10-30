@@ -30,8 +30,17 @@ import java.awt.Cursor
 fun VerticalSplitPanel(
     state: HexViewStateHolder,
     northPanel: @Composable () -> Unit,
-    southPanel: @Composable () -> Unit
+    southPanel: @Composable () -> Unit,
+    /**
+     * `false` gives [northPanel] the whole height and drops the divider — for a binary with
+     * no tabs, where the south pane would only be empty space.
+     */
+    showSouthPanel: Boolean = true,
 ) {
+    if (!showSouthPanel) {
+        Box(modifier = Modifier.fillMaxSize()) { northPanel() }
+        return
+    }
     // Delegate to the stateless core; the state holder is read live inside the
     // delta callback so divider drags stay correct across recomposition.
     VerticalSplitPanel(

@@ -97,6 +97,11 @@ fun HexanaPanel(
      * another editor. Each new request switches to its tab and selects the row there.
      */
     tableRowSelection: TableRowSelectionRequest? = null,
+    /**
+     * Told whether the tab list is empty, as it is for a generic binary. The panel then
+     * renders nothing, and the caller should drop the divider above it too.
+     */
+    onTabsEmptyChange: (Boolean) -> Unit = {},
 ) {
     val host = LocalHost.current
     val pendingRun = rememberPendingRunState()
@@ -419,9 +424,13 @@ fun HexanaPanel(
     // -----------------------------------------------------------------------
     // Panel layout
     // -----------------------------------------------------------------------
+    val tabsEmpty = tabs.isEmpty()
+    LaunchedEffect(tabsEmpty) { onTabsEmptyChange(tabsEmpty) }
+    // Hidden rather than left out, so the run and replay dialogs composed above keep working.
     Div({
         classes("hexana-panel")
         style {
+            if (tabsEmpty) display(DisplayStyle.None)
             property("border-top", "1px solid var(--hexana-border, #333)")
             property("flex", "0 0 auto")
             height(heightPx.px)
