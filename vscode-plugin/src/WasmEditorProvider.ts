@@ -1062,6 +1062,12 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     message.json as string,
                     message.schema as string | undefined,
                 );
+            } else if (message.type === "open-file-associations-file") {
+                await this.openFileAssociationsFile(
+                    webviewPanel,
+                    message.json as string,
+                    message.schema as string | undefined,
+                );
             } else if (message.type === "save-file-associations") {
                 await this.saveFileAssociations(
                     webviewPanel,
@@ -2054,6 +2060,59 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             void vscode.window.showErrorMessage(
                 `Failed to save file parser associations: ${error instanceof Error ? error.message : String(error)}`,
             );
+        }
+    }
+
+    /**
+     * Opens `.hexana/file_associations.json` - from the format badge's "Edit File
+     * Associations..." item - in a text editor beside the binary. VS Code has no settings page
+     * for it, and with the schema next to it the file completes and validates as it is edited;
+     * the watcher then carries a save to every open editor.
+     *
+     * A missing file is created from [json] and [schema] first. An existing one is left as it
+     * is: it is the user's, and may hold edits the webview has not seen yet.
+     */
+    private async openFileAssociationsFile(
+        webviewPanel: vscode.WebviewPanel,
+        json: string,
+        schema?: string,
+    ): Promise<void> {
+        const folder = runtimeTargetsFolder(this.openWebviews.get(webviewPanel));
+        if (!folder) {
+            void vscode.window.showWarningMessage(
+                "Open a folder to edit file parser associations: they live in " +
+                `${HEXANA_PROJECT_DIR}/${FILE_ASSOCIATIONS_FILE} in the workspace.`,
+            );
+            return;
+        }
+        const directory = vscode.Uri.joinPath(folder.uri, HEXANA_PROJECT_DIR);
+        const file = vscode.Uri.joinPath(directory, FILE_ASSOCIATIONS_FILE);
+        try {
+            if (!(await this.exists(file))) {
+                await vscode.workspace.fs.createDirectory(directory);
+                const encoder = new TextEncoder();
+                if (schema) {
+                    const schemaFile = vscode.Uri.joinPath(directory, FILE_ASSOCIATIONS_SCHEMA_FILE);
+                    if (await this.needsWrite(schemaFile, schema)) {
+                        await vscode.workspace.fs.writeFile(schemaFile, encoder.encode(schema));
+                    }
+                }
+                await vscode.workspace.fs.writeFile(file, encoder.encode(json));
+            }
+            await vscode.window.showTextDocument(file, { viewColumn: vscode.ViewColumn.Beside });
+        } catch (error) {
+            void vscode.window.showErrorMessage(
+                `Failed to open file parser associations: ${error instanceof Error ? error.message : String(error)}`,
+            );
+        }
+    }
+
+    private async exists(file: vscode.Uri): Promise<boolean> {
+        try {
+            await vscode.workspace.fs.stat(file);
+            return true;
+        } catch {
+            return false;
         }
     }
 

@@ -450,6 +450,18 @@ fun postSaveFileAssociationsToHost(json: String, schema: String) {
 }
 
 /**
+ * Asks the extension host to open `.hexana/file_associations.json` in a text editor, writing
+ * [json] and [schema] first when the file does not exist yet.
+ */
+fun postOpenFileAssociationsFileToHost(json: String, schema: String) {
+    val msg = js("{}")
+    msg.type = "open-file-associations-file"
+    msg.json = json
+    msg.schema = schema
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Asks the extension host to open a text document in a new VS Code editor tab.
  *
  * [fileName] is used as the suggested file name (e.g. "foo.cdx.json").
@@ -743,6 +755,8 @@ class VscodeHost(override val canRunApk: Boolean = false) : Host {
     override val canEditFileAssociations: Boolean get() = true
     override fun saveFileAssociations(json: String, schema: String) =
         postSaveFileAssociationsToHost(json, schema)
+    override fun openFileAssociationsFile(json: String, schema: String) =
+        postOpenFileAssociationsFileToHost(json, schema)
     override fun createScriptFromTemplate(fileName: String, template: String?, jsConfigContent: String?) =
         postCreateScriptFromTemplateToHost(fileName, template, jsConfigContent)
     override fun openScriptForEditing(scriptPath: String, jsConfigContent: String?) =

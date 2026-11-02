@@ -230,6 +230,12 @@ fun BinaryEditorContent(
             chosen = fileAssociations.parserFor(fileAssociationKey),
             failed = parserOverrideFailed,
             onChoose = { parser -> saveFileAssociations(fileAssociations.with(fileAssociationKey, parser)) },
+            onEdit = {
+                host.openFileAssociationsFile(
+                    serializeFileAssociations(fileAssociations),
+                    serializeFileAssociationsSchema(),
+                )
+            },
         )
     } else {
         null

@@ -71,7 +71,9 @@ File format (keys sorted, layout fixed so re-saves are byte-stable):
 - **The VS Code host only moves text.** The webview renders both JSON and schema (shared Kotlin);
   `WasmEditorProvider.ts` reads, watches (one watcher per folder, alongside the runtimes one) and
   writes with read-compare-write, and sends `fileAssociationKey` with `load-wasm`. Messages:
-  `file-associations-loaded`, `save-file-associations`, `open-file-associations-dialog`; command
+  `file-associations-loaded`, `save-file-associations`, `open-file-associations-dialog`,
+  `open-file-associations-file` (badge menu's "Edit File Associations…": opens the JSON beside the
+  binary, creating it and the schema first if missing; IntelliJ opens the settings page instead); command
   `hexana.configureFileAssociations` (needs an open Hexana editor, like the runtimes dialog).
 - **"Open As Protobuf Message" beats an association** — it is an explicit action on a synthetic file.
 - **`.gz` / `.tgz`**: the choice applies to the inflated content. A `.tgz` with a choice skips the

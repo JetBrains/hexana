@@ -125,6 +125,13 @@ interface Host {
     fun saveFileAssociations(json: String, schema: String) {}
 
     /**
+     * Opens `.hexana/file_associations.json` in a text editor. [json] and [schema] are what
+     * the host writes first when the file does not exist yet, so there is always something
+     * to edit — the schema next to it is what gives the hand-edit completion.
+     */
+    fun openFileAssociationsFile(json: String, schema: String) {}
+
+    /**
      * Creates a runnable script and selects it, so the user never starts from an
      * empty file. The host replies with `script-file-picked`.
      *

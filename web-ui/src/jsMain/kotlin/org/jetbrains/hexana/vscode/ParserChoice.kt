@@ -21,11 +21,13 @@ import org.jetbrains.hexana.shared.features.FILE_ASSOCIATIONS_PATH
  * @param chosen the parser the associations name for this file, or `null` when detected
  * @param failed whether [chosen] could not read the bytes, so detection was used instead
  * @param onChoose records a new choice; `null` returns the file to automatic detection
+ * @param onEdit opens `.hexana/file_associations.json` itself for editing
  */
 class ParserChoice(
     val chosen: BinaryParser?,
     val failed: Boolean,
     val onChoose: (BinaryParser?) -> Unit,
+    val onEdit: () -> Unit,
 )
 
 /**
@@ -84,6 +86,11 @@ internal fun FormatBadge(label: String, choice: ParserChoice?) {
                     if (parser == BinaryParser.GENERIC) {
                         Div({ classes("hexana-format-menu-separator") }) {}
                     }
+                }
+                Div({ classes("hexana-format-menu-separator") }) {}
+                ParserMenuItem("Edit File Associations\u2026", selected = false) {
+                    menuVisible = false
+                    choice.onEdit()
                 }
             }
         }

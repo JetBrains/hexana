@@ -166,3 +166,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-02 — `entities/file-parser-associations` — IntelliJ: dropped `key(provider)` around the editor view (whole-tree teardown made a parser switch blink); BinaryEditorView state is keyed on `binaryProvider` instead.
 - 2026-11-02 — `entities/file-parser-associations` — IntelliJ blink on parser switch traced (frame-by-frame) to the sidecar-restore spinner gate; now first-open only.
 - 2026-11-02 — `entities/file-parser-associations` — VS Code blinks: PDB loading gate now first-open only (previous provider kept while a replacement loads its PDB); divider moved into HexanaPanel.
+- 2026-11-02 — `entities/file-parser-associations` — "Edit File Associations…" in the badge menu: IntelliJ settings page, VS Code opens the JSON.

@@ -24,6 +24,7 @@ import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider
 import com.intellij.openapi.fileTypes.BinaryFileTypeDecompilers
 import com.intellij.openapi.fileTypes.FileType
+import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
@@ -42,6 +43,7 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.breakpoints.BinaryBreakpointRegistry
 import org.jetbrains.hexana.breakpoints.BinaryIdentityProvider
 import org.jetbrains.hexana.breakpoints.BreakpointMaterializationCoordinator
+import org.jetbrains.hexana.features.FileAssociationsConfigurable
 import org.jetbrains.hexana.features.FileAssociationsService
 import org.jetbrains.hexana.shared.BinaryAnchor
 import org.jetbrains.hexana.shared.DEX_CLASSES_TAB_NAME
@@ -318,6 +320,10 @@ class HexanaFileEditor(
                 failed = parserOverrideFailed,
                 // Off the EDT: the save writes two files and refreshes VFS synchronously.
                 onChoose = { parser -> editorScope.launch { associations.setParser(myFile, parser) } },
+                onEdit = {
+                    ShowSettingsUtil.getInstance()
+                        .showSettingsDialog(myProject, FileAssociationsConfigurable::class.java)
+                },
             )
         }
         // Compose state, so a changed association swaps the provider under the same editor:

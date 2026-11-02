@@ -36,11 +36,13 @@ import javax.swing.Icon
  *   when it was detected automatically
  * @param failed whether [chosen] could not read the bytes, so detection was used instead
  * @param onChoose records a new choice; `null` returns the file to automatic detection
+ * @param onEdit opens the settings page listing every file's choice
  */
 internal class ParserChoice(
     val chosen: BinaryParser?,
     val failed: Boolean,
     val onChoose: (BinaryParser?) -> Unit,
+    val onEdit: () -> Unit,
 )
 
 /**
@@ -89,8 +91,11 @@ internal fun FormatBadge(
     }
 }
 
-/** One row of the parser popup: a parser, or `null` for automatic detection. */
-private class ParserItem(val parser: BinaryParser?)
+/**
+ * One row of the parser popup: a parser, `null` for automatic detection, or — with
+ * [isEdit] — the link to the settings page that closes the list.
+ */
+private class ParserItem(val parser: BinaryParser?, val isEdit: Boolean = false)
 
 /**
  * Shows the parser list at the pointer. A platform list popup rather than a Compose menu:
@@ -98,25 +103,35 @@ private class ParserItem(val parser: BinaryParser?)
  * neither the strip nor the editor clips. It also brings speed search for free.
  */
 private fun showParserPopup(choice: ParserChoice) {
-    val items = listOf(ParserItem(null)) + BinaryParser.entries.map(::ParserItem)
+    val items = listOf(ParserItem(null)) + BinaryParser.entries.map(::ParserItem) +
+        ParserItem(null, isEdit = true)
     val step = object : BaseListPopupStep<ParserItem>("Parse File As", items) {
-        override fun getTextFor(value: ParserItem): String =
-            value.parser?.displayName ?: "Auto-detect"
+        override fun getTextFor(value: ParserItem): String = when {
+            value.isEdit -> "Edit File Associations\u2026"
+            else -> value.parser?.displayName ?: "Auto-detect"
+        }
 
-        override fun getIconFor(value: ParserItem): Icon? =
-            if (value.parser == choice.chosen) AllIcons.Actions.Checked else null
-
-        override fun getSeparatorAbove(value: ParserItem): ListSeparator? = when (value.parser) {
-            BinaryParser.GENERIC -> ListSeparator()
-            BinaryParser.entries.first { it != BinaryParser.GENERIC } -> ListSeparator("Formats")
+        override fun getIconFor(value: ParserItem): Icon? = when {
+            value.isEdit -> AllIcons.General.Settings
+            value.parser == choice.chosen -> AllIcons.Actions.Checked
             else -> null
         }
 
-        override fun getDefaultOptionIndex(): Int = items.indexOfFirst { it.parser == choice.chosen }
+        override fun getSeparatorAbove(value: ParserItem): ListSeparator? = when {
+            value.isEdit -> ListSeparator()
+            value.parser == BinaryParser.GENERIC -> ListSeparator()
+            value.parser == BinaryParser.entries.first { it != BinaryParser.GENERIC } -> ListSeparator("Formats")
+            else -> null
+        }
+
+        override fun getDefaultOptionIndex(): Int =
+            items.indexOfFirst { !it.isEdit && it.parser == choice.chosen }
 
         override fun isSpeedSearchEnabled(): Boolean = true
 
         override fun onChosen(selectedValue: ParserItem, finalChoice: Boolean): PopupStep<*>? {
+            // The settings dialog is modal; opened from the final step, once the popup is gone.
+            if (selectedValue.isEdit) return doFinalStep { choice.onEdit() }
             if (selectedValue.parser != choice.chosen) choice.onChoose(selectedValue.parser)
             return FINAL_CHOICE
         }
