@@ -34,6 +34,9 @@ File format (keys sorted, layout fixed so re-saves are byte-stable):
   Only files on the local disk inside the project (IntelliJ `project.basePath`; VS Code the
   workspace folder that *contains* the file — no first-folder fallback, unlike runtimes) can
   carry a choice. Archive entries, nested modules and in-memory views get a plain badge.
+  A file in the project root is therefore stored under its bare name, which *looks* like name
+  matching but is not. Matching by file name (`"match": "filename"`) was considered on
+  2026-11-02 and declined: relative-path matching is the intended behaviour.
 - **Parser ids reuse `binaryFormatId` names** (`wasm`, `elf`, `macho`, `pe`, …) so scripts and the
   file share one spelling; `generic` is new. Ids are a committed format: never rename.
 - **Entries are coarser than providers**: Mach-O covers thin + universal, Arrow covers file +
