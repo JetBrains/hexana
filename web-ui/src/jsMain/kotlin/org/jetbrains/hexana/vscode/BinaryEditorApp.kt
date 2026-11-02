@@ -241,9 +241,6 @@ fun BinaryEditorContent(
         }
     }
     var panelHeight by remember { mutableStateOf(DEFAULT_PANEL_HEIGHT) }
-    // Reported by HexanaPanel; a generic binary has no tabs, and then neither the panel nor
-    // the divider above it takes any space from the hex view.
-    var panelHasTabs by remember(provider) { mutableStateOf(true) }
     var activeTab by remember(provider, initialActiveTab) { mutableStateOf(initialActiveTab) }
     var showDataInspector by remember { mutableStateOf(false) }
 
@@ -400,10 +397,6 @@ fun BinaryEditorContent(
             showDataInspector = showDataInspector,
             onToggleDataInspector = { showDataInspector = !showDataInspector },
         )
-        if (panelHasTabs) ResizeDivider { deltaY ->
-            // Dragging down → shrink the panel (panel is below the divider)
-            panelHeight = (panelHeight - deltaY).coerceAtLeast(MIN_PANEL_HEIGHT)
-        }
         HexanaPanel(
             provider = liveProvider,
             selection = selection,
@@ -429,7 +422,8 @@ fun BinaryEditorContent(
                 null
             },
             tableRowSelection = tableRowSelection,
-            onTabsEmptyChange = { empty -> panelHasTabs = !empty },
+            // Dragging down shrinks the panel, which sits below the divider.
+            onResize = { deltaY -> panelHeight = (panelHeight - deltaY).coerceAtLeast(MIN_PANEL_HEIGHT) },
         )
     }
 

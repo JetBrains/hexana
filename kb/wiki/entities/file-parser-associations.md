@@ -45,8 +45,21 @@ File format (keys sorted, layout fixed so re-saves are byte-stable):
   in tabs like they do for corrupt files.
 - **Both editors swap the provider in place.** IntelliJ keeps the provider and the badge's
   `ParserChoice` in Compose state inside `HexanaFileEditor.initPanel`; a changed association
-  re-runs `resolveProvider` on the EDT, resets the tab index, retires the WAT text editor, and the
-  view recomposes under `key(provider)`. The first cut closed and reopened the file instead
+  re-runs `resolveProvider` (off the EDT), resets the tab index, retires the WAT text editor, and the
+  view recomposes with the new provider. *Not* under `key(provider)`: tearing the whole tree down
+  (hex view, Swing-hosted panels) made every switch blink. `BinaryEditorView` keys all
+  provider-dependent state on `binaryProvider` instead — keep it that way when adding state there.
+  The other blink source was `BinaryEditorView`'s sidecar gate: `sidecarRestored` is keyed on the
+  provider, so each swap replaced the *whole* view with a progress indicator for the `.hexana.json`
+  restore round-trip (one blank frame in a screen recording). The gate now applies only until the
+  first restore completes (`restoredOnce`); later swaps render straight away.
+- **VS Code had two blink sources of its own.** (1) The webview's PDB gate in `Main.kt` showed a
+  full-page "Loading debug symbols…" for every *new* `PeBinaryProvider` — e.g. leaving "Generic
+  binary" on a `.dll`, or a failing parser falling back to detection from there. Now the editor
+  keeps showing the previous provider (and its fallback flag) until the replacement's PDB is
+  attached; the loading text only appears for the first provider of a set of bytes. (2) The
+  divider above an empty panel was dropped one frame late, through an effect reporting "no tabs";
+  `HexanaPanel` now draws its own divider (`onResize`) and drops it in the same frame. The first cut closed and reopened the file instead
   (`closeFile` + `openFile` in one EDT turn); in 2026.2 that only took effect on the *second*
   switch — the reopen could land before the close completed and keep the old editor. The platform
   has a `FileEditorManagerImpl.CLOSING_TO_REOPEN` flag for its own reopen path, a hint that the
@@ -74,6 +87,8 @@ File format (keys sorted, layout fixed so re-saves are byte-stable):
   StateFlow conflates bursts); only publishing is on the EDT. It then calls
   `HexanaFileEditor.providerChangeListeners`, which the Structure view model uses to rebuild its
   root and fire `onModelChanged` — public API, no `StructureViewWrapperImpl` needed.
+- Reaching for an effect to report layout facts upward (e.g. "no tabs") costs a frame and
+  shows as a blink; decide in the composable that has the fact.
 - **Web `liveProvider` must be keyed on `provider`** as well as the reparse counter, or a changed
   parser keeps tabs and problems on the old provider while the toolbar and hex view move on.
 - **`computeExtraTabs` decides class/DEX tabs by provider type when it has a provider**, magic

@@ -98,10 +98,12 @@ fun HexanaPanel(
      */
     tableRowSelection: TableRowSelectionRequest? = null,
     /**
-     * Told whether the tab list is empty, as it is for a generic binary. The panel then
-     * renders nothing, and the caller should drop the divider above it too.
+     * Drags of the resize divider drawn above the panel; `null` draws none. The divider lives
+     * here rather than with the caller so that it disappears in the same frame as the panel
+     * when the tab list is empty (a generic binary) — reported back through an effect, it
+     * lagged a frame behind and the switch to "Generic binary" blinked.
      */
-    onTabsEmptyChange: (Boolean) -> Unit = {},
+    onResize: ((deltaY: Double) -> Unit)? = null,
 ) {
     val host = LocalHost.current
     val pendingRun = rememberPendingRunState()
@@ -425,7 +427,7 @@ fun HexanaPanel(
     // Panel layout
     // -----------------------------------------------------------------------
     val tabsEmpty = tabs.isEmpty()
-    LaunchedEffect(tabsEmpty) { onTabsEmptyChange(tabsEmpty) }
+    if (!tabsEmpty && onResize != null) ResizeDivider(onResize)
     // Hidden rather than left out, so the run and replay dialogs composed above keep working.
     Div({
         classes("hexana-panel")

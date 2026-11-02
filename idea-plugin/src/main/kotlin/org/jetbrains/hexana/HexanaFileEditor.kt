@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -396,10 +395,11 @@ class HexanaFileEditor(
 
         val hexView = createComposePanel {
             val hexFocusRequester = remember { FocusRequester() }
+            // Not keyed on the provider: tearing the whole tree down made a parser switch
+            // blink, hex view and all. BinaryEditorView remembers everything that depends on
+            // the provider against it, so only those parts rebuild.
             val currentProvider = providerState.value
-            // Keyed on the provider so a parser change starts every panel from scratch rather
-            // than carrying remembered state across two unrelated tab lists.
-            key(currentProvider) { Column {
+            Column {
                 if (stateHolder.showSearchDialog.value) {
                     HexSearchField(currentProvider, stateHolder, hexFocusRequester)
                 }
@@ -461,7 +461,7 @@ class HexanaFileEditor(
                         BinaryBreakpointRegistry.getInstance(myProject).remove(id)
                     },
                 )
-            } }
+            }
         }
         panel.add(hexView)
 

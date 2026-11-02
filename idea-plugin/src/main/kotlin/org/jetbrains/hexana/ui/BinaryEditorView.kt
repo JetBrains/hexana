@@ -172,6 +172,12 @@ internal fun BinaryEditorView(
     // gate clears as soon as the IO dispatcher returns null — typically
     // within one frame.
     var sidecarRestored by remember(binaryProvider, editableDoc) { mutableStateOf(false) }
+    // The spinner is for opening the file only. A parser chosen for it later hands this view a
+    // new provider for the same bytes, and blanking the whole editor for the restore round-trip
+    // made every switch blink; the restore still runs, and a file with unsaved edits simply
+    // shows them a frame later.
+    var restoredOnce by remember { mutableStateOf(false) }
+    LaunchedEffect(sidecarRestored) { if (sidecarRestored) restoredOnce = true }
     LaunchedEffect(binaryProvider, editableDoc) {
         val sourceFile = (binaryProvider as? BinaryVirtualFileProvider)?.file
         if (sourceFile == null) {
@@ -259,8 +265,10 @@ internal fun BinaryEditorView(
     // anything held inside those lambdas via positional `remember` resets.
     // Lifting it here means each new lambda captures the SAME LazyListState
     // and folded-section MutableState references, preserving state.
-    val watVirtualizedListState = rememberLazyListState()
-    val watVirtualizedFolded = remember { mutableStateOf<Set<ChunkId>>(emptySet()) }
+    // Both survive a liveProvider commit but not a different [binaryProvider] — a parser
+    // chosen for the file — whose WAT has unrelated chunks and lines.
+    val watVirtualizedListState = key(binaryProvider) { rememberLazyListState() }
+    val watVirtualizedFolded = remember(binaryProvider) { mutableStateOf<Set<ChunkId>>(emptySet()) }
     // Binary format derived once per opened provider — fed into the
     // `hex_tab_selected` analytics event so cross-tab funnels can filter
     // by container format (e.g. "ELF users → Disassembly tab").
@@ -312,13 +320,13 @@ internal fun BinaryEditorView(
         .fillMaxSize()
         .background(HexanaTheme.backgroundColor)
         .onPreviewKeyEvent(docKeyHandler)) {
-        if (!sidecarRestored) {
+        if (!sidecarRestored && !restoredOnce) {
             Box(modifier = Modifier.fillMaxSize()) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             }
             return@BoxWithConstraints
         }
-        val pathsNav = remember { PathsNavigationState() }
+        val pathsNav = remember(binaryProvider) { PathsNavigationState() }
         // Panels are keyed to the ORIGINAL provider, not liveProvider — so
         // they don't rebuild on every commit. The WAT virtualized lambda
         // captures `liveProvider` (a Compose State delegate); its body

@@ -234,25 +234,35 @@ fun BinaryEditorApp() {
             val pdbCandidates = remember(provider) {
                 (provider as? PeBinaryProvider)?.let { PdbCompanionLoader.candidatePaths(it) }.orEmpty()
             }
-            var debugSymbolsPending by remember(provider) { mutableStateOf(pdbCandidates.isNotEmpty()) }
+            var pdbReadyFor by remember(bytes) { mutableStateOf<BinaryProvider?>(null) }
             LaunchedEffect(provider) {
-                val pe = provider as? PeBinaryProvider ?: return@LaunchedEffect
-                // Cleared however the loop ends, or the editor would wait on this forever.
+                val pe = provider as? PeBinaryProvider
+                // Marked ready however the loop ends, or the editor would wait on this forever.
                 try {
-                    loadPdbCompanion(pe, pdbCandidates, host)
+                    if (pe != null && pdbCandidates.isNotEmpty()) loadPdbCompanion(pe, pdbCandidates, host)
                 } finally {
-                    debugSymbolsPending = false
+                    pdbReadyFor = provider
                 }
             }
-            if (debugSymbolsPending) {
+            // What the editor shows, paired with whether its parser was a fallback. Normally the
+            // provider above; while a *replacement* waits for its PDB — a parser chosen for the
+            // file — the one already on screen stays there instead of a full-page loading text,
+            // which made every switch to or from a PE provider blink. Only the first provider
+            // for these bytes has nothing to fall back to.
+            val current = provider to (chosenParser != null && forcedProvider == null)
+            val lastShown = remember(bytes) { arrayOfNulls<Pair<BinaryProvider, Boolean>>(1) }
+            val shown = if (pdbCandidates.isEmpty() || pdbReadyFor === provider) current else lastShown[0]
+            if (shown == null) {
                 Div({ classes("loading") }) {
                     Text("Loading debug symbols…")
                 }
                 return@CompositionLocalProvider
             }
+            SideEffect { lastShown[0] = shown }
+            val (shownProvider, shownOverrideFailed) = shown
 
-            val extraTabs = remember(bytes, provider) {
-                computeExtraTabs(buffer, provider)
+            val extraTabs = remember(bytes, shownProvider) {
+                computeExtraTabs(buffer, shownProvider)
             }
 
             // Remembered for the same reason as the buffer above: the panel
@@ -276,7 +286,7 @@ fun BinaryEditorApp() {
                 fileName = fileName,
                 filePath = filePath,
                 parentFileName = parentFileName,
-                provider = provider,
+                provider = shownProvider,
                 isDecompressed = isDecompressed,
                 extraTabs = extraTabs,
                 capabilities = capabilities,
@@ -304,7 +314,7 @@ fun BinaryEditorApp() {
                 openRuntimeTargetsRequest = openRuntimeTargetsRequest,
                 fileAssociationsJson = fileAssociationsJson,
                 fileAssociationKey = fileAssociationKey,
-                parserOverrideFailed = chosenParser != null && forcedProvider == null,
+                parserOverrideFailed = shownOverrideFailed,
                 openFileAssociationsRequest = openFileAssociationsRequest,
                 tableRowSelection = tableRowSelection,
             )
