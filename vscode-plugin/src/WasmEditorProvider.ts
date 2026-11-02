@@ -164,7 +164,9 @@ function fileAssociationKey(uri: vscode.Uri): string {
         return "";
     }
     const relative = path.relative(folder.uri.fsPath, uri.fsPath);
-    if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+    // A leading `..` *segment* climbs out; a name merely starting with dots (`..cache/x`) is
+    // inside the folder.
+    if (!relative || relative.split(path.sep)[0] === ".." || path.isAbsolute(relative)) {
         return "";
     }
     return relative.split(path.sep).join("/");

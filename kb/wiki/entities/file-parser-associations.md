@@ -65,6 +65,20 @@ File format (keys sorted, layout fixed so re-saves are byte-stable):
 
 ## Traps
 
+- **Read-modify-write is serialized** in `FileAssociationsService` (one lock around transform +
+  write + `tracker.recordSave`, and around `reload`'s read + observe). The VFS refresh stays
+  *outside* the lock: a synchronous refresh can wait for an EDT write action while the EDT sits
+  in a VFS listener waiting for the lock. `FileAssociationsStore` writes temp-then-atomic-move so
+  VS Code's watcher never reads half a file (which would parse as "nothing associated").
+- **The IntelliJ rebuild runs off the EDT** (editor IO scope; `collect` is sequential and the
+  StateFlow conflates bursts); only publishing is on the EDT. It then calls
+  `HexanaFileEditor.providerChangeListeners`, which the Structure view model uses to rebuild its
+  root and fire `onModelChanged` — public API, no `StructureViewWrapperImpl` needed.
+- **Web `liveProvider` must be keyed on `provider`** as well as the reparse counter, or a changed
+  parser keeps tabs and problems on the old provider while the toolbar and hex view move on.
+- **`computeExtraTabs` decides class/DEX tabs by provider type when it has a provider**, magic
+  only without one — or a forced "Generic binary" class/DEX file gets its bytecode tabs back.
+
 - A plain `GenericBinaryProvider` labels itself with the native header it sniffs
   (`nativeFormat`), so a forced "Generic binary" on an ELF read "ELF64". Both badges call the
   3-arg `fileTypeDescription(provider, fileName, chosenParser)`, which labels it "Generic binary".

@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.vscode
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import org.jetbrains.compose.web.dom.Button
@@ -60,7 +61,9 @@ fun FileAssociationsDialog(
                 }
                 for ((index, row) in rows.withIndex()) {
                     val (path, parser) = row
-                    Div({ classes("hexana-file-associations-row") }) {
+                    // Keyed by path: removing a row must not hand its DOM node — and the
+                    // browser-owned value of its <select> — to the row that moves up.
+                    key(path) { Div({ classes("hexana-file-associations-row") }) {
                         Span({
                             classes("hexana-file-associations-path")
                             attr("title", path)
@@ -83,7 +86,7 @@ fun FileAssociationsDialog(
                             attr("title", "Detect this file automatically again")
                             onClick { rows.removeAt(index) }
                         }) { Text("Remove") }
-                    }
+                    } }
                 }
             }
 

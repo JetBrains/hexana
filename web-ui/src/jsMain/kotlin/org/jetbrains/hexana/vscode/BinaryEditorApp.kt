@@ -101,7 +101,10 @@ fun computeExtraTabs(
     buffer: org.jetbrains.hexana.io.CommonByteBuffer,
     provider: BinaryProvider? = null,
 ): List<PanelTab> {
-    if (ClassFileBinaryProvider.isClassFile(buffer)) {
+    // With a provider, its type decides, not the magic: a class file or DEX the user chose to
+    // open as a generic binary must not get the bytecode tabs back. The magic stays the
+    // signal only for callers that have no provider.
+    if ((provider == null || provider is ClassFileBinaryProvider) && ClassFileBinaryProvider.isClassFile(buffer)) {
         val classFile = try {
             JavaClassFileParser.parse(buffer.duplicate().position(0))
         } catch (_: Exception) {
@@ -109,7 +112,7 @@ fun computeExtraTabs(
         }
         return if (classFile != null) classFileExtraTabs(classFile) else emptyList()
     }
-    if (DexBinaryProvider.isDexFile(buffer)) {
+    if ((provider == null || provider is DexBinaryProvider) && DexBinaryProvider.isDexFile(buffer)) {
         val dex = (provider as? DexBinaryProvider)?.parsedDexFile
             ?: try {
                 DexFileParser.parse(buffer.duplicate().position(0))
@@ -276,10 +279,13 @@ fun BinaryEditorContent(
     }
 
     // Reparse counter: incremented after overwrite/discard to rebuild the provider.
-    var reparseCounter by remember { mutableStateOf(0) }
+    // Keyed on the provider: the host can hand this composable a different one for the same
+    // file (a parser chosen for it), and a counter left over from the old one would keep
+    // `liveProvider` — and with it the tabs and the problems — on the provider before.
+    var reparseCounter by remember(provider) { mutableStateOf(0) }
 
     // Live provider rebuilt from edited bytes when reparseCounter changes.
-    val liveProvider = remember(reparseCounter) {
+    val liveProvider = remember(provider, reparseCounter) {
         if (reparseCounter == 0) provider
         else {
             val liveBuffer = editState.toBuffer()

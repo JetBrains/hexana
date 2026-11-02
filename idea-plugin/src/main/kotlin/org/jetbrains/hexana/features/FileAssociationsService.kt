@@ -65,17 +65,34 @@ class FileAssociationsService(private val project: Project) : Disposable {
     /** The parser chosen for [file], or `null` when it is detected automatically. */
     fun parserFor(file: VirtualFile): BinaryParser? = associations.parserFor(keyFor(file))
 
+    /**
+     * Serializes every read-modify-write of the file and of the cache behind [associations].
+     * Each editor saves from its own coroutine, so without it two choices made in quick
+     * succession could both start from the same map and the second save would drop the first;
+     * and a [reload] reading the file just before a save could publish the stale contents
+     * just after it.
+     */
+    private val lock = Any()
+
     /** Chooses [parser] for [file], or returns it to automatic detection when `null`. */
     fun setParser(file: VirtualFile, parser: BinaryParser?) {
         val key = keyFor(file) ?: return
-        save(associations.with(key, parser))
+        update { it.with(key, parser) }
     }
 
     /** Persists [associations] (and the schema) and refreshes VFS so the files show up. */
     fun save(associations: FileAssociations) {
+        update { associations }
+    }
+
+    private fun update(transform: (FileAssociations) -> FileAssociations) {
         val basePath = project.basePath ?: return
-        val file = FileAssociationsStore.write(basePath, associations)
-        tracker.recordSave(associations)
+        val file = synchronized(lock) {
+            val next = transform(associations)
+            FileAssociationsStore.write(basePath, next).also { tracker.recordSave(next) }
+        }
+        // Outside the lock: a synchronous refresh can wait for a write action on the EDT, and
+        // the EDT may itself be waiting for the lock in [reload], called from a VFS listener.
         val vfs = LocalFileSystem.getInstance()
         vfs.refreshAndFindFileByIoFile(FileAssociationsStore.schemaFile(basePath))
         vfs.refreshAndFindFileByIoFile(file)
@@ -90,7 +107,7 @@ class FileAssociationsService(private val project: Project) : Disposable {
 
     private fun reload() {
         val basePath = project.basePath ?: return
-        tracker.observe(FileAssociationsStore.read(basePath))
+        synchronized(lock) { tracker.observe(FileAssociationsStore.read(basePath)) }
     }
 
     override fun dispose() = Unit

@@ -7,6 +7,8 @@ import org.jetbrains.hexana.shared.DexSmaliRow
 import org.jetbrains.hexana.shared.DEX_SMALI_TAB_NAME
 import org.jetbrains.hexana.shared.DexSmaliSearchEntry
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.providers.DexBinaryProvider
+import org.jetbrains.hexana.providers.GenericBinaryProvider
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -130,6 +132,15 @@ class DexEditorContentTest {
         // wiring: magic detection, parse, tab label.
         val tabs = computeExtraTabs(minimalDex().toCommonByteBuffer())
         assertEquals(listOf(DEX_SMALI_TAB_NAME), tabs.map { it.label })
+    }
+
+    @Test
+    fun aDexFileChosenAsGenericGetsNoSmaliTab() {
+        // A parser chosen in `.hexana/file_associations.json` decides; the magic must not
+        // bring the bytecode tabs back for a file the user asked to see unparsed.
+        val bytes = minimalDex().toCommonByteBuffer()
+        assertEquals(emptyList(), computeExtraTabs(bytes, GenericBinaryProvider(bytes)).map { it.label })
+        assertEquals(listOf(DEX_SMALI_TAB_NAME), computeExtraTabs(bytes, DexBinaryProvider(bytes)).map { it.label })
     }
 
     @Test

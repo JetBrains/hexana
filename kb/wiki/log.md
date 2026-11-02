@@ -162,3 +162,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-10-28 — `entities/file-parser-associations` — fix: forced generic was labelled by the sniffed native header; 3-arg `fileTypeDescription` honours the chosen parser.
 - 2026-10-28 — `entities/file-parser-associations` — IntelliJ: replaced close+reopen (took effect only on the second switch) with an in-place provider swap via Compose state.
 - 2026-10-30 — (no page) — editors hide the bottom tabs panel + divider when the tab list is empty (generic binary): IntelliJ `VerticalSplitPanel(showSouthPanel)`, web `HexanaPanel(onTabsEmptyChange)`. With no tabs the script "+" was already unreachable in both hosts.
+- 2026-11-02 — `entities/file-parser-associations` — AI-review fixes: panel display override, web liveProvider keying, class/DEX tabs under forced generic, dialog row keys, `..foo` keys in VS Code, off-EDT IntelliJ rebuild, Structure view refresh, serialized + atomic association writes.

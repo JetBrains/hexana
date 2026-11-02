@@ -228,10 +228,27 @@ class HexanaFileEditor(
      * built, or `null` for automatic detection. Declared before [init] for the reason
      * [wasmDiffScope] is: [initPanel] assigns it during construction.
      */
+    @Volatile
     private var parserOverride: BinaryParser? = null
 
     /** Whether [parserOverride] could not read the bytes, so detection was used instead. */
+    @Volatile
     private var parserOverrideFailed: Boolean = false
+
+    /**
+     * Called on the EDT after a changed association replaced [binaryProvider]. The Structure
+     * view model registers here: it is built from the provider of its time and would
+     * otherwise keep showing, and navigating, regions of the one before.
+     */
+    private val providerChangeListeners = CopyOnWriteArrayList<() -> Unit>()
+
+    internal fun addProviderChangeListener(listener: () -> Unit) {
+        providerChangeListeners += listener
+    }
+
+    internal fun removeProviderChangeListener(listener: () -> Unit) {
+        providerChangeListeners -= listener
+    }
 
     /** Gutter model; null until identity is resolved (async, off-EDT). */
     val gutterMarksModelFlow: MutableStateFlow<GutterMarksModel?> = MutableStateFlow(null)
@@ -311,25 +328,28 @@ class HexanaFileEditor(
         val providerState = mutableStateOf(binaryProvider!!)
         val parserChoiceState = mutableStateOf(parserChoice())
         if (associationKey != null) {
+            // `collect` handles one change at a time and the StateFlow conflates the rest, so
+            // rebuilds never overlap and a burst of changes ends on the latest choice.
             editorScope.launch {
                 associations.changes.collect {
                     val chosen = associations.associations.parserFor(associationKey)
                     if (chosen == parserOverride) return@collect
+                    parserOverride = chosen
+                    parserOverrideFailed = false
+                    // Built here, on the editor's IO scope: resolving can inflate a gzip stream
+                    // of up to 128 MiB and run a parser's constructor, neither of which belongs
+                    // on the EDT. Only publishing the result does.
+                    val rebuilt = resolveProvider(myFile.name, inMemoryBuffer, commonBuffer, sourcePath)
                     withContext(Dispatchers.EDT) {
-                        // Re-checked on the EDT: two changes in quick succession must not
-                        // rebuild twice, or rebuild to a choice already superseded.
-                        val latest = associations.associations.parserFor(associationKey)
-                        if (latest == parserOverride) return@withContext
-                        parserOverride = latest
-                        parserOverrideFailed = false
                         // A WAT document belongs to the provider it was printed from.
                         myTextEditor?.let { myClosedTextEditors.add(it) }
                         myTextEditor = null
-                        binaryProvider = resolveProvider(myFile.name, inMemoryBuffer, commonBuffer, sourcePath)
+                        binaryProvider = rebuilt
                         // The old tab list's index means nothing in the new one.
                         stateHolder.setSelectedTab(0)
-                        providerState.value = binaryProvider!!
+                        providerState.value = rebuilt
                         parserChoiceState.value = parserChoice()
+                        providerChangeListeners.forEach { it() }
                     }
                 }
             }

@@ -114,9 +114,32 @@ private class HexanaStructureViewModel(
 ) : StructureViewModel.ElementInfoProvider, StructureViewModel {
 
     private val modelListeners = mutableListOf<ModelListener>()
-    private val root = buildRoot()
 
-    private fun buildRoot(): HexanaStructureElement {
+    @Volatile
+    private var root = buildRoot(binaryProvider)
+
+    /**
+     * A parser chosen for the file replaces the editor's provider under an open Structure
+     * view; rebuilding the root from the new one keeps the tree in step with the editor.
+     */
+    private val onProviderChanged: () -> Unit = {
+        editor.binaryProvider?.let { provider ->
+            root = buildRoot(provider)
+            notifyModelChanged()
+        }
+    }
+
+    init {
+        editor.addProviderChangeListener(onProviderChanged)
+    }
+
+    private fun notifyModelChanged() {
+        synchronized(modelListeners) {
+            modelListeners.forEach { it.onModelChanged() }
+        }
+    }
+
+    private fun buildRoot(binaryProvider: BinaryProvider): HexanaStructureElement {
         val rootElement = HexanaStructureElement(
             name = editor.file?.name ?: "Binary",
             range = IntRange.EMPTY,
@@ -134,9 +157,8 @@ private class HexanaStructureViewModel(
             }
             rootElement.setResolvedChildren(children)
             com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
-                synchronized(modelListeners) {
-                    modelListeners.forEach { it.onModelChanged() }
-                }
+                // A root replaced while this one resolved is no longer on screen.
+                if (root === rootElement) notifyModelChanged()
             }
         }
         return rootElement
@@ -162,7 +184,9 @@ private class HexanaStructureViewModel(
     }
     override fun addEditorPositionListener(listener: com.intellij.ide.structureView.FileEditorPositionListener) {}
     override fun removeEditorPositionListener(listener: com.intellij.ide.structureView.FileEditorPositionListener) {}
-    override fun dispose() {}
+    override fun dispose() {
+        editor.removeProviderChangeListener(onProviderChanged)
+    }
     override fun getCurrentEditorElement(): Any? = null
 }
 

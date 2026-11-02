@@ -42,6 +42,15 @@ class FileAssociationsStoreTest {
     }
 
     @Test
+    fun `writes leave no temporary files behind`() {
+        FileAssociationsStore.write(basePath, FileAssociations(mapOf("a.bin" to BinaryParser.ELF)))
+        FileAssociationsStore.write(basePath, FileAssociations(mapOf("a.bin" to BinaryParser.PE)))
+        val names = File(basePath, ".hexana").list()!!.sorted()
+        assertEquals(listOf("file_associations.json", "file_associations.schema.json"), names)
+        assertEquals(BinaryParser.PE, FileAssociationsStore.read(basePath).parserFor("a.bin"))
+    }
+
+    @Test
     fun `an unchanged save does not touch the committed file`() {
         val associations = FileAssociations(mapOf("a.bin" to BinaryParser.PE))
         val file = FileAssociationsStore.write(basePath, associations)

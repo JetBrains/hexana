@@ -430,12 +430,12 @@ fun HexanaPanel(
     Div({
         classes("hexana-panel")
         style {
-            if (tabsEmpty) display(DisplayStyle.None)
             property("border-top", "1px solid var(--hexana-border, #333)")
             property("flex", "0 0 auto")
             height(heightPx.px)
             property("min-height", "80px")
-            display(DisplayStyle.Flex)
+            // One declaration: a later `display` in the same block would override `none`.
+            display(if (tabsEmpty) DisplayStyle.None else DisplayStyle.Flex)
             property("flex-direction", "column")
             property("overflow", "hidden")
         }

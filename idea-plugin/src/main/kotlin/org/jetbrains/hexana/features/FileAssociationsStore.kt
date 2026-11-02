@@ -8,6 +8,9 @@ import org.jetbrains.hexana.shared.features.parseFileAssociations
 import org.jetbrains.hexana.shared.features.serializeFileAssociations
 import org.jetbrains.hexana.shared.features.serializeFileAssociationsSchema
 import java.io.File
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 /**
  * Reads and writes `.hexana/file_associations.json` inside a project directory.
@@ -50,9 +53,26 @@ object FileAssociationsStore {
         return file
     }
 
+    /**
+     * Written to a sibling and moved into place, so a reader never sees half a file. The VS
+     * Code extension watches the same path and reads it as soon as it changes, and a
+     * truncated file parses as "nothing associated" — every open editor would flip to
+     * automatic detection and back.
+     */
     private fun writeIfChanged(file: File, content: String) {
         if (file.isFile && runCatching { file.readText() }.getOrNull() == content) return
-        file.parentFile?.mkdirs()
-        file.writeText(content)
+        val directory = file.parentFile
+        directory?.mkdirs()
+        val temp = File.createTempFile(".${file.name}", ".tmp", directory)
+        try {
+            temp.writeText(content)
+            try {
+                Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
+        } finally {
+            temp.delete()
+        }
     }
 }
