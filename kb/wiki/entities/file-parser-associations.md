@@ -78,6 +78,18 @@ File format (keys sorted, layout fixed so re-saves are byte-stable):
   `open-file-associations-file` (badge menu's "Edit File Associations…": opens the JSON beside the
   binary, creating it and the schema first if missing; IntelliJ opens the settings page instead); command
   `hexana.configureFileAssociations` (needs an open Hexana editor, like the runtimes dialog).
+- **An association also routes the file to Hexana in VS Code.** A file nothing claims (no
+  `customEditors` extension, no recognized magic) opens in VS Code's text editor; the tab
+  interceptor in `NativeBinaryFileTypeDetector.ts` now reopens it in Hexana when
+  `hasFileAssociation` (`WasmEditorProvider.ts`) finds its key in `file_associations.json` —
+  checked before the magic sniff and the `.class` guard. No `workbench.editorAssociations` glob
+  is persisted for it (that would be `*.bin` machine-wide); the JSON is consulted on each open.
+  Because nothing is persisted, every open starts as a text tab, so the detector's loop guard
+  (`reopenedUris`) may only cover the reopen in flight for these files — a permanent entry (fine
+  for sniffed files, whose later opens skip the text tab) made only the first open work.
+  The same fix found `KNOWN_EXTENSIONS` listing `.bin`, which the selector never claimed, so no
+  `.bin` — associated or a magic-identifiable ELF — was ever rerouted. The list is now pinned to
+  `package.json` by `binaryFormatRouting.test.ts`.
 - **"Open As Protobuf Message" beats an association** — it is an explicit action on a synthetic file.
 - **`.gz` / `.tgz`**: the choice applies to the inflated content. A `.tgz` with a choice skips the
   tar shortcut and goes through the generic gzip branch with the name rewritten to `.tar`.

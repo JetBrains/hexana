@@ -243,6 +243,43 @@ function fileAssociationKey(uri: vscode.Uri): string {
 }
 
 /**
+ * Normalizes a key as written in `.hexana/file_associations.json`; mirrors
+ * `normalizeFileAssociationKey` in `FileAssociations.kt` for the part that matters here, so a
+ * hand-written `./fw\\boot.img` still matches the file it names.
+ */
+function normalizeAssociationKey(key: string): string {
+    let normalized = key.trim().replace(/\\/g, "/");
+    while (normalized.startsWith("./")) {
+        normalized = normalized.substring(2);
+    }
+    return normalized.replace(/\/+$/, "");
+}
+
+/**
+ * Whether `.hexana/file_associations.json` names a parser for [uri] - so the file belongs in
+ * Hexana even when nothing else would route it there. Read on each call, so an association
+ * made a moment ago counts. Anything unreadable or malformed means no.
+ *
+ * Only the key is looked at, not the parser: the webview owns the format and decides what an
+ * entry means, including a `user:` provider whose script is not loaded.
+ */
+export async function hasFileAssociation(uri: vscode.Uri): Promise<boolean> {
+    const key = fileAssociationKey(uri);
+    if (!key) {
+        return false;
+    }
+    try {
+        const associations = JSON.parse(await readFileAssociationsJson(uri))?.associations;
+        if (!associations || typeof associations !== "object" || Array.isArray(associations)) {
+            return false;
+        }
+        return Object.keys(associations).some((entry) => normalizeAssociationKey(entry) === key);
+    } catch {
+        return false;
+    }
+}
+
+/**
  * Reads `.hexana/runtimes.json` from the workspace folder that governs [scope].
  *
  * Returns an empty string when there is no workspace, no file, or the file cannot be read.

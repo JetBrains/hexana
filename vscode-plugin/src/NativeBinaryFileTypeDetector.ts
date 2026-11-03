@@ -33,9 +33,14 @@ const COFF_MACHINE_TYPES = new Set([0x014C, 0x01C0, 0x01C4, 0x0200, 0x8664, 0xAA
  * do. The second, `option`-priority contribution matches `*`, but only to offer Hexana
  * under "Reopen Editor With…" — it never opens anything by itself, so it does not make
  * this list redundant.
+ *
+ * Must list exactly what that selector claims — `binaryFormatRouting.test.ts` compares the two.
+ * It once also listed `.bin`, which the selector never claimed, so every `.bin` opened as text
+ * and was then skipped here: an ELF named `.bin` was never rerouted, nor was a file
+ * `.hexana/file_associations.json` assigns.
  */
-const KNOWN_EXTENSIONS = new Set([
-    ".wasm", ".bin", ".elf", ".exe", ".so", ".o", ".a", ".dll", ".dylib",
+export const KNOWN_EXTENSIONS = new Set([
+    ".wasm", ".elf", ".exe", ".so", ".o", ".a", ".dll", ".dylib",
     ".jar", ".zip", ".war", ".apk", ".class", ".dex", ".arsc", ".resources", ".desc", ".protoset",
     ".pcap", ".cap", ".pcapng", ".parquet", ".arrow", ".arrows", ".pb",
     ".tar", ".tgz", ".gz",
@@ -243,7 +248,18 @@ function persistEditorAssociation(uri: vscode.Uri): void {
  * Files whose extensions are already covered by the `customEditors` selector in
  * `package.json` are skipped — they are handled by the normal editor association.
  */
-export function registerNativeBinaryDetector(context: vscode.ExtensionContext): void {
+export function registerNativeBinaryDetector(
+    context: vscode.ExtensionContext,
+    /**
+     * Whether `.hexana/file_associations.json` names a parser for the file. Such a file is
+     * Hexana's whatever its bytes look like - its format may be one no magic identifies, like a
+     * provider script's own - so it is reopened before any sniffing, and the `.class` guard does
+     * not apply. No `workbench.editorAssociations` entry is persisted for it: the pattern would be
+     * `*.<ext>`, sending every such file on the machine to Hexana, when the associations file is
+     * already the per-file record and is consulted on every open.
+     */
+    hasFileAssociation: (uri: vscode.Uri) => Promise<boolean> = async () => false,
+): void {
     // Track URIs we've already attempted to re-open to avoid infinite loops.
     const reopenedUris = new Set<string>();
 
@@ -264,12 +280,27 @@ export function registerNativeBinaryDetector(context: vscode.ExtensionContext): 
                 const ext = getExtension(uri);
                 if (ext !== "" && KNOWN_EXTENSIONS.has(ext)) continue;
 
-                // Guard: skip .class files for the CA FE BA BE ambiguity.
-                if (ext === ".class") continue;
-
                 // Avoid re-triggering on the same file.
                 const key = uri.toString();
                 if (reopenedUris.has(key)) continue;
+
+                if (await hasFileAssociation(uri)) {
+                    // Guarded only while the reopen is in flight. Unlike a sniffed file, nothing
+                    // is persisted for an associated one, so every later open lands in a text tab
+                    // again and has to be rerouted again; a permanent entry would skip it from the
+                    // second open on. The reopened tab is a custom-editor tab, so it cannot loop.
+                    reopenedUris.add(key);
+                    try {
+                        await vscode.window.tabGroups.close(tab);
+                        await vscode.commands.executeCommand("vscode.openWith", uri, HEXANA_VIEW_TYPE);
+                    } finally {
+                        reopenedUris.delete(key);
+                    }
+                    continue;
+                }
+
+                // Guard: skip .class files for the CA FE BA BE ambiguity.
+                if (ext === ".class") continue;
 
                 // Read a small prefix to check magic bytes.
                 try {

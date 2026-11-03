@@ -29,6 +29,27 @@ describe('binary format routing', function () {
         clearModuleCache();
     });
 
+    describe('KNOWN_EXTENSIONS', function () {
+        it('lists exactly what the default-priority customEditors selector claims', function () {
+            // Extensions in the list are skipped on the assumption VS Code already opened them
+            // in Hexana; one the selector does not claim opens as text and is then never
+            // rerouted — which is how every `.bin` came to stay in the text editor.
+            const {KNOWN_EXTENSIONS} = require('../../../src/NativeBinaryFileTypeDetector') as {
+                KNOWN_EXTENSIONS: Set<string>;
+            };
+            const manifest = extensionManifest();
+            const editor = manifest.contributes.customEditors.find(
+                (candidate: {priority: string}) => candidate.priority === 'default',
+            );
+            const pattern: string = editor.selector[0].filenamePattern;
+            const claimed = pattern.replace(/^\{|\}$/g, '').split(',')
+                .map((glob) => glob.replace(/^\*/, ''))
+                // `*.tar.gz` is matched by `.gz`; the detector compares single extensions.
+                .filter((ext) => ext !== '.tar.gz');
+            expect([...KNOWN_EXTENSIONS].sort()).to.deep.equal([...new Set(claimed)].sort());
+        });
+    });
+
     describe('isNativeBinary', function () {
         it('recognizes Parquet and Arrow IPC files by their magic', function () {
             const {isNativeBinary} = requireDetector();
@@ -83,6 +104,21 @@ describe('binary format routing', function () {
 function withMagic(magic: string): Uint8Array {
     const head = Buffer.from(magic, 'binary');
     return new Uint8Array(Buffer.concat([head, Buffer.alloc(32), head]));
+}
+
+/** The extension's own package.json, found by walking up past the test project's. */
+function extensionManifest(): any {
+    let dir = __dirname;
+    for (;;) {
+        const candidate = path.join(dir, 'package.json');
+        if (fs.existsSync(candidate)) {
+            const manifest = JSON.parse(fs.readFileSync(candidate, 'utf-8'));
+            if (manifest.contributes?.customEditors) return manifest;
+        }
+        const parent = path.dirname(dir);
+        if (parent === dir) throw new Error('extension package.json not found');
+        dir = parent;
+    }
 }
 
 /** `parsing/native-fixtures/test-data/pe`, found by walking up to the repository root. */

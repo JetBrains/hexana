@@ -3,7 +3,7 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { registerWasmDebugAdapter } from "./WasmDebugAdapter";
 import { registerWasmDebugView } from "./WasmDebugView";
-import { WasmEditorProvider } from "./WasmEditorProvider";
+import { WasmEditorProvider, hasFileAssociation } from "./WasmEditorProvider";
 import type * as ExtensionLib from "./extension-lib";
 import { registerHexanaMcpServerCommands } from "./mcpServerDownloader";
 import { initWasiSdkManager, registerWasiSdkCommands } from "./wasiSdkManager";
@@ -84,7 +84,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     // Register content-based binary file type detection for extensionless files.
-    registerNativeBinaryDetector(context);
+    // A file .hexana/file_associations.json names opens in Hexana whatever its bytes look like.
+    registerNativeBinaryDetector(context, hasFileAssociation);
 
     // Ensure .wasm files are associated with the Hexana custom editor so that
     // VS Code does not show the "binary file not displayed" warning.  The
