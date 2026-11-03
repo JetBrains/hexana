@@ -1,4 +1,8 @@
-// Example provider script. Copy it to `.hexana/providers/` in a project, then pick
+// Example provider script, part of the demo project in examples/providers/: open that folder
+// in IntelliJ or VS Code and open firmware-image.bin, which ../file_associations.json already
+// assigns to this provider.
+//
+// To use it in a project of your own, copy it to `.hexana/providers/`, then pick
 // "ACME firmware image" from the format badge's parser menu on a firmware file (or add
 // `"path/to/image.bin": "user:acme-fw"` to `.hexana/file_associations.json`).
 //

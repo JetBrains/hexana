@@ -25,8 +25,18 @@ hexana.defineTab({           // = SliceSpec with appliesTo instead of formats
 });
 ```
 
-`hexana.has("providers")` / `has("tabs")` are true. Runnable example:
-`examples/providers/firmware-image.js` (exercised by `HexanaScriptProvidersTest`).
+`hexana.has("providers")` / `has("tabs")` are true.
+
+## Demo project
+
+`examples/providers/` is a self-contained project rather than a loose script: the script in its
+real home (`.hexana/providers/firmware-image.js`), a 144-byte `firmware-image.bin` in the made-up
+format it reads, and `.hexana/file_associations.json` assigning `user:acme-fw` to it. Open *that
+folder* as the project — scripts load from the opened project's root `.hexana/`, so the Hexana
+repo opened as a whole does not pick it up. `HexanaScriptProvidersTest` runs the script against
+the committed image (regions tile the file exactly) and pins the JSON to the serializer's output,
+so opening the demo and touching nothing leaves the tree clean. No schema file is committed: it
+lists the built-in parser ids and would go stale; the editors write it on the first save.
 
 ## Decisions worth remembering
 

@@ -168,3 +168,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-02 — `entities/file-parser-associations` — VS Code blinks: PDB loading gate now first-open only (previous provider kept while a replacement loads its PDB); divider moved into HexanaPanel.
 - 2026-11-02 — `entities/file-parser-associations` — "Edit File Associations…" in the badge menu: IntelliJ settings page, VS Code opens the JSON.
 - 2026-11-03 — `entities/scripted-binary-providers` — new: scripted binary providers and auto-attached tabs, assignable via file_associations.json, in IntelliJ and VS Code.
+- 2026-11-03 — `entities/scripted-binary-providers` — demo project examples/providers/ (script under .hexana/providers, firmware-image.bin, file_associations.json), tested.

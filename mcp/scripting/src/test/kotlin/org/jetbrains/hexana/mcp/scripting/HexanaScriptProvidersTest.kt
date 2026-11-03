@@ -149,19 +149,33 @@ class HexanaScriptProvidersTest {
     }
 
     @Test
-    fun theExampleProviderScriptParsesItsFormat() {
-        val example = java.io.File("../../examples/providers/firmware-image.js")
-        assertTrue(example.isFile, "missing ${example.absolutePath}")
-        // "FWIM", version 2, entry 0x8000, a 64-byte payload, then a 32-byte signature.
-        val image = java.nio.ByteBuffer.allocate(16 + 64 + 32).order(java.nio.ByteOrder.LITTLE_ENDIAN)
-            .put("FWIM".toByteArray()).putInt(2).putInt(0x8000).putInt(64).array()
-        val provider = GenericBinaryProvider(image.toCommonByteBuffer())
-        runner.openSession(HexanaScriptSource.Inline(example.readText(), example.name), provider).use { s ->
+    fun theExampleProviderScriptParsesTheExampleImage() {
+        // The demo project in examples/providers/: the script, and the image it is assigned to.
+        val demo = java.io.File("../../examples/providers")
+        val script = java.io.File(demo, ".hexana/providers/firmware-image.js")
+        val image = java.io.File(demo, "firmware-image.bin")
+        assertTrue(script.isFile && image.isFile, "missing demo files under ${demo.absolutePath}")
+        val provider = GenericBinaryProvider(image.readBytes().toCommonByteBuffer())
+        runner.openSession(HexanaScriptSource.Inline(script.readText(), script.name), provider).use { s ->
             assertTrue(s.initialResult.success, s.initialResult.diagnostics.toString())
             val regions = assertIs<ProviderParseOutcome.Ok>(s.runParse("user:acme-fw")).result.regions
-            assertEquals(listOf("Header" to 16L, "Payload" to 64L, "Signature" to 32L), regions.map { it.name to it.length })
+            // The regions tile the whole file, so none is dropped for lying outside it.
+            assertEquals(listOf("Header" to 16L, "Payload" to 96L, "Signature" to 32L), regions.map { it.name to it.length })
+            assertEquals(image.length(), regions.sumOf { it.length })
             val page = assertIs<SlicePageResult.Ok>(s.fetchPage("user:Header", 0, 10)).page
-            assertEquals("0x8000", page.rows[2].cells[1].text)
+            assertEquals(listOf("FWIM", "2", "0x8000", "96"), page.rows.map { it.cells[1].text })
         }
+    }
+
+    @Test
+    fun theDemoProjectAssignsTheExampleProvider() {
+        val text = java.io.File("../../examples/providers/.hexana/file_associations.json").readText()
+        val associations = org.jetbrains.hexana.shared.features.parseFileAssociations(text)
+        assertEquals(
+            org.jetbrains.hexana.shared.features.ParserRef.Scripted("user:acme-fw"),
+            associations.parserFor("firmware-image.bin"),
+        )
+        // Committed exactly as the editors write it, so opening the demo leaves it unchanged.
+        assertEquals(org.jetbrains.hexana.shared.features.serializeFileAssociations(associations), text)
     }
 }
