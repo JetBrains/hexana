@@ -167,3 +167,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-02 — `entities/file-parser-associations` — IntelliJ blink on parser switch traced (frame-by-frame) to the sidecar-restore spinner gate; now first-open only.
 - 2026-11-02 — `entities/file-parser-associations` — VS Code blinks: PDB loading gate now first-open only (previous provider kept while a replacement loads its PDB); divider moved into HexanaPanel.
 - 2026-11-02 — `entities/file-parser-associations` — "Edit File Associations…" in the badge menu: IntelliJ settings page, VS Code opens the JSON.
+- 2026-11-03 — `entities/scripted-binary-providers` — new: scripted binary providers and auto-attached tabs, assignable via file_associations.json, in IntelliJ and VS Code.

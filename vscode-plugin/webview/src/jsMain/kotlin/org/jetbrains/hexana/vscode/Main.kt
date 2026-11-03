@@ -9,7 +9,9 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.shared.PdbCompanionLoader
 import org.jetbrains.hexana.shared.diff.BinaryDiffInput
+import org.jetbrains.hexana.shared.features.ParserRef
 import org.jetbrains.hexana.shared.features.parseFileAssociations
+import org.jetbrains.hexana.shared.scripting.PROVIDER_SCRIPTS_DIR
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.await
 
@@ -40,6 +42,8 @@ fun BinaryEditorApp() {
     var fileAssociationsJson by remember { mutableStateOf("") }
     var fileAssociationKey by remember { mutableStateOf("") }
     var openFileAssociationsRequest by remember { mutableStateOf(0) }
+    var providerScripts by remember { mutableStateOf<List<ProviderScriptSource>>(emptyList()) }
+    var providerScriptsUntrusted by remember { mutableStateOf(false) }
     // Row the host asked to select, e.g. for "Reveal in DEX" from an APK's editor.
     var tableRowSelection by remember { mutableStateOf<TableRowSelectionRequest?>(null) }
 
@@ -72,6 +76,14 @@ fun BinaryEditorApp() {
                     runtimeTargetsJson = message.runtimeTargetsJson
                     fileAssociationsJson = message.fileAssociationsJson
                     fileAssociationKey = message.fileAssociationKey
+                    message.providerScripts?.let { providerScripts = it }
+                    providerScriptsUntrusted = message.providerScriptsUntrusted
+                }
+                // Sent when a provider script is added, edited or removed, and when the
+                // workspace becomes trusted.
+                "provider-scripts-loaded" -> {
+                    providerScripts = message.providerScripts.orEmpty()
+                    providerScriptsUntrusted = message.providerScriptsUntrusted
                 }
                 // Sent after a parser is chosen from the format badge or the dialog, and
                 // whenever the file changes on disk. The provider below re-keys on the
@@ -222,11 +234,45 @@ fun BinaryEditorApp() {
             // does not reparse this one.
             val associations = remember(fileAssociationsJson) { parseFileAssociations(fileAssociationsJson) }
             val chosenParser = associations.parserFor(fileAssociationKey.ifBlank { null })
-            val forcedProvider = remember(bytes, filePath, chosenParser) {
-                chosenParser?.let { createBinaryProvider(it, buffer, sourcePath = filePath) }
+            // What the provider scripts register, learnt against an empty binary; re-evaluated
+            // only when a script changes, not when this file's choice does.
+            val providerCatalog = remember(providerScripts, providerScriptsUntrusted) {
+                loadProviderCatalog(providerScripts, providerScriptsUntrusted)
+            }
+            val scripted = (chosenParser as? ParserRef.Scripted)?.let { providerCatalog.provider(it.id)?.second?.info }
+            // The built-in parser the choice reads the file with: itself, or the one a scripted
+            // provider builds on.
+            val overrideParser = when (chosenParser) {
+                is ParserRef.Builtin -> chosenParser.parser
+                is ParserRef.Scripted -> scripted?.base
+                null -> null
+            }
+            val forcedProvider = remember(bytes, filePath, overrideParser) {
+                overrideParser?.let { createBinaryProvider(it, buffer, sourcePath = filePath) }
             }
             val provider = remember(bytes, filePath, fileName, forcedProvider) {
                 forcedProvider ?: createBinaryProvider(buffer, sourcePath = filePath, fileName = fileName)
+            }
+            val overrideFailure = when {
+                chosenParser is ParserRef.Scripted && scripted == null ->
+                    if (providerCatalog.untrusted) {
+                        "Provider scripts do not run in an untrusted workspace, so ${chosenParser.id} is not available."
+                    } else {
+                        "No script in $PROVIDER_SCRIPTS_DIR defines ${chosenParser.id}."
+                    }
+                overrideParser != null && forcedProvider == null ->
+                    if (scripted != null) {
+                        "${scripted.name} builds on the ${overrideParser.displayName} parser, which cannot read this file."
+                    } else {
+                        "The ${overrideParser.displayName} parser cannot read this file."
+                    }
+                else -> null
+            }
+            // What the scripts contribute to this file: the provider's regions, and the tabs
+            // that attach to it. Evaluated against the file itself, as on the JVM.
+            val scriptedInEffect = scripted?.takeIf { overrideFailure == null }
+            val providerBindings = remember(provider, providerCatalog, scriptedInEffect) {
+                bindBrowserProviderScripts(providerCatalog, provider, fileName, filePath, scriptedInEffect?.id)
             }
 
             // A PE image's PDB lives next to it. Load it before any tab is built, so the IL view,
@@ -249,8 +295,8 @@ fun BinaryEditorApp() {
             // file — the one already on screen stays there instead of a full-page loading text,
             // which made every switch to or from a PE provider blink. Only the first provider
             // for these bytes has nothing to fall back to.
-            val current = provider to (chosenParser != null && forcedProvider == null)
-            val lastShown = remember(bytes) { arrayOfNulls<Pair<BinaryProvider, Boolean>>(1) }
+            val current = ShownEditor(provider, overrideFailure ?: providerBindings.error, providerBindings)
+            val lastShown = remember(bytes) { arrayOfNulls<ShownEditor>(1) }
             val shown = if (pdbCandidates.isEmpty() || pdbReadyFor === provider) current else lastShown[0]
             if (shown == null) {
                 Div({ classes("loading") }) {
@@ -259,10 +305,11 @@ fun BinaryEditorApp() {
                 return@CompositionLocalProvider
             }
             SideEffect { lastShown[0] = shown }
-            val (shownProvider, shownOverrideFailed) = shown
+            val shownProvider = shown.provider
 
-            val extraTabs = remember(bytes, shownProvider) {
-                computeExtraTabs(buffer, shownProvider)
+            val extraTabs = remember(bytes, shownProvider, shown.bindings) {
+                computeExtraTabs(buffer, shownProvider) +
+                    shown.bindings.tabs.map(::providerScriptPanelTab)
             }
 
             // Remembered for the same reason as the buffer above: the panel
@@ -314,13 +361,27 @@ fun BinaryEditorApp() {
                 openRuntimeTargetsRequest = openRuntimeTargetsRequest,
                 fileAssociationsJson = fileAssociationsJson,
                 fileAssociationKey = fileAssociationKey,
-                parserOverrideFailed = shownOverrideFailed,
+                parserOverrideFailure = shown.failure,
+                parserLabelOverride = shown.bindings.provider?.name,
+                scriptedProviders = providerCatalog.providers,
+                scriptStructureRanges = shown.bindings.ranges,
                 openFileAssociationsRequest = openFileAssociationsRequest,
                 tableRowSelection = tableRowSelection,
             )
         }
     }
 }
+
+/**
+ * What the editor is showing: the provider, why its parser choice is not fully in effect (or
+ * `null`), and what the provider scripts contribute — kept together so a replacement waiting
+ * for its PDB never mixes one provider's tabs with another's label.
+ */
+private class ShownEditor(
+    val provider: BinaryProvider,
+    val failure: String?,
+    val bindings: BrowserProviderBindings,
+)
 
 /**
  * Reads [candidates] in order through the extension host and attaches the first matching PDB.

@@ -11,7 +11,7 @@ import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
 import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
 import kotlinx.coroutines.flow.StateFlow
-import org.jetbrains.hexana.providers.BinaryParser
+import org.jetbrains.hexana.shared.features.ParserRef
 import org.jetbrains.hexana.shared.features.FILE_ASSOCIATIONS_PATH
 import org.jetbrains.hexana.shared.features.FileAssociations
 import org.jetbrains.hexana.shared.features.fileAssociationKey
@@ -63,7 +63,7 @@ class FileAssociationsService(private val project: Project) : Disposable {
     }
 
     /** The parser chosen for [file], or `null` when it is detected automatically. */
-    fun parserFor(file: VirtualFile): BinaryParser? = associations.parserFor(keyFor(file))
+    fun parserFor(file: VirtualFile): ParserRef? = associations.parserFor(keyFor(file))
 
     /**
      * Serializes every read-modify-write of the file and of the cache behind [associations].
@@ -75,7 +75,7 @@ class FileAssociationsService(private val project: Project) : Disposable {
     private val lock = Any()
 
     /** Chooses [parser] for [file], or returns it to automatic detection when `null`. */
-    fun setParser(file: VirtualFile, parser: BinaryParser?) {
+    fun setParser(file: VirtualFile, parser: ParserRef?) {
         val key = keyFor(file) ?: return
         update { it.with(key, parser) }
     }
@@ -89,7 +89,8 @@ class FileAssociationsService(private val project: Project) : Disposable {
         val basePath = project.basePath ?: return
         val file = synchronized(lock) {
             val next = transform(associations)
-            FileAssociationsStore.write(basePath, next).also { tracker.recordSave(next) }
+            val providers = ProviderScriptsService.getInstance(project).catalog.value.providers
+            FileAssociationsStore.write(basePath, next, providers).also { tracker.recordSave(next) }
         }
         // Outside the lock: a synchronous refresh can wait for a write action on the EDT, and
         // the EDT may itself be waiting for the lock in [reload], called from a VFS listener.

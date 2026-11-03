@@ -38,6 +38,7 @@ import org.jetbrains.hexana.shared.scripting.ConsoleSeverity
 import org.jetbrains.hexana.shared.scripting.ScriptAnchor
 import org.jetbrains.hexana.shared.scripting.ScriptConsoleEntry
 import org.jetbrains.hexana.shared.scripting.SliceRegistrationInfo
+import org.jetbrains.hexana.mcp.scripting.ScriptTabBinding
 import org.jetbrains.hexana.ui.components.Table
 import org.jetbrains.hexana.ui.components.TableCellValue
 import org.jetbrains.hexana.ui.components.TableColumn
@@ -187,6 +188,24 @@ internal fun ScriptCompoundView(
             }
         }
     }
+}
+
+/**
+ * A `hexana.defineTab` tab shown as one of the editor's own tabs: the same paged table a
+ * script tab renders for a slice, driven by the provider script's session. The session
+ * belongs to the editor's script bindings, which close it — not this composable.
+ */
+@Composable
+internal fun ProviderTabContent(binding: ScriptTabBinding, hexState: HexViewStateHolder?) {
+    val model = remember(binding) { SliceTabModel(binding.tab) }
+    SliceTabContent(
+        session = binding.session,
+        model = model,
+        sliceInfo = binding.tab,
+        hexState = hexState,
+        // A provider tab has no Log tab beside it; console output is not shown.
+        onConsoleFetched = {},
+    )
 }
 
 @Composable

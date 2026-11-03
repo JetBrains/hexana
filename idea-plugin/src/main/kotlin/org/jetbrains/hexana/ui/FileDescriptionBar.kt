@@ -73,6 +73,7 @@ import org.jetbrains.hexana.ui.panel.ProgramArgsDialog
 import org.jetbrains.hexana.ui.panel.WasmRunDialog
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.jetbrains.hexana.features.RuntimeTargetsService
+import org.jetbrains.hexana.shared.features.ParserRef
 import org.jetbrains.hexana.features.WasmFeatureCatalogService
 import org.jetbrains.hexana.shared.COMPATIBILITY_TAB_NAME
 import org.jetbrains.hexana.shared.features.unsupportedProposalsSummary
@@ -288,7 +289,9 @@ private fun NormalModeContent(
     filePath: String? = null,
     parserChoice: ParserChoice? = null,
 ) {
-    val moduleType = fileTypeDescription(binaryProvider, fileName, parserChoice?.chosen)
+    val moduleType = fileTypeDescription(
+        binaryProvider, fileName, (parserChoice?.chosen as? ParserRef.Builtin)?.parser,
+    )
 
     val badgeBackground = if (JewelTheme.isDark) Color(0xFF4D4D4D) else Color(0xFFE0E0E0)
     val badgeForeground = if (JewelTheme.isDark) Color.White else Color.Black

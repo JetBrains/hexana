@@ -544,6 +544,65 @@ interface SliceSpec {
   ): SliceRowsResult;
 }
 
+/**
+ * Full specification passed to hexana.defineTab(): a slice that attaches itself to
+ * every binary whose format or provider is listed in appliesTo, instead of living
+ * inside the script tab that defined it. Tabs are normally declared in a provider
+ * script under .hexana/providers/.
+ */
+interface TabSpec extends Omit<SliceSpec, "formats"> {
+  /**
+   * Where the tab appears: built-in parser ids as used in
+   * .hexana/file_associations.json ("elf", "pe", "wasm", "generic", ...), user:
+   * provider ids from hexana.defineProvider(), or "*" for every binary. Required.
+   */
+  appliesTo: string[];
+}
+
+/** Built-in parser id a provider can build on, as used in .hexana/file_associations.json. */
+type BuiltinParserId =
+  "generic" | "wasm" | "wasm-component" | "elf" | "macho" | "pe" | "coff" | "archive" | "zip" | "tar" | "class" | "dex" | "arsc" | "dotnet-resources" | "pdb" | "portable-pdb" | "pcap" | "protobuf" | "protobuf-message" | "parquet" | "arrow";
+
+/** One region reported by a provider's parse(). */
+interface ProviderRegion {
+  /** Label shown in the hex view and the Structure view. */
+  name: string;
+  /** Byte offset of the region in the file. */
+  offset: number;
+  /** Length in bytes. Regions that are empty or extend past the end of the file are dropped. */
+  length: number;
+  /** Name of a tab the region corresponds to, so section navigation can switch to it. */
+  tab?: string;
+}
+
+/** Return value of a provider's parse(): an object with regions, or the array of regions itself. */
+type ProviderParseResult = { regions?: ProviderRegion[] } | ProviderRegion[] | undefined;
+
+/**
+ * Full specification passed to hexana.defineProvider(). A provider is assigned to
+ * files in .hexana/file_associations.json under its id, or from the format badge's
+ * parser menu.
+ */
+interface ProviderSpec {
+  /** Unique id; must start with "user:". This is what file_associations.json refers to. */
+  id: string;
+  /** Label shown in the format badge and the parser menu. */
+  name: string;
+  /** Optional description shown alongside the name. */
+  description?: string;
+  /**
+   * Built-in parser the file is read with first. Its tabs stay, and parse() receives
+   * its view of the file as binary. Defaults to "generic" (raw bytes).
+   */
+  base?: BuiltinParserId;
+  /**
+   * Called once each time a file opens with this provider. Returns the regions that
+   * tint the hex view and fill the Structure view. If it throws, the file still opens
+   * with the base parser and the format badge shows the error.
+   */
+  parse?(binary: HexanaBinary): ProviderParseResult;
+}
+
 /** Severity for a check finding emitted by report.fail/warn/info. */
 type CheckSeverity = "error" | "warning" | "info";
 
@@ -616,6 +675,26 @@ interface HexanaApi {
    */
   defineSlice(spec: SliceSpec): void;
   /**
+   * Registers a table tab that attaches to every binary listed in appliesTo. The name
+   * must start with "user:". Registering the same name twice in one script is an error.
+   */
+  defineTab(spec: TabSpec): void;
+  /**
+   * Registers a named binary provider. The id must start with "user:". Providers are
+   * loaded from the scripts in .hexana/providers/ and assigned to files in
+   * .hexana/file_associations.json or from the format badge's parser menu.
+   *
+   * @example
+   * hexana.defineProvider({
+   *   id: "user:acme-fw",
+   *   name: "ACME firmware",
+   *   parse(binary) {
+   *     return { regions: [{ name: "Header", offset: 0, length: 64 }] };
+   *   },
+   * });
+   */
+  defineProvider(spec: ProviderSpec): void;
+  /**
    * Registers a binary check. The id must start with "user:". Registering the same
    * id twice in one script is an error. The run() callback is called after the
    * collection pass and receives a report object for emitting findings.
@@ -633,7 +712,7 @@ interface HexanaApi {
   readonly api: number;
   /**
    * Returns true when the named feature is available.
-   * Recognised values: "slices", "checks"; in the test-suite profile
+   * Recognised values: "slices", "checks", "tabs", "providers"; in the test-suite profile
    * (see the suite declarations below) has("suite") is true, and it is
    * false everywhere else.
    */

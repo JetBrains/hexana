@@ -95,6 +95,60 @@ const FILE_ASSOCIATIONS_FILE = "file_associations.json";
 const FILE_ASSOCIATIONS_SCHEMA_FILE = "file_associations.schema.json";
 
 /**
+ * Directory inside [HEXANA_PROJECT_DIR] whose `*.js` files define binary providers and tabs
+ * (`hexana.defineProvider` / `hexana.defineTab`). Mirrors `PROVIDER_SCRIPTS_DIR` in
+ * `plugins-shared/.../shared/scripting/ScriptProviders.kt`. The webview evaluates them; this
+ * side only reads them, and only in a trusted workspace.
+ */
+const PROVIDER_SCRIPTS_DIR = "providers";
+
+/** One provider script as sent to the webview. */
+interface ProviderScriptSource {
+    path: string;
+    text: string;
+}
+
+/**
+ * Reads the provider scripts governing [scope], in name order. Nothing in an untrusted
+ * workspace: these scripts run on their own whenever a binary opens, unlike a script tab the
+ * user adds, so opening a cloned repository must not be enough to run its code.
+ */
+async function readProviderScripts(scope?: vscode.Uri): Promise<{ scripts: ProviderScriptSource[]; untrusted: boolean }> {
+    const folder = runtimeTargetsFolder(scope);
+    if (!folder) {
+        return { scripts: [], untrusted: false };
+    }
+    const directory = vscode.Uri.joinPath(folder.uri, HEXANA_PROJECT_DIR, PROVIDER_SCRIPTS_DIR);
+    let entries: [string, vscode.FileType][];
+    try {
+        entries = await vscode.workspace.fs.readDirectory(directory);
+    } catch {
+        return { scripts: [], untrusted: false };
+    }
+    const names = entries
+        .filter(([name, type]) => type === vscode.FileType.File && name.endsWith(".js"))
+        .map(([name]) => name)
+        .sort();
+    if (names.length === 0) {
+        return { scripts: [], untrusted: false };
+    }
+    if (!vscode.workspace.isTrusted) {
+        return { scripts: [], untrusted: true };
+    }
+    const decoder = new TextDecoder("utf-8");
+    const scripts: ProviderScriptSource[] = [];
+    for (const name of names) {
+        const file = vscode.Uri.joinPath(directory, name);
+        try {
+            scripts.push({ path: file.fsPath, text: decoder.decode(await vscode.workspace.fs.readFile(file)) });
+        } catch {
+            // Unreadable right now (mid-save, deleted): skipped; the watcher brings it back.
+        }
+    }
+    return { scripts, untrusted: false };
+}
+
+/**
  * The workspace folder whose `.hexana/runtimes.json` governs the binary at [scope].
  *
  * A multi-root workspace holds one settings file per folder, so the folder the *file* lives
@@ -759,7 +813,12 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 this.watchRuntimeTargets();
                 void this.pushRuntimeTargets();
                 void this.pushFileAssociations();
+                void this.pushProviderScripts();
             }),
+        );
+        // Trusting the workspace is what lets provider scripts run; nothing else changes.
+        context.subscriptions.push(
+            vscode.workspace.onDidGrantWorkspaceTrust(() => void this.pushProviderScripts()),
         );
         // Registered once, rather than per rebuild, so repeated folder changes do not pile up
         // dead disposables in the extension context.
@@ -792,6 +851,16 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             associationsWatcher.onDidChange(pushAssociations);
             associationsWatcher.onDidDelete(pushAssociations);
             this.runtimeTargetsWatchers.push(associationsWatcher);
+
+            // And for the provider scripts: an edit re-evaluates them in every open editor.
+            const scriptsWatcher = vscode.workspace.createFileSystemWatcher(
+                new vscode.RelativePattern(folder, `${HEXANA_PROJECT_DIR}/${PROVIDER_SCRIPTS_DIR}/*.js`),
+            );
+            const pushScripts = () => void this.pushProviderScripts();
+            scriptsWatcher.onDidCreate(pushScripts);
+            scriptsWatcher.onDidChange(pushScripts);
+            scriptsWatcher.onDidDelete(pushScripts);
+            this.runtimeTargetsWatchers.push(scriptsWatcher);
         }
     }
 
@@ -820,6 +889,25 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             void panel.webview.postMessage({
                 type: "runtime-targets-loaded",
                 runtimeTargetsJson: await json,
+            });
+        }
+    }
+
+    /** Sends every open webview the provider scripts that govern its own file. */
+    private async pushProviderScripts(): Promise<void> {
+        const byFolder = new Map<string, Promise<{ scripts: ProviderScriptSource[]; untrusted: boolean }>>();
+        for (const [panel, uri] of this.openWebviews) {
+            const key = runtimeTargetsFolder(uri)?.uri.toString() ?? "";
+            let loaded = byFolder.get(key);
+            if (loaded === undefined) {
+                loaded = readProviderScripts(uri);
+                byFolder.set(key, loaded);
+            }
+            const { scripts, untrusted } = await loaded;
+            void panel.webview.postMessage({
+                type: "provider-scripts-loaded",
+                providerScripts: scripts,
+                providerScriptsUntrusted: untrusted,
             });
         }
     }
@@ -1012,6 +1100,9 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     fileAssociationsJson: await readFileAssociationsJson(document.uri),
                     fileAssociationKey: fileAssociationKey(document.uri),
                 };
+                const { scripts: providerScripts, untrusted } = await readProviderScripts(document.uri);
+                loadMsg.providerScripts = providerScripts;
+                loadMsg.providerScriptsUntrusted = untrusted;
                 if (document.displayName && document.displayName !== path.basename(document.uri.fsPath)) {
                     loadMsg.decompressed = true;
                 }

@@ -69,6 +69,9 @@ import org.jetbrains.hexana.features.WasmRuntimeCompatibilityConfigurable
 import org.jetbrains.hexana.providers.NativeBinaryProvider
 import org.jetbrains.hexana.shared.COMPATIBILITY_TAB_NAME
 import org.jetbrains.hexana.shared.PROBLEMS_TAB_NAME
+import org.jetbrains.hexana.mcp.scripting.ScriptTabBinding
+import org.jetbrains.hexana.ui.panel.ProviderTabContent
+import org.jetbrains.hexana.ui.panel.displayName
 import org.jetbrains.hexana.shared.CLR_IL_TAB_NAME
 import org.jetbrains.hexana.shared.DEX_SMALI_TAB_NAME
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
@@ -115,6 +118,10 @@ internal fun BinaryEditorView(
     filePath: String? = null,
     /** Turns the format badge into a parser picker; see [ParserChoice]. */
     parserChoice: ParserChoice? = null,
+    /** Tabs `hexana.defineTab` attached to this file, shown after the built-in ones. */
+    scriptTabs: List<ScriptTabBinding> = emptyList(),
+    /** Regions a scripted provider's `parse()` reported, tinted on top of the provider's own. */
+    scriptStructureRanges: List<StructureRange> = emptyList(),
     parentFileName: String? = null,
     onNavigateToParent: (() -> Unit)? = null,
     wasmFunctionNavTargetFlow: MutableStateFlow<WasmFunctionNavTarget?> = remember { MutableStateFlow(null) },
@@ -388,10 +395,18 @@ internal fun BinaryEditorView(
         LaunchedEffect(panels) {
             decompiledContentPanelFlow.collect { decompiled ->
                 if (decompiled != null && panels.none { it === decompiled }) {
-                    val scriptStart = panels.indexOfFirst { it is ScriptPanel }.takeIf { it >= 0 } ?: panels.size
+                    val scriptStart = panels.indexOfFirst { it.isAppended() }.takeIf { it >= 0 } ?: panels.size
                     panels.add(scriptStart, decompiled)
                 }
             }
+        }
+        // Provider-script tabs follow the scripts, not the provider: they change when a
+        // script is edited, so they are swapped in place rather than rebuilt with the list.
+        // Placed after the built-in tabs and before the user's own script tabs.
+        LaunchedEffect(panels, scriptTabs) {
+            panels.removeAll { it is ProviderTabPanel }
+            val insertAt = panels.indexOfFirst { it is ScriptPanel }.takeIf { it >= 0 } ?: panels.size
+            panels.addAll(insertAt, scriptTabs.map { binding -> ProviderTabPanel(binding, state) })
         }
         // Publish the live tab names so non-composition observers (the UI-test
         // probe) see what is actually rendered, including placeholder swaps.
@@ -754,6 +769,7 @@ internal fun BinaryEditorView(
                 Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
                     Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                         HexViewer(
+                            extraStructureRanges = scriptStructureRanges,
                             binaryProvider = liveProvider,
                             state = state,
                             focusRequester = hexFocusRequester,
@@ -1198,15 +1214,29 @@ private fun NativeBinaryProvider.commonNativePanels(
  * panel whose name differs (a promoted "Group: Sub" grouped tab) still lands
  * in its placeholder's slot. Script panels are never touched.
  */
+/**
+ * A tab a provider script attached with `hexana.defineTab`, paged from its live session.
+ * Not closable: it belongs to the project's scripts, not to this file.
+ */
+private class ProviderTabPanel(binding: ScriptTabBinding, state: HexViewStateHolder) :
+    Panel(binding.tab.displayName(), { ProviderTabContent(binding, state) })
+
+/**
+ * Panels appended after the format's own — provider-script tabs, then the user's script
+ * tabs. Placeholder resolution never matches them, so a script tab named like a built-in
+ * one is never replaced by it, and new format tabs are inserted before them.
+ */
+private fun Panel.isAppended(): Boolean = this is ScriptPanel || this is ProviderTabPanel
+
 private fun replacePlaceholder(panels: MutableList<Panel>, placeholderName: String, panel: Panel?) {
     val idx = panels.indexOfFirst {
-        (it.description == placeholderName || (panel != null && it.description == panel.description)) && it !is ScriptPanel
+        (it.description == placeholderName || (panel != null && it.description == panel.description)) && !it.isAppended()
     }
     when {
         panel == null -> if (idx >= 0) panels.removeAt(idx)
         idx >= 0 -> panels[idx] = panel
         else -> {
-            val scriptStart = panels.indexOfFirst { it is ScriptPanel }.takeIf { it >= 0 } ?: panels.size
+            val scriptStart = panels.indexOfFirst { it.isAppended() }.takeIf { it >= 0 } ?: panels.size
             panels.add(scriptStart, panel)
         }
     }
@@ -1214,19 +1244,19 @@ private fun replacePlaceholder(panels: MutableList<Panel>, placeholderName: Stri
 
 private fun replacePlaceholders(panels: MutableList<Panel>, resolved: List<Panel>) {
     for (panel in resolved) {
-        val idx = panels.indexOfFirst { it.description == panel.description && it !is ScriptPanel }
+        val idx = panels.indexOfFirst { it.description == panel.description && !it.isAppended() }
         if (idx >= 0) {
             panels[idx] = panel
         } else {
             // Grouped-tab promotion: placeholder "X" should match resolved "X: Y"
             val prefixIdx = panels.indexOfFirst {
-                it !is ScriptPanel && panel.description.startsWith("${it.description}: ")
+                !it.isAppended() && panel.description.startsWith("${it.description}: ")
             }
             if (prefixIdx >= 0) {
                 panels[prefixIdx] = panel
             } else {
                 // Insert before script panels
-                val scriptStart = panels.indexOfFirst { it is ScriptPanel }.takeIf { it >= 0 } ?: panels.size
+                val scriptStart = panels.indexOfFirst { it.isAppended() }.takeIf { it >= 0 } ?: panels.size
                 panels.add(scriptStart, panel)
             }
         }

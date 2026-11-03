@@ -7,6 +7,7 @@ import org.jetbrains.hexana.shared.features.HEXANA_PROJECT_DIR
 import org.jetbrains.hexana.shared.features.parseFileAssociations
 import org.jetbrains.hexana.shared.features.serializeFileAssociations
 import org.jetbrains.hexana.shared.features.serializeFileAssociationsSchema
+import org.jetbrains.hexana.shared.scripting.ProviderRegistrationInfo
 import java.io.File
 import java.nio.file.AtomicMoveNotSupportedException
 import java.nio.file.Files
@@ -45,10 +46,15 @@ object FileAssociationsStore {
      * returns the settings file. Skips each write whose content already matches, so an
      * unchanged apply leaves version-controlled files alone.
      */
-    fun write(projectBasePath: String, associations: FileAssociations): File {
+    fun write(
+        projectBasePath: String,
+        associations: FileAssociations,
+        scriptedProviders: List<ProviderRegistrationInfo> = emptyList(),
+    ): File {
         val file = file(projectBasePath)
-        // Schema first, so the settings file's reference never points at nothing.
-        writeIfChanged(schemaFile(projectBasePath), serializeFileAssociationsSchema())
+        // Schema first, so the settings file's reference never points at nothing. It lists the
+        // providers loaded right now, so their ids complete in a hand-edit.
+        writeIfChanged(schemaFile(projectBasePath), serializeFileAssociationsSchema(scriptedProviders))
         writeIfChanged(file, serializeFileAssociations(associations))
         return file
     }

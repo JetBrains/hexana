@@ -14,6 +14,9 @@ import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.hexana.providers.BinaryParser
 import org.jetbrains.hexana.shared.features.FILE_ASSOCIATIONS_PATH
 import org.jetbrains.hexana.shared.features.FileAssociations
+import org.jetbrains.hexana.shared.features.ParserRef
+import org.jetbrains.hexana.shared.features.ref
+import org.jetbrains.hexana.shared.scripting.ProviderRegistrationInfo
 
 /**
  * Lists the parsers chosen by hand for individual files — the VS Code counterpart of the
@@ -29,11 +32,13 @@ import org.jetbrains.hexana.shared.features.FileAssociations
 @Composable
 fun FileAssociationsDialog(
     current: FileAssociations,
+    /** Providers the workspace's scripts define, offered next to the built-in parsers. */
+    scriptedProviders: List<ProviderRegistrationInfo> = emptyList(),
     onConfirm: (FileAssociations) -> Unit,
     onCancel: () -> Unit,
 ) {
     val rows = remember(current) {
-        mutableStateListOf<Pair<String, BinaryParser>>().apply { addAll(current.associations.toList()) }
+        mutableStateListOf<Pair<String, ParserRef>>().apply { addAll(current.associations.toList()) }
     }
 
     Div({
@@ -71,14 +76,12 @@ fun FileAssociationsDialog(
                         Select({
                             classes("hexana-dialog-input")
                             onChange { event ->
-                                val chosen = event.value?.let(BinaryParser::fromId) ?: return@onChange
+                                val chosen = event.value?.let(ParserRef::fromId) ?: return@onChange
                                 rows[index] = path to chosen
                             }
                         }) {
-                            for (entry in BinaryParser.entries) {
-                                Option(entry.id, { if (entry == parser) attr("selected", "") }) {
-                                    Text(entry.displayName)
-                                }
+                            for ((ref, label) in parserOptions(parser, scriptedProviders)) {
+                                Option(ref.id, { if (ref == parser) attr("selected", "") }) { Text(label) }
                             }
                         }
                         Button({
@@ -102,4 +105,14 @@ fun FileAssociationsDialog(
             }
         }
     }
+}
+
+/**
+ * The parser options for one row: built-in parsers, the scripts' providers, and [current] when
+ * it is a provider no loaded script defines — so saving never silently changes such a row.
+ */
+private fun parserOptions(current: ParserRef, scripted: List<ProviderRegistrationInfo>): List<Pair<ParserRef, String>> {
+    val options = BinaryParser.entries.map { it.ref() to it.displayName } +
+        scripted.map { ParserRef.Scripted(it.id) to "${it.name} (${it.id})" }
+    return if (options.any { it.first == current }) options else options + (current to "${current.id} (not loaded)")
 }

@@ -22,6 +22,8 @@ import org.jetbrains.hexana.HexanaBundle
 import org.jetbrains.hexana.providers.BinaryParser
 import org.jetbrains.hexana.shared.features.FILE_ASSOCIATIONS_PATH
 import org.jetbrains.hexana.shared.features.FileAssociations
+import org.jetbrains.hexana.shared.features.ParserRef
+import org.jetbrains.hexana.shared.features.ref
 import org.jetbrains.hexana.shared.features.normalizeFileAssociationKey
 import java.awt.Component
 import javax.swing.DefaultCellEditor
@@ -43,9 +45,9 @@ class FileAssociationsConfigurable(private val project: Project) :
     DslConfigurableBase(), SearchableConfigurable {
 
     /** One editable row; [path] is project-relative, as stored. */
-    private class Row(var path: String, var parser: BinaryParser)
+    private class Row(var path: String, var parser: ParserRef)
 
-    private val model = ListTableModel<Row>(PathColumn(), ParserColumn())
+    private val model = ListTableModel<Row>(PathColumn(), ParserColumn(::parserChoices))
 
     override fun createPanel(): DialogPanel {
         val table = TableView(model).apply {
@@ -96,7 +98,7 @@ class FileAssociationsConfigurable(private val project: Project) :
             return
         }
         if (model.items.none { it.path == key }) {
-            model.addRow(Row(key, BinaryParser.GENERIC))
+            model.addRow(Row(key, BinaryParser.GENERIC.ref()))
         }
     }
 
@@ -106,7 +108,7 @@ class FileAssociationsConfigurable(private val project: Project) :
 
     /** The table as it would be saved: paths normalized, unusable ones dropped. */
     private fun collect(): FileAssociations {
-        val entries = linkedMapOf<String, BinaryParser>()
+        val entries = linkedMapOf<String, ParserRef>()
         for (row in model.items) {
             val key = normalizeFileAssociationKey(row.path) ?: continue
             entries.getOrPut(key) { row.parser }
@@ -122,33 +124,50 @@ class FileAssociationsConfigurable(private val project: Project) :
         }
     }
 
-    private class ParserColumn : ColumnInfo<Row, BinaryParser>(HexanaBundle.message("file.associations.column.parser")) {
-        override fun valueOf(item: Row): BinaryParser = item.parser
+    /**
+     * What the parser column offers: every built-in parser, every provider the project's
+     * provider scripts define, and any `user:` id already in the table whose script is not
+     * loaded — so opening the page never silently rewrites such an entry.
+     */
+    private fun parserChoices(): List<ParserRef> {
+        val scripted = ProviderScriptsService.getInstance(project).catalog.value.providers
+        val known = BinaryParser.entries.map { it.ref() } + scripted.map { ParserRef.Scripted(it.id) }
+        val unknown = model.items.map { it.parser }.filter { it !in known }.distinct()
+        return known + unknown
+    }
+
+    /** Display text for [ref]: the parser's or provider's name, or the bare id when unloaded. */
+    private fun labelFor(ref: ParserRef): String = when (ref) {
+        is ParserRef.Builtin -> ref.parser.displayName
+        is ParserRef.Scripted -> ProviderScriptsService.getInstance(project).catalog.value.provider(ref.id)
+            ?.second?.let { "${it.name} (${ref.id})" }
+            ?: "${ref.id} (not loaded)"
+    }
+
+    private inner class ParserColumn(private val choices: () -> List<ParserRef>) :
+        ColumnInfo<Row, ParserRef>(HexanaBundle.message("file.associations.column.parser")) {
+        override fun valueOf(item: Row): ParserRef = item.parser
         override fun isCellEditable(item: Row): Boolean = true
-        override fun setValue(item: Row, value: BinaryParser) {
+        override fun setValue(item: Row, value: ParserRef) {
             item.parser = value
         }
 
         override fun getEditor(item: Row): TableCellEditor {
-            val combo = ComboBox(BinaryParser.entries.toTypedArray()).apply {
-                renderer = SimpleListCellRenderer.create("") { it.displayName }
+            val combo = ComboBox(choices().toTypedArray()).apply {
+                renderer = SimpleListCellRenderer.create("") { labelFor(it) }
             }
             return DefaultCellEditor(combo)
         }
 
-        override fun getRenderer(item: Row): TableCellRenderer = ParserRenderer
+        override fun getRenderer(item: Row): TableCellRenderer = object : DefaultTableCellRenderer() {
+            override fun getTableCellRendererComponent(
+                table: JTable, value: Any?, isSelected: Boolean, hasFocus: Boolean, row: Int, column: Int,
+            ): Component = super.getTableCellRendererComponent(
+                table, (value as? ParserRef)?.let(::labelFor) ?: value, isSelected, hasFocus, row, column,
+            )
+        }
 
         override fun getWidth(table: JTable): Int = table.getFontMetrics(table.font).stringWidth("Protobuf descriptor set") + 48
-    }
-
-    private object ParserRenderer : DefaultTableCellRenderer() {
-        private fun readResolve(): Any = ParserRenderer
-
-        override fun getTableCellRendererComponent(
-            table: JTable, value: Any?, isSelected: Boolean, hasFocus: Boolean, row: Int, column: Int,
-        ): Component = super.getTableCellRendererComponent(
-            table, (value as? BinaryParser)?.displayName ?: value, isSelected, hasFocus, row, column,
-        )
     }
 
     override fun getId(): @NonNls String = ID

@@ -155,7 +155,7 @@ private class HexanaStructureViewModel(
                 is ElfBinaryProvider -> buildElfElements(binaryProvider, editor)
                 else -> buildStructureRangeElements(binaryProvider, editor)
             }
-            rootElement.setResolvedChildren(children)
+            rootElement.setResolvedChildren(children + listOfNotNull(scriptRegionsGroup(editor)))
             com.intellij.openapi.application.ApplicationManager.getApplication().invokeLater {
                 // A root replaced while this one resolved is no longer on screen.
                 if (root === rootElement) notifyModelChanged()
@@ -582,6 +582,29 @@ private fun buildElfElements(provider: ElfBinaryProvider, editor: HexanaFileEdit
  * list; a tree that materializes a node per region cannot.
  */
 private const val MAX_STRUCTURE_RANGE_ELEMENTS = 10_000
+
+/**
+ * The regions a scripted provider's `parse()` reported, as one group under the root, named
+ * after the provider. A group rather than leaves mixed into the format's own tree: the base
+ * parser's tree (an ELF's sections, a Wasm module's functions) stays as it always reads, and
+ * the script's view of the same bytes sits beside it. `null` when no script added regions.
+ */
+private fun scriptRegionsGroup(editor: HexanaFileEditor): HexanaStructureElement? {
+    val overlay = editor.scriptOverlay ?: return null
+    if (overlay.ranges.isEmpty()) return null
+    val leaves = overlay.ranges.sortedBy { it.offset }.take(MAX_STRUCTURE_RANGE_ELEMENTS).map { range ->
+        val start = range.offset.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        val end = (range.offset + range.size - 1).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        HexanaStructureElement(name = range.label, range = start..end, icon = AllIcons.Nodes.Property, editor = editor)
+    }
+    return HexanaStructureElement(
+        name = overlay.provider.name,
+        range = IntRange.EMPTY,
+        icon = AllIcons.Nodes.Folder,
+        children = leaves,
+        editor = editor,
+    )
+}
 
 /**
  * Structure elements for a format with no hand-written tree: one leaf per region, in

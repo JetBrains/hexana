@@ -38,6 +38,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.breakpoints.BinaryBreakpointRegistry
@@ -45,6 +46,14 @@ import org.jetbrains.hexana.breakpoints.BinaryIdentityProvider
 import org.jetbrains.hexana.breakpoints.BreakpointMaterializationCoordinator
 import org.jetbrains.hexana.features.FileAssociationsConfigurable
 import org.jetbrains.hexana.features.FileAssociationsService
+import org.jetbrains.hexana.features.ProviderScriptsService
+import org.jetbrains.hexana.mcp.scripting.ProviderOverlay
+import org.jetbrains.hexana.mcp.scripting.ProviderScriptBindings
+import org.jetbrains.hexana.mcp.scripting.ProviderScriptCatalog
+import org.jetbrains.hexana.mcp.scripting.bindProviderScripts
+import org.jetbrains.hexana.shared.features.ParserRef
+import org.jetbrains.hexana.shared.scripting.PROVIDER_SCRIPTS_DIR
+import org.jetbrains.hexana.shared.scripting.ProviderRegistrationInfo
 import org.jetbrains.hexana.shared.BinaryAnchor
 import org.jetbrains.hexana.shared.DEX_CLASSES_TAB_NAME
 import org.jetbrains.hexana.ui.panel.GutterMarksModel
@@ -230,11 +239,49 @@ class HexanaFileEditor(
      * [wasmDiffScope] is: [initPanel] assigns it during construction.
      */
     @Volatile
-    private var parserOverride: BinaryParser? = null
+    private var parserOverride: ParserRef? = null
 
-    /** Whether [parserOverride] could not read the bytes, so detection was used instead. */
+    /**
+     * The provider-script registration a [ParserRef.Scripted] override resolved to, or `null`
+     * when the override is built in, absent, or names a provider no loaded script defines.
+     */
     @Volatile
-    private var parserOverrideFailed: Boolean = false
+    private var scriptedProvider: ProviderRegistrationInfo? = null
+
+    /**
+     * Why [parserOverride] is not in effect — its parser cannot read the bytes, its provider
+     * script is missing — so detection was used instead; `null` when it is, or there is none.
+     */
+    @Volatile
+    private var parserOverrideFailure: String? = null
+
+    /**
+     * What the provider scripts contribute to this editor. Replaced on the EDT; the one it
+     * replaces, and the last one on [dispose], is closed, which closes its script sessions.
+     */
+    private var scriptBindings: ProviderScriptBindings = ProviderScriptBindings.EMPTY
+
+    /** What the scripted provider this file opened with added, or `null`; read by the Structure view. */
+    internal val scriptOverlay: ProviderOverlay? get() = scriptBindings.overlay
+
+    /** The built-in parser the current override reads the file with, if any. */
+    private fun overrideParser(): BinaryParser? = when (val override = parserOverride) {
+        is ParserRef.Builtin -> override.parser
+        is ParserRef.Scripted -> scriptedProvider?.base
+        null -> null
+    }
+
+    /** Records [chosen] as the override and resolves a scripted one against [catalog]. */
+    private fun applyAssociation(chosen: ParserRef?, catalog: ProviderScriptCatalog) {
+        parserOverride = chosen
+        scriptedProvider = (chosen as? ParserRef.Scripted)?.let { catalog.provider(it.id)?.second }
+        parserOverrideFailure = when {
+            chosen !is ParserRef.Scripted || scriptedProvider != null -> null
+            catalog.blockedByTrust ->
+                "Provider scripts do not run in an untrusted project, so ${chosen.id} is not available."
+            else -> "No script in $PROVIDER_SCRIPTS_DIR defines ${chosen.id}."
+        }
+    }
 
     /**
      * Called on the EDT after a changed association replaced [binaryProvider]. The Structure
@@ -309,15 +356,18 @@ class HexanaFileEditor(
         // "Open As Protobuf Message" already says what the file is; an association recorded
         // for the file on disk must not overrule the action.
         val associations = FileAssociationsService.getInstance(myProject)
+        val providerScripts = ProviderScriptsService.getInstance(myProject)
         val associationKey = if (myFile is HexanaProtobufMessageVirtualFile) null else associations.keyFor(myFile)
-        parserOverride = associations.associations.parserFor(associationKey)
+        applyAssociation(associations.associations.parserFor(associationKey), providerScripts.catalog.value)
 
         binaryProvider = resolveProvider(myFile.name, inMemoryBuffer, commonBuffer, sourcePath)
 
-        fun parserChoice(): ParserChoice? = associationKey?.let {
+        fun parserChoice(catalog: ProviderScriptCatalog, overlay: ProviderOverlay?): ParserChoice? = associationKey?.let {
             ParserChoice(
                 chosen = parserOverride,
-                failed = parserOverrideFailed,
+                failure = parserOverrideFailure ?: overlay?.error,
+                labelOverride = scriptedProvider?.takeIf { parserOverrideFailure == null }?.name,
+                scriptedProviders = catalog.providers,
                 // Off the EDT: the save writes two files and refreshes VFS synchronously.
                 onChoose = { parser -> editorScope.launch { associations.setParser(myFile, parser) } },
                 onEdit = {
@@ -331,16 +381,21 @@ class HexanaFileEditor(
         // file instead proved unreliable — the reopen could land before the close finished
         // and keep the old editor, so a choice only took effect on the next attempt.
         val providerState = mutableStateOf(binaryProvider!!)
-        val parserChoiceState = mutableStateOf(parserChoice())
-        if (associationKey != null) {
-            // `collect` handles one change at a time and the StateFlow conflates the rest, so
-            // rebuilds never overlap and a burst of changes ends on the latest choice.
-            editorScope.launch {
-                associations.changes.collect {
-                    val chosen = associations.associations.parserFor(associationKey)
-                    if (chosen == parserOverride) return@collect
-                    parserOverride = chosen
-                    parserOverrideFailed = false
+        val parserChoiceState = mutableStateOf(parserChoice(providerScripts.catalog.value, null))
+        val scriptBindingsState = mutableStateOf(ProviderScriptBindings.EMPTY)
+        // Follows both the associations and the provider scripts: either can change which
+        // provider this file opens with (a script defining the chosen provider may load, or be
+        // edited), and the scripts decide which tabs attach. `collect` handles one change at a
+        // time and the flows conflate the rest, so rebuilds never overlap and a burst of
+        // changes ends on the latest state.
+        editorScope.launch {
+            var boundCatalog: ProviderScriptCatalog? = null
+            combine(associations.changes, providerScripts.catalog) { _, catalog -> catalog }.collect { catalog ->
+                val chosen = associations.associations.parserFor(associationKey)
+                val scriptedNow = (chosen as? ParserRef.Scripted)?.let { catalog.provider(it.id)?.second }
+                val providerChanged = chosen != parserOverride || scriptedNow != scriptedProvider
+                if (providerChanged) {
+                    applyAssociation(chosen, catalog)
                     // Built here, on the editor's IO scope: resolving can inflate a gzip stream
                     // of up to 128 MiB and run a parser's constructor, neither of which belongs
                     // on the EDT. Only publishing the result does.
@@ -353,7 +408,23 @@ class HexanaFileEditor(
                         // The old tab list's index means nothing in the new one.
                         stateHolder.setSelectedTab(0)
                         providerState.value = rebuilt
-                        parserChoiceState.value = parserChoice()
+                        parserChoiceState.value = parserChoice(catalog, null)
+                        providerChangeListeners.forEach { it() }
+                    }
+                }
+                if (providerChanged || catalog !== boundCatalog) {
+                    boundCatalog = catalog
+                    val provider = binaryProvider ?: return@collect
+                    // Script sessions run user code: here on IO, under the runner's timeout.
+                    val bound = bindProviderScripts(
+                        providerScripts::openSession, catalog, provider, myFile.name, sourcePath,
+                        scripted = scriptedProvider.takeIf { parserOverrideFailure == null },
+                    )
+                    withContext(Dispatchers.EDT) {
+                        scriptBindings.close()
+                        scriptBindings = bound
+                        scriptBindingsState.value = bound
+                        parserChoiceState.value = parserChoice(catalog, bound.overlay)
                         providerChangeListeners.forEach { it() }
                     }
                 }
@@ -415,6 +486,8 @@ class HexanaFileEditor(
                     fileName = myFile.name,
                     filePath = binarySourcePath,
                     parserChoice = parserChoiceState.value,
+                    scriptTabs = scriptBindingsState.value.tabs,
+                    scriptStructureRanges = scriptBindingsState.value.overlay?.ranges.orEmpty(),
                     parentFileName = parentFile?.name,
                     onNavigateToParent = parentFile?.let { pf ->
                         { FileEditorManager.getInstance(myProject).openFile(pf, true) }
@@ -795,7 +868,7 @@ class HexanaFileEditor(
 
         // A `.tgz` with a parser chosen for it falls through to the generic gzip branch
         // below, so the choice applies to the inflated tar like it does for any `.gz`.
-        if ((ext == "tgz" || fileName.endsWith(".tar.gz", ignoreCase = true)) && parserOverride == null) {
+        if ((ext == "tgz" || fileName.endsWith(".tar.gz", ignoreCase = true)) && overrideParser() == null) {
             val decompressed = decompressGzip(commonBuffer)
             return if (decompressed != null) {
                 TarBinaryProvider(decompressed)
@@ -827,12 +900,17 @@ class HexanaFileEditor(
         // two Wasm parsers still go through the `VirtualFile`-backed providers further down,
         // which the WAT view needs; any other choice is built by the shared factory. One that
         // cannot read the bytes at all falls back to detection, and the toolbar says so.
-        val override = parserOverride
+        val override = overrideParser()
         val overrideKind = override?.providerKindOrNull()
         if (override != null && overrideKind == null) {
             val forced = createBinaryProvider(override, commonBuffer, sourcePath)
             if (forced != null) return withVirtualFile(forced, inMemoryBuffer)
-            parserOverrideFailed = true
+            val scripted = scriptedProvider
+            parserOverrideFailure = if (scripted != null) {
+                "${scripted.name} builds on the ${override.displayName} parser, which cannot read this file."
+            } else {
+                "The ${override.displayName} parser cannot read this file."
+            }
         }
 
         val kind = overrideKind ?: resolveIdeBinaryProviderKind(commonBuffer, fileName, myFile.fileType)
@@ -1061,6 +1139,7 @@ class HexanaFileEditor(
     override fun dispose() {
         wasmDiffScope.cancel()
         editorScope.cancel()
+        scriptBindings.close()
         disposeClosedEditors()
         myTextEditor?.let {
             Disposer.dispose(it)

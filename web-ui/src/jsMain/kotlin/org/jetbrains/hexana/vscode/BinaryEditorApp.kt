@@ -19,6 +19,7 @@ import org.jetbrains.hexana.shared.features.parseRuntimeTargets
 import org.jetbrains.hexana.shared.features.serializeRuntimeTargets
 import org.jetbrains.hexana.shared.features.serializeRuntimeTargetsSchema
 import org.jetbrains.hexana.shared.features.FileAssociations
+import org.jetbrains.hexana.shared.scripting.ProviderRegistrationInfo
 import org.jetbrains.hexana.shared.features.parseFileAssociations
 import org.jetbrains.hexana.shared.features.serializeFileAssociations
 import org.jetbrains.hexana.shared.features.serializeFileAssociationsSchema
@@ -185,10 +186,17 @@ fun BinaryEditorContent(
      */
     fileAssociationKey: String = "",
     /**
-     * Whether the parser the associations name for this file could not read it, so
-     * [provider] is the automatic choice instead. The caller built [provider], so it knows.
+     * Why the parser the associations name for this file is not fully in effect — it cannot
+     * read the file, its provider script is missing or failed — or `null` when it is. The
+     * caller built [provider], so it knows.
      */
-    parserOverrideFailed: Boolean = false,
+    parserOverrideFailure: String? = null,
+    /** The format badge's text instead of the detected format's, for a scripted provider in effect. */
+    parserLabelOverride: String? = null,
+    /** Providers the workspace's provider scripts define, offered in the parser menu. */
+    scriptedProviders: List<ProviderRegistrationInfo> = emptyList(),
+    /** Regions a scripted provider's `parse()` reported, tinted on top of the provider's own. */
+    scriptStructureRanges: List<StructureRange> = emptyList(),
     /** Bumped by the host to open the file-associations dialog; see [openRuntimeTargetsRequest]. */
     openFileAssociationsRequest: Int = 0,
     /** Latest host request to select a table row; see [HexanaPanel]'s parameter of that name. */
@@ -222,18 +230,21 @@ fun BinaryEditorContent(
     val fileAssociations = remember(fileAssociationsJson) { parseFileAssociations(fileAssociationsJson) }
     // The host owns the write and replies with `file-associations-loaded`; the caller then
     // rebuilds the provider with the new parser, so nothing changes here until the file has.
+    // The schema lists the providers loaded now, so their ids complete in a hand-edit.
     val saveFileAssociations = { associations: FileAssociations ->
-        host.saveFileAssociations(serializeFileAssociations(associations), serializeFileAssociationsSchema())
+        host.saveFileAssociations(serializeFileAssociations(associations), serializeFileAssociationsSchema(scriptedProviders))
     }
     val parserChoice = if (host.canEditFileAssociations && fileAssociationKey.isNotBlank()) {
         ParserChoice(
             chosen = fileAssociations.parserFor(fileAssociationKey),
-            failed = parserOverrideFailed,
+            failure = parserOverrideFailure,
+            labelOverride = parserLabelOverride,
+            scriptedProviders = scriptedProviders,
             onChoose = { parser -> saveFileAssociations(fileAssociations.with(fileAssociationKey, parser)) },
             onEdit = {
                 host.openFileAssociationsFile(
                     serializeFileAssociations(fileAssociations),
-                    serializeFileAssociationsSchema(),
+                    serializeFileAssociationsSchema(scriptedProviders),
                 )
             },
         )
@@ -382,8 +393,12 @@ fun BinaryEditorContent(
                 bytes = buffer,
                 selection = selection,
                 editState = editState,
-                structureRanges = remember(provider, initialStructureRanges, showSemanticHighlighting) {
-                    if (showSemanticHighlighting) (initialStructureRanges ?: provider.structureRanges).sortedBy { it.offset } else emptyList()
+                structureRanges = remember(provider, initialStructureRanges, showSemanticHighlighting, scriptStructureRanges) {
+                    if (showSemanticHighlighting) {
+                        ((initialStructureRanges ?: provider.structureRanges) + scriptStructureRanges).sortedBy { it.offset }
+                    } else {
+                        emptyList()
+                    }
                 },
                 onTabChangeRequest = { tabName -> activeTab = tabName },
             )
@@ -455,6 +470,7 @@ fun BinaryEditorContent(
     if (showFileAssociationsDialog) {
         FileAssociationsDialog(
             current = fileAssociations,
+            scriptedProviders = scriptedProviders,
             onConfirm = { associations ->
                 saveFileAssociations(associations)
                 showFileAssociationsDialog = false

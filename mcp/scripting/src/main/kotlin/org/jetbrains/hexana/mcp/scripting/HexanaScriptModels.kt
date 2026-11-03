@@ -4,6 +4,7 @@ import org.jetbrains.hexana.mcp.HexanaAnalysisLimits
 import org.jetbrains.hexana.mcp.model.binaries.BinaryModuleIdentityResult
 import org.jetbrains.hexana.shared.scripting.CheckFinding
 import org.jetbrains.hexana.shared.scripting.CheckRegistrationInfo
+import org.jetbrains.hexana.shared.scripting.ProviderRegistrationInfo
 import org.jetbrains.hexana.shared.scripting.FlagSpec
 import org.jetbrains.hexana.shared.scripting.ScriptConsoleEntry
 import org.jetbrains.hexana.shared.scripting.ScriptUsageError
@@ -111,6 +112,8 @@ data class HexanaScriptResult(
     val console: List<ScriptConsoleEntry> = emptyList(),
     /** Static metadata for checks registered via `hexana.defineCheck(...)`. */
     val checks: List<CheckRegistrationInfo> = emptyList(),
+    /** Static metadata for binary providers registered via `hexana.defineProvider(...)`. */
+    val providers: List<ProviderRegistrationInfo> = emptyList(),
     /** Findings produced by running all registered checks against the primary binary. */
     val findings: List<CheckFinding> = emptyList(),
     /**

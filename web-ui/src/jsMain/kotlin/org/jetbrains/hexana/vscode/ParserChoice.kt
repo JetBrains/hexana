@@ -10,6 +10,9 @@ import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.hexana.providers.BinaryParser
 import org.jetbrains.hexana.shared.features.FILE_ASSOCIATIONS_PATH
+import org.jetbrains.hexana.shared.features.ParserRef
+import org.jetbrains.hexana.shared.features.ref
+import org.jetbrains.hexana.shared.scripting.ProviderRegistrationInfo
 
 /**
  * What the format badge needs to offer a parser choice for the open file — the web
@@ -19,14 +22,19 @@ import org.jetbrains.hexana.shared.features.FILE_ASSOCIATIONS_PATH
  * key in it, so a `null` choice leaves the badge a plain label.
  *
  * @param chosen the parser the associations name for this file, or `null` when detected
- * @param failed whether [chosen] could not read the bytes, so detection was used instead
+ * @param failure why [chosen] is not fully in effect, shown in the tooltip; `null` when it is
+ * @param labelOverride the badge text instead of the detected format's, for a scripted
+ *   provider in effect
+ * @param scriptedProviders the providers the workspace's provider scripts define
  * @param onChoose records a new choice; `null` returns the file to automatic detection
  * @param onEdit opens `.hexana/file_associations.json` itself for editing
  */
 class ParserChoice(
-    val chosen: BinaryParser?,
-    val failed: Boolean,
-    val onChoose: (BinaryParser?) -> Unit,
+    val chosen: ParserRef?,
+    val failure: String?,
+    val labelOverride: String?,
+    val scriptedProviders: List<ProviderRegistrationInfo>,
+    val onChoose: (ParserRef?) -> Unit,
     val onEdit: () -> Unit,
 )
 
@@ -42,25 +50,24 @@ internal fun FormatBadge(label: String, choice: ParserChoice?) {
     }
 
     var menuVisible by remember { mutableStateOf(false) }
-    val failed = choice.chosen != null && choice.failed
+    val failure = choice.failure?.takeIf { choice.chosen != null }
     val tooltip = when {
         choice.chosen == null -> "Detected automatically. Click to choose a parser for this file."
-        failed -> "The ${choice.chosen.displayName} parser chosen in $FILE_ASSOCIATIONS_PATH cannot read " +
-            "this file, so it was detected automatically. Click to choose another."
+        failure != null -> "$failure Click to choose another parser."
         else -> "Parser chosen for this file in $FILE_ASSOCIATIONS_PATH. Click to change it."
     }
 
     Div({ classes("hexana-format-picker") }) {
         Span({
             classes("hexana-badge", "hexana-format-badge", "hexana-format-badge-clickable")
-            if (failed) classes("hexana-format-badge-warning")
+            if (failure != null) classes("hexana-format-badge-warning")
             attr("title", tooltip)
             onClick { event ->
                 event.stopPropagation()
                 menuVisible = !menuVisible
             }
         }) {
-            Text("$label ▾")
+            Text("${choice.labelOverride ?: label} \u25BE")
         }
 
         if (menuVisible) {
@@ -71,20 +78,34 @@ internal fun FormatBadge(label: String, choice: ParserChoice?) {
                 onClick { menuVisible = false }
             }) {}
 
+            fun choose(ref: ParserRef?) {
+                menuVisible = false
+                if (ref != choice.chosen) choice.onChoose(ref)
+            }
+
             Div({ classes("hexana-format-menu") }) {
                 Div({ classes("hexana-format-menu-title") }) { Text("Parse File As") }
-                ParserMenuItem("Auto-detect", selected = choice.chosen == null) {
-                    menuVisible = false
-                    if (choice.chosen != null) choice.onChoose(null)
-                }
+                ParserMenuItem("Auto-detect", selected = choice.chosen == null) { choose(null) }
                 Div({ classes("hexana-format-menu-separator") }) {}
                 for (parser in BinaryParser.entries) {
-                    ParserMenuItem(parser.displayName, selected = choice.chosen == parser) {
-                        menuVisible = false
-                        if (choice.chosen != parser) choice.onChoose(parser)
-                    }
+                    ParserMenuItem(parser.displayName, selected = choice.chosen == parser.ref()) { choose(parser.ref()) }
                     if (parser == BinaryParser.GENERIC) {
                         Div({ classes("hexana-format-menu-separator") }) {}
+                    }
+                }
+                // A chosen provider whose script is not loaded stays listed, so the
+                // checkmark has a row and the choice can be seen for what it is.
+                val scripted = choice.scriptedProviders.map { ParserRef.Scripted(it.id) to it.name } +
+                    listOfNotNull(
+                        (choice.chosen as? ParserRef.Scripted)
+                            ?.takeIf { chosen -> choice.scriptedProviders.none { it.id == chosen.id } }
+                            ?.let { it to "${it.id} (not loaded)" },
+                    )
+                if (scripted.isNotEmpty()) {
+                    Div({ classes("hexana-format-menu-separator") }) {}
+                    Div({ classes("hexana-format-menu-title") }) { Text("Scripts") }
+                    for ((ref, name) in scripted) {
+                        ParserMenuItem(name, selected = choice.chosen == ref) { choose(ref) }
                     }
                 }
                 Div({ classes("hexana-format-menu-separator") }) {}

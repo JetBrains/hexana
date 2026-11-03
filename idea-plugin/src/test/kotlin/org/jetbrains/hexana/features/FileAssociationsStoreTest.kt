@@ -2,6 +2,7 @@ package org.jetbrains.hexana.features
 
 import org.jetbrains.hexana.providers.BinaryParser
 import org.jetbrains.hexana.shared.features.FileAssociations
+import org.jetbrains.hexana.shared.features.ref
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -25,7 +26,7 @@ class FileAssociationsStoreTest {
 
     @Test
     fun `write lands the file and its schema where both editors look`() {
-        FileAssociationsStore.write(basePath, FileAssociations(mapOf("a.bin" to BinaryParser.ELF)))
+        FileAssociationsStore.write(basePath, FileAssociations(mapOf("a.bin" to BinaryParser.ELF.ref())))
 
         val hexana = File(basePath, ".hexana")
         assertTrue(File(hexana, "file_associations.json").isFile)
@@ -35,7 +36,7 @@ class FileAssociationsStoreTest {
     @Test
     fun `round trip through disk preserves the associations`() {
         val associations = FileAssociations(
-            mapOf("fw/boot.img" to BinaryParser.ELF, "blob.dat" to BinaryParser.GENERIC),
+            mapOf("fw/boot.img" to BinaryParser.ELF.ref(), "blob.dat" to BinaryParser.GENERIC.ref()),
         )
         FileAssociationsStore.write(basePath, associations)
         assertEquals(associations, FileAssociationsStore.read(basePath))
@@ -43,16 +44,16 @@ class FileAssociationsStoreTest {
 
     @Test
     fun `writes leave no temporary files behind`() {
-        FileAssociationsStore.write(basePath, FileAssociations(mapOf("a.bin" to BinaryParser.ELF)))
-        FileAssociationsStore.write(basePath, FileAssociations(mapOf("a.bin" to BinaryParser.PE)))
+        FileAssociationsStore.write(basePath, FileAssociations(mapOf("a.bin" to BinaryParser.ELF.ref())))
+        FileAssociationsStore.write(basePath, FileAssociations(mapOf("a.bin" to BinaryParser.PE.ref())))
         val names = File(basePath, ".hexana").list()!!.sorted()
         assertEquals(listOf("file_associations.json", "file_associations.schema.json"), names)
-        assertEquals(BinaryParser.PE, FileAssociationsStore.read(basePath).parserFor("a.bin"))
+        assertEquals(BinaryParser.PE.ref(), FileAssociationsStore.read(basePath).parserFor("a.bin"))
     }
 
     @Test
     fun `an unchanged save does not touch the committed file`() {
-        val associations = FileAssociations(mapOf("a.bin" to BinaryParser.PE))
+        val associations = FileAssociations(mapOf("a.bin" to BinaryParser.PE.ref()))
         val file = FileAssociationsStore.write(basePath, associations)
         file.setLastModified(1_000L)
         FileAssociationsStore.write(basePath, associations)
@@ -70,11 +71,11 @@ class FileAssociationsStoreTest {
     @Test
     fun `tracker announces content changes only`() {
         val tracker = FileAssociationsTracker()
-        val one = FileAssociations(mapOf("a.bin" to BinaryParser.PE))
+        val one = FileAssociations(mapOf("a.bin" to BinaryParser.PE.ref()))
         tracker.get { one }
-        tracker.observe(FileAssociations(mapOf("a.bin" to BinaryParser.PE)))
+        tracker.observe(FileAssociations(mapOf("a.bin" to BinaryParser.PE.ref())))
         assertEquals(0, tracker.changes.value)
-        tracker.observe(one.with("a.bin", BinaryParser.GENERIC))
+        tracker.observe(one.with("a.bin", BinaryParser.GENERIC.ref()))
         assertEquals(1, tracker.changes.value)
         tracker.recordSave(FileAssociations.EMPTY)
         assertEquals(2, tracker.changes.value)

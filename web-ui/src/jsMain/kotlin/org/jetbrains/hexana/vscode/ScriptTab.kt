@@ -67,7 +67,7 @@ private class ScriptRunScope {
  * property access compiles correctly — and defines lazy getters under clean names.
  * Wrapping is recursive: nested objects and lists are also wrapped.
  */
-private fun wrapForJs(value: Any?): dynamic {
+internal fun wrapForJs(value: Any?): dynamic {
     if (value == null) return null
     if (value is String || value is Number || value is Boolean) return value
     if (value is List<*>) {

@@ -18,6 +18,8 @@ consult-first / write-back rules.
 - [[entities/binary-provider-selection]] — the one factory that turns bytes plus a name into a
   `BinaryProvider`, why gzip stays outside it, and the per-host lists that decide which files
   reach the editor in the first place.
+- [[entities/scripted-binary-providers]] — `hexana.defineProvider` / `defineTab` from
+  `.hexana/providers/*.js`: base+overlay model, `ParserRef`, trust gating, both runtimes.
 - [[entities/file-parser-associations]] — per-file parser override (`.hexana/file_associations.json`):
   `BinaryParser` ids, the format-badge picker in both editors, settings pages, live reload.
 - [[entities/binary-opened-format-analytics]] — how `binary_opened.format` is derived, the

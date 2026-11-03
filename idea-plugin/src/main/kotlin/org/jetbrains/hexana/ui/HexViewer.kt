@@ -147,6 +147,11 @@ internal fun HexViewer(
     onHexCommit: (() -> Unit)? = null,
     suppressEditHighlight: Boolean = false,
     onSectionLabelClick: ((tabName: String) -> Unit)? = null,
+    /**
+     * Regions a scripted provider's `parse()` reported, tinted on top of the provider's own.
+     * Already bounds-checked against the file.
+     */
+    extraStructureRanges: List<StructureRange> = emptyList(),
 ) {
     val buf = binaryProvider.bytes
 
@@ -171,8 +176,8 @@ internal fun HexViewer(
         })
         onDispose { connection.disconnect() }
     }
-    val structureRanges = remember(binaryProvider, semanticHighlighting) {
-        if (semanticHighlighting) binaryProvider.structureRanges.sortedBy { it.offset }
+    val structureRanges = remember(binaryProvider, semanticHighlighting, extraStructureRanges) {
+        if (semanticHighlighting) (binaryProvider.structureRanges + extraStructureRanges).sortedBy { it.offset }
         else emptyList()
     }
     val structureColors = HexanaTheme.structureColors

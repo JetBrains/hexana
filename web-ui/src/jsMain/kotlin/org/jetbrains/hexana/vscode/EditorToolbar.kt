@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.vscode
 
+import org.jetbrains.hexana.shared.features.ParserRef
+
 import org.jetbrains.hexana.shared.inspections.BinaryProblem
 import org.jetbrains.hexana.shared.inspections.ProblemSeverity
 import org.jetbrains.hexana.shared.inspections.counts
@@ -320,7 +322,9 @@ fun EditorToolbar(
 
         if (showNormalContent) {
             FormatBadge(
-                label = fileTypeLabelOverride ?: fileTypeDescription(provider, fileName, parserChoice?.chosen),
+                label = fileTypeLabelOverride ?: fileTypeDescription(
+                    provider, fileName, (parserChoice?.chosen as? ParserRef.Builtin)?.parser,
+                ),
                 choice = parserChoice,
             )
 

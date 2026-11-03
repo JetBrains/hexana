@@ -60,6 +60,11 @@ data class SliceRegistration(
     val params: List<SliceParam>,
     val columns: List<SliceColumn>,
     val rows: ScriptValue.Fn,
+    /**
+     * Registered via `hexana.defineTab`: attaches to every binary [formats] names. A plain
+     * slice only ever shows inside the script tab that defined it, whatever its [formats].
+     */
+    val isTab: Boolean = false,
 )
 
 // -------------------------------------------------------------------------
@@ -233,10 +238,18 @@ open class ScriptContributionCollector {
 
     private val _slices = mutableListOf<SliceRegistration>()
     private val _checks = mutableListOf<CheckRegistration>()
+    private val _providers = mutableListOf<ProviderRegistration>()
     private val _console = mutableListOf<ScriptConsoleEntry>()
 
-    /** All slice registrations collected so far, in registration order. */
+    /**
+     * All slice registrations collected so far, in registration order — from
+     * `hexana.defineSlice` and `hexana.defineTab` alike: a tab is a slice whose `formats`
+     * say which binaries it attaches to.
+     */
     val slices: List<SliceRegistration> get() = _slices
+
+    /** All provider registrations collected so far, in registration order. */
+    val providers: List<ProviderRegistration> get() = _providers
 
     /** All check registrations collected so far, in registration order. */
     val checks: List<CheckRegistration> get() = _checks
@@ -283,6 +296,23 @@ open class ScriptContributionCollector {
     }
 
     /**
+     * Registers a binary provider. Called by host-layer code after validating the JS spec.
+     *
+     * @throws IllegalArgumentException on a duplicate id or a missing "user:" prefix
+     */
+    fun registerProvider(registration: ProviderRegistration) {
+        require(registration.id.startsWith(USER_CONTRIBUTION_PREFIX) &&
+            registration.id.length > USER_CONTRIBUTION_PREFIX.length
+        ) {
+            "hexana.defineProvider: provider id must start with \"user:\", got \"${registration.id}\""
+        }
+        require(_providers.none { it.id == registration.id }) {
+            "hexana.defineProvider: duplicate provider id \"${registration.id}\""
+        }
+        _providers += registration
+    }
+
+    /**
      * Records a console entry. Called by host-layer code when the script calls
      * `console.log(...)` / `console.error(...)` / `console.debug(...)`.
      */
@@ -303,8 +333,10 @@ data class SliceRegistrationInfo(
     val formats: List<String>,
     val params: List<SliceParam>,
     val columns: List<SliceColumn>,
+    /** See [SliceRegistration.isTab]. */
+    val isTab: Boolean = false,
 )
 
 /** Converts a live [SliceRegistration] to its serializable metadata form. */
 fun SliceRegistration.toInfo(): SliceRegistrationInfo =
-    SliceRegistrationInfo(name = name, formats = formats, params = params, columns = columns)
+    SliceRegistrationInfo(name = name, formats = formats, params = params, columns = columns, isTab = isTab)

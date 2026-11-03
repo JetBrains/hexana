@@ -11,6 +11,9 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import org.jetbrains.hexana.providers.BinaryParser
+import org.jetbrains.hexana.shared.scripting.PROVIDER_SCRIPTS_DIR
+import org.jetbrains.hexana.shared.scripting.ProviderRegistrationInfo
+import org.jetbrains.hexana.shared.scripting.USER_CONTRIBUTION_PREFIX
 
 /** File inside [HEXANA_PROJECT_DIR] holding the parser chosen by hand for individual files. */
 const val FILE_ASSOCIATIONS_FILE: String = "file_associations.json"
@@ -36,7 +39,42 @@ const val FILE_ASSOCIATIONS_SCHEMA_REF: String = "./$FILE_ASSOCIATIONS_SCHEMA_FI
 const val FILE_ASSOCIATIONS_SCHEMA_VERSION: Int = 1
 
 /**
- * Contents of `.hexana/file_associations.json`: which [BinaryParser] opens a given file,
+ * What an association names: a built-in [BinaryParser], or a provider a script in
+ * `.hexana/providers/` registered under a `user:` id.
+ */
+sealed interface ParserRef {
+    /** The id `.hexana/file_associations.json` stores. */
+    val id: String
+
+    data class Builtin(val parser: BinaryParser) : ParserRef {
+        override val id: String get() = parser.id
+    }
+
+    /**
+     * A provider defined by `hexana.defineProvider`. Kept by id alone: whether a script
+     * registering it is loaded is only known at resolution time, and an association to one
+     * that is not must survive — the script may simply not have loaded yet.
+     */
+    data class Scripted(override val id: String) : ParserRef
+
+    companion object {
+        /** The reference stored as [id], or `null` for an id that is neither built in nor `user:`. */
+        fun fromId(id: String): ParserRef? {
+            BinaryParser.fromId(id)?.let { return Builtin(it) }
+            return if (id.startsWith(USER_CONTRIBUTION_PREFIX) && id.length > USER_CONTRIBUTION_PREFIX.length) {
+                Scripted(id)
+            } else {
+                null
+            }
+        }
+    }
+}
+
+/** This parser as an association target. */
+fun BinaryParser.ref(): ParserRef = ParserRef.Builtin(this)
+
+/**
+ * Contents of `.hexana/file_associations.json`: which parser — built in or scripted — opens a given file,
  * overriding the automatic detection.
  *
  * Keys are project-relative paths with `/` separators (see [fileAssociationKey]), so the
@@ -44,20 +82,20 @@ const val FILE_ASSOCIATIONS_SCHEMA_VERSION: Int = 1
  * is detected automatically.
  */
 class FileAssociations(
-    associations: Map<String, BinaryParser> = emptyMap(),
+    associations: Map<String, ParserRef> = emptyMap(),
     val schemaVersion: Int = FILE_ASSOCIATIONS_SCHEMA_VERSION,
 ) {
     /** Sorted by path, so iteration order — and therefore the file — is stable. */
-    val associations: Map<String, BinaryParser> =
+    val associations: Map<String, ParserRef> =
         associations.entries.sortedBy { it.key }.associate { it.key to it.value }
 
     val isEmpty: Boolean get() = associations.isEmpty()
 
     /** The parser chosen for [key], or `null` when the file is detected automatically. */
-    fun parserFor(key: String?): BinaryParser? = key?.let { associations[it] }
+    fun parserFor(key: String?): ParserRef? = key?.let { associations[it] }
 
     /** A copy with [key] bound to [parser], or unbound when [parser] is `null`. */
-    fun with(key: String, parser: BinaryParser?): FileAssociations {
+    fun with(key: String, parser: ParserRef?): FileAssociations {
         val updated = associations.toMutableMap()
         if (parser == null) updated.remove(key) else updated[key] = parser
         return FileAssociations(updated, schemaVersion)
@@ -127,10 +165,10 @@ fun parseFileAssociations(text: String): FileAssociations {
         ?: FILE_ASSOCIATIONS_SCHEMA_VERSION
     val entries = root["associations"] as? JsonObject ?: return FileAssociations(emptyMap(), schemaVersion)
 
-    val associations = linkedMapOf<String, BinaryParser>()
+    val associations = linkedMapOf<String, ParserRef>()
     for ((path, value) in entries) {
         val key = normalizeFileAssociationKey(path) ?: continue
-        val parser = (value as? JsonPrimitive)?.content?.trim()?.let(BinaryParser::fromId) ?: continue
+        val parser = (value as? JsonPrimitive)?.content?.trim()?.let(ParserRef::fromId) ?: continue
         // Two spellings of one path (`a/b` and `./a/b`): the first wins, as in runtimes.json.
         associations.getOrPut(key) { parser }
     }
@@ -158,7 +196,7 @@ fun serializeFileAssociations(associations: FileAssociations): String {
  * [serializeFileAssociations] output declares itself against, so IntelliJ and VS Code
  * complete the parser ids, show what each one is, and flag a typo.
  */
-fun serializeFileAssociationsSchema(): String {
+fun serializeFileAssociationsSchema(scriptedProviders: List<ProviderRegistrationInfo> = emptyList()): String {
     val root = buildJsonObject {
         // Draft-07 for the reason given in serializeRuntimeTargetsSchema.
         put(SCHEMA_KEY, "http://json-schema.org/draft-07/schema#")
@@ -199,12 +237,35 @@ fun serializeFileAssociationsSchema(): String {
         }
         putJsonObject("definitions") {
             putJsonObject("parser") {
-                put("type", "string")
                 put("title", "Parser")
-                put("description", "Parser id. \"generic\" shows the raw bytes without any format parsing.")
-                putJsonArray("enum") { for (parser in BinaryParser.entries) add(parser.id) }
-                // Non-standard but honoured by both editors' completion popups.
-                putJsonArray("enumDescriptions") { for (parser in BinaryParser.entries) add(parser.displayName) }
+                put(
+                    "description",
+                    "Parser id: a built-in parser (\"generic\" shows the raw bytes without any format " +
+                        "parsing), or the user: id of a provider defined by a script in $PROVIDER_SCRIPTS_DIR.",
+                )
+                putJsonArray("anyOf") {
+                    addJsonObject {
+                        put("type", "string")
+                        putJsonArray("enum") { for (parser in BinaryParser.entries) add(parser.id) }
+                        // Non-standard but honoured by both editors' completion popups.
+                        putJsonArray("enumDescriptions") { for (parser in BinaryParser.entries) add(parser.displayName) }
+                    }
+                    // The providers loaded when the schema was written, so they complete too.
+                    // Sorted, so loading scripts in another order does not rewrite the file.
+                    val known = scriptedProviders.sortedBy { it.id }
+                    if (known.isNotEmpty()) {
+                        addJsonObject {
+                            put("type", "string")
+                            putJsonArray("enum") { for (provider in known) add(provider.id) }
+                            putJsonArray("enumDescriptions") { for (provider in known) add(provider.name) }
+                        }
+                    }
+                    // Any other user: id is still valid: its script may not be loaded here.
+                    addJsonObject {
+                        put("type", "string")
+                        put("pattern", "^user:.+$")
+                    }
+                }
             }
         }
         putJsonArray("examples") {

@@ -56,6 +56,13 @@ data class VscodeMessage(
      * when it cannot carry a parser choice (not on disk, or outside the workspace).
      */
     val fileAssociationKey: String = "",
+    /**
+     * `load-wasm` / `provider-scripts-loaded`: the scripts in `.hexana/providers/` governing
+     * the file, or `null` when the message does not carry them.
+     */
+    val providerScripts: List<ProviderScriptSource>? = null,
+    /** The scripts exist but were not sent because the workspace is not trusted. */
+    val providerScriptsUntrusted: Boolean = false,
     /** `select-table-row`: the table tab to select a row of. */
     val tabName: String = "",
     /** `select-table-row`: the top-level descriptor row to select. */
@@ -798,6 +805,15 @@ internal fun decodeVscodeMessage(type: String, data: dynamic): VscodeMessage =
                 runtimeTargetsJson = (data.runtimeTargetsJson as? String) ?: "",
                 fileAssociationsJson = (data.fileAssociationsJson as? String) ?: "",
                 fileAssociationKey = (data.fileAssociationKey as? String) ?: "",
+                providerScripts = decodeProviderScripts(data.providerScripts),
+                providerScriptsUntrusted = (data.providerScriptsUntrusted as? Boolean) ?: false,
+            )
+        }
+        "provider-scripts-loaded" -> {
+            VscodeMessage(
+                type = type,
+                providerScripts = decodeProviderScripts(data.providerScripts) ?: emptyList(),
+                providerScriptsUntrusted = (data.providerScriptsUntrusted as? Boolean) ?: false,
             )
         }
         "select-table-row" -> {
@@ -917,6 +933,17 @@ internal fun decodeVscodeMessage(type: String, data: dynamic): VscodeMessage =
         }
         else -> VscodeMessage(type = type)
     }
+
+/** Reads the `[{ path, text }]` array the host sends; `null` when the field is absent. */
+private fun decodeProviderScripts(value: dynamic): List<ProviderScriptSource>? {
+    if (value == null || value == undefined || !(js("Array").isArray(value) as Boolean)) return null
+    return (0 until (value.length as Int)).mapNotNull { i ->
+        val entry: dynamic = value[i]
+        val path = entry?.path as? String
+        val text = entry?.text as? String
+        if (path != null && text != null) ProviderScriptSource(path, text) else null
+    }
+}
 
 /**
  * Composable side-effect that listens for messages from the VS Code extension

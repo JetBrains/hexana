@@ -4,12 +4,14 @@ import org.graalvm.polyglot.Value
 import org.graalvm.polyglot.proxy.ProxyArray
 import org.graalvm.polyglot.proxy.ProxyExecutable
 import org.graalvm.polyglot.proxy.ProxyObject
+import org.jetbrains.hexana.providers.BinaryParser
 import org.jetbrains.hexana.shared.scripting.CheckFinding
 import org.jetbrains.hexana.shared.scripting.CheckRegistration
 import org.jetbrains.hexana.shared.scripting.CheckSeverity
 import org.jetbrains.hexana.shared.scripting.ConsoleSeverity
 import org.jetbrains.hexana.shared.scripting.FlagSpec
 import org.jetbrains.hexana.shared.scripting.FlagType
+import org.jetbrains.hexana.shared.scripting.ProviderRegistration
 import org.jetbrains.hexana.shared.scripting.ScriptAnchor
 import org.jetbrains.hexana.shared.scripting.ScriptContributionCollector
 import org.jetbrains.hexana.shared.scripting.ScriptInvocation
@@ -66,6 +68,13 @@ internal class GraalScriptContributionCollector : ScriptContributionCollector() 
      * All accesses must be on the same executor thread as the GraalJS context.
      */
     val rawCheckFunctions: MutableMap<String, Value> = mutableMapOf()
+
+    /**
+     * Raw Graal [Value] for each registered provider's `parse` function, keyed by provider id.
+     * Same rules as [rawRowsFunctions]: called directly so the returned object is read member by
+     * member instead of flattened, and only ever on the context's executor thread.
+     */
+    val rawParseFunctions: MutableMap<String, Value> = mutableMapOf()
 
     // -------------------------------------------------------------------------
     // Invocation context (args/inputs/flags)
@@ -143,6 +152,8 @@ internal class GraalScriptContributionCollector : ScriptContributionCollector() 
     fun buildGraalHexanaProxy(): ProxyObject = object : ProxyObject {
         override fun getMember(key: String): Any? = when (key) {
             "defineSlice" -> defineSliceExecutable
+            "defineTab" -> defineTabExecutable
+            "defineProvider" -> defineProviderExecutable
             "defineCheck" -> defineCheckExecutable
             "defineFlags" -> defineFlagsExecutable
             "api" -> 2
@@ -154,11 +165,11 @@ internal class GraalScriptContributionCollector : ScriptContributionCollector() 
         }
 
         override fun getMemberKeys(): Any = ProxyArray.fromList(
-            listOf("defineSlice", "defineCheck", "defineFlags", "api", "has", "args", "inputs", "flags")
+            HEXANA_MEMBERS.toList()
         )
 
         override fun hasMember(key: String): Boolean =
-            key in setOf("defineSlice", "defineCheck", "defineFlags", "api", "has", "args", "inputs", "flags")
+            key in HEXANA_MEMBERS
 
         override fun putMember(key: String, value: Value) { /* read-only */ }
     }
@@ -196,6 +207,31 @@ internal class GraalScriptContributionCollector : ScriptContributionCollector() 
         }
         val registration = parseGraalSpec(spec)
         registerSlice(registration)
+        null
+    }
+
+    /**
+     * `hexana.defineTab`: a slice that attaches itself to every binary its `appliesTo` names,
+     * instead of living inside the script tab that defined it. Registered as a slice so
+     * paging, columns and params work exactly as they do for `defineSlice`.
+     */
+    private val defineTabExecutable: ProxyExecutable = ProxyExecutable { args ->
+        val spec = args.getOrNull(0)
+            ?: throw IllegalArgumentException("hexana.defineTab requires a spec argument")
+        if (spec.isNull || !spec.hasMembers()) {
+            throw IllegalArgumentException("hexana.defineTab expects an object spec")
+        }
+        registerSlice(parseGraalSpec(spec, api = "hexana.defineTab"))
+        null
+    }
+
+    private val defineProviderExecutable: ProxyExecutable = ProxyExecutable { args ->
+        val spec = args.getOrNull(0)
+            ?: throw IllegalArgumentException("hexana.defineProvider requires a spec argument")
+        if (spec.isNull || !spec.hasMembers()) {
+            throw IllegalArgumentException("hexana.defineProvider expects an object spec")
+        }
+        registerProvider(parseGraalProviderSpec(spec))
         null
     }
 
@@ -237,7 +273,7 @@ internal class GraalScriptContributionCollector : ScriptContributionCollector() 
 
     private val hasFnExecutable: ProxyExecutable = ProxyExecutable { args ->
         val feature = args.getOrNull(0)?.takeIf { it.isString }?.asString() ?: ""
-        feature == "slices" || feature == "checks"
+        feature in HAS_FEATURES
     }
 
     private fun buildArgsArray(): ProxyArray {
@@ -567,20 +603,66 @@ internal class GraalScriptContributionCollector : ScriptContributionCollector() 
         return FlagSpec(short = short, long = long, type = flagType, values = values, default = default)
     }
 
-    private fun parseGraalSpec(spec: Value): SliceRegistration {
+    private fun parseGraalProviderSpec(spec: Value): ProviderRegistration {
+        val api = "hexana.defineProvider"
+        val id = spec.getMemberOrNull("id")?.takeIf { it.isString }?.asString()
+            ?: throw IllegalArgumentException("$api: spec.id is required (string)")
+        val name = spec.getMemberOrNull("name")?.takeIf { it.isString }?.asString()?.takeIf { it.isNotBlank() }
+            ?: throw IllegalArgumentException("$api: spec.name is required (non-empty string)")
+        val baseVal = spec.getMemberOrNull("base")
+        val base = if (baseVal == null || baseVal.isNull) {
+            BinaryParser.GENERIC
+        } else {
+            val baseId = baseVal.takeIf { it.isString }?.asString()
+                ?: throw IllegalArgumentException("$api: spec.base must be a string")
+            BinaryParser.fromId(baseId) ?: throw IllegalArgumentException(
+                "$api: spec.base \"$baseId\" is not a built-in parser; valid values: " +
+                    BinaryParser.entries.joinToString(", ") { it.id }
+            )
+        }
+        val description = spec.getMemberOrNull("description")?.takeIf { it.isString }?.asString()
+        val parseVal = spec.getMemberOrNull("parse")?.takeIf { !it.isNull }
+        if (parseVal != null && !parseVal.canExecute()) {
+            throw IllegalArgumentException("$api: spec.parse must be a function")
+        }
+        if (parseVal != null) rawParseFunctions[id] = parseVal
+        val parseFn = parseVal?.let { fn ->
+            ScriptValue.Fn(
+                name = "$id.parse(...)",
+                minArgs = 0,
+                maxArgs = Int.MAX_VALUE,
+                call = { args ->
+                    val graalArgs = args.all().map { sv -> ScriptValueGraalProxy.toGuest(sv) }.toTypedArray()
+                    ScriptValueGraalProxy.fromGuest(fn.execute(*graalArgs))
+                },
+            )
+        }
+        return ProviderRegistration(id = id, name = name, base = base, description = description, parse = parseFn)
+    }
+
+    private fun parseGraalSpec(spec: Value, api: String = "hexana.defineSlice"): SliceRegistration {
+        val isTab = api == "hexana.defineTab"
         val nameStr = spec.getMemberOrNull("name")?.asString()
-            ?: throw IllegalArgumentException("hexana.defineSlice: spec.name is required (string)")
+            ?: throw IllegalArgumentException("$api: spec.name is required (string)")
         require(nameStr.startsWith("user:")) {
-            "hexana.defineSlice: slice name must start with \"user:\", got \"$nameStr\""
+            "$api: ${if (isTab) "tab" else "slice"} name must start with \"user:\", got \"$nameStr\""
         }
 
-        val formatsVal = spec.getMemberOrNull("formats")
+        // A tab says where it attaches; with no list it would attach to every binary in the
+        // project, which nobody writing one means. `"*"` asks for that explicitly.
+        val formatsKey = if (isTab) "appliesTo" else "formats"
+        val formatsVal = spec.getMemberOrNull(formatsKey)
         val formats: List<String> = when {
-            formatsVal == null || formatsVal.isNull -> emptyList()
+            formatsVal == null || formatsVal.isNull ->
+                if (isTab) throw IllegalArgumentException("$api: spec.appliesTo is required (array of format or provider ids)")
+                else emptyList()
             formatsVal.hasArrayElements() -> {
                 (0 until formatsVal.arraySize).map { i -> formatsVal.getArrayElement(i).asString() }
             }
-            else -> throw IllegalArgumentException("hexana.defineSlice: spec.formats must be an array")
+            else -> throw IllegalArgumentException("$api: spec.$formatsKey must be an array")
+        }
+        if (isTab && formats.isEmpty()) {
+            throw IllegalArgumentException("$api: spec.appliesTo must not be empty; use [\"*\"] for every binary")
         }
 
         val columnsVal = spec.getMemberOrNull("columns")
@@ -633,6 +715,7 @@ internal class GraalScriptContributionCollector : ScriptContributionCollector() 
             params = params,
             columns = columns,
             rows = rowsFn,
+            isTab = isTab,
         )
     }
 
@@ -681,5 +764,14 @@ internal class GraalScriptContributionCollector : ScriptContributionCollector() 
     companion object {
         private fun Value.getMemberOrNull(key: String): Value? =
             if (hasMembers() && hasMember(key)) getMember(key) else null
+
+        /** Every member of the `hexana` global; kept in one place for keys and membership. */
+        private val HEXANA_MEMBERS = setOf(
+            "defineSlice", "defineTab", "defineProvider", "defineCheck", "defineFlags",
+            "api", "has", "args", "inputs", "flags",
+        )
+
+        /** What `hexana.has(feature)` answers true for in a regular run. */
+        private val HAS_FEATURES = setOf("slices", "checks", "tabs", "providers")
     }
 }

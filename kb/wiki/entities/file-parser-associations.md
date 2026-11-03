@@ -1,5 +1,8 @@
 # File parser associations
 
+> Since 2026-11-03 an association can also name a scripted provider (`"user:…"`); see
+> [[entities/scripted-binary-providers]].
+
 A per-file override of [[entities/binary-provider-selection]]: the user picks which parser opens a
 file, or "Generic binary" for none. Stored in `.hexana/file_associations.json`, shared by the
 IntelliJ plugin and the VS Code extension, modelled on `.hexana/runtimes.json`

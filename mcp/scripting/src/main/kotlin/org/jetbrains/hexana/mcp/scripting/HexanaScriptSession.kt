@@ -9,6 +9,9 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.shared.scripting.CheckFinding
 import org.jetbrains.hexana.shared.scripting.CheckSeverity
 import org.jetbrains.hexana.shared.scripting.EmptyScriptInvocation
+import org.jetbrains.hexana.shared.scripting.ProviderParseResult
+import org.jetbrains.hexana.shared.scripting.ProviderParseResultBuilder
+import org.jetbrains.hexana.shared.scripting.ProviderRegistration
 import org.jetbrains.hexana.shared.scripting.ScriptConsoleEntry
 import org.jetbrains.hexana.shared.scripting.ScriptInvocation
 import org.jetbrains.hexana.shared.scripting.ScriptOpenPolicy
@@ -67,6 +70,14 @@ sealed interface SlicePageResult {
     data class Err(val error: SlicePageError) : SlicePageResult
 }
 
+/** Result of [HexanaScriptSession.runParse]. */
+sealed interface ProviderParseOutcome {
+    data class Ok(val result: ProviderParseResult) : ProviderParseOutcome
+
+    /** The provider could not report its regions; [message] is meant for the user. */
+    data class Err(val message: String) : ProviderParseOutcome
+}
+
 /**
  * A persistent script session that keeps the GraalJS context alive so
  * that registered slice `rows` functions can be called after the initial eval.
@@ -96,6 +107,62 @@ class HexanaScriptSession private constructor(
     /** Live slice registrations (include the callable rows Fn). */
     val registrations: List<SliceRegistration>
         get() = contributions?.slices ?: emptyList()
+
+    /** Live provider registrations (include the callable parse Fn). */
+    val providers: List<ProviderRegistration>
+        get() = contributions?.providers ?: emptyList()
+
+    /**
+     * Runs provider [providerId]'s `parse(binary)` against this session's binary and returns
+     * the regions it reported.
+     *
+     * Mirrors [fetchPage]: a guest error comes back as [ProviderParseOutcome.Err] and leaves
+     * the session alive — the provider's tabs still work — while a timeout kills it. A provider
+     * without a `parse` reports no regions.
+     *
+     * @throws IllegalStateException when the session is already closed
+     * @throws IllegalArgumentException when [providerId] is not registered
+     */
+    fun runParse(providerId: String): ProviderParseOutcome {
+        check(isAlive) { "Session is closed" }
+        require(providers.any { it.id == providerId }) { "No provider registered with id \"$providerId\"" }
+        val rawFn = contributions?.rawParseFunctions?.get(providerId)
+            ?: return ProviderParseOutcome.Ok(ProviderParseResult(emptyList()))
+
+        val future = executor!!.submit(Callable {
+            try {
+                val binary = contextRef.get()?.getBindings("js")?.getMember(SCRIPT_BINARY_GLOBAL)
+                    ?: return@Callable ProviderParseOutcome.Err("The script session has no binary to parse.")
+                ProviderParseOutcome.Ok(convertGraalParseResult(rawFn.execute(binary)))
+            } catch (error: PolyglotException) {
+                if (error.isCancelled) throw error
+                ProviderParseOutcome.Err("$providerId.parse() failed: ${error.message ?: "script error"}")
+            } catch (error: IllegalArgumentException) {
+                ProviderParseOutcome.Err("$providerId.parse(): ${error.message}")
+            }
+        })
+
+        return try {
+            future.get(limits.timeoutMillis, TimeUnit.MILLISECONDS)
+        } catch (_: TimeoutException) {
+            killSession()
+            ProviderParseOutcome.Err("$providerId.parse() timed out after ${limits.timeoutMillis} ms")
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+            killSession()
+            ProviderParseOutcome.Err("$providerId.parse() was interrupted")
+        } catch (error: ExecutionException) {
+            val cause = error.cause ?: error
+            when (cause) {
+                is VirtualMachineError -> throw cause
+                is LinkageError -> throw cause
+                else -> {
+                    killSession()
+                    ProviderParseOutcome.Err("$providerId.parse() failed: ${cause.message ?: cause::class.java.name}")
+                }
+            }
+        }
+    }
 
     /**
      * All console entries emitted so far (eval + any page calls), in order.
@@ -332,6 +399,37 @@ class HexanaScriptSession private constructor(
      * Expected shape: `{ rows: [ { anchor?, cells: [...] } ], nextOffset?, total? }`
      * or just an array of row objects. Unknown keys are ignored.
      */
+    /**
+     * Reads `parse()`'s return value: `{ regions: [...] }`, or the array of regions itself.
+     * `undefined`/`null` means no regions. Called on the executor thread.
+     */
+    private fun convertGraalParseResult(value: Value): ProviderParseResult {
+        if (value.isNull) return ProviderParseResult(emptyList())
+        val regions = when {
+            value.hasArrayElements() -> value
+            value.hasMembers() && value.hasMember("regions") -> value.getMember("regions")
+            else -> throw IllegalArgumentException("must return { regions: [...] } or an array of regions")
+        }
+        if (regions.isNull) return ProviderParseResult(emptyList())
+        if (!regions.hasArrayElements()) throw IllegalArgumentException("regions must be an array")
+        val builder = ProviderParseResultBuilder()
+        for (i in 0 until regions.arraySize) {
+            val region = regions.getArrayElement(i)
+            if (!region.hasMembers()) {
+                builder.region(null, null, null, null)
+                continue
+            }
+            fun member(key: String): Value? = if (region.hasMember(key)) region.getMember(key) else null
+            builder.region(
+                name = member("name")?.takeIf { it.isString }?.asString(),
+                offset = member("offset")?.takeIf { it.isNumber }?.asDouble(),
+                length = member("length")?.takeIf { it.isNumber }?.asDouble(),
+                tab = member("tab")?.takeIf { it.isString }?.asString(),
+            )
+        }
+        return builder.build()
+    }
+
     private fun convertGraalRowsResult(value: Value, registration: SliceRegistration): SlicePage {
         val isObj = value.hasMembers()
         val graalRows: Value? = when {
@@ -589,6 +687,7 @@ class HexanaScriptSession private constructor(
                     slices = contributions.slices.map { it.toInfo() },
                     console = contributions.console.toList(),
                     checks = contributions.checks.map { it.toInfo() },
+                    providers = contributions.providers.map { it.toInfo() },
                     findings = emptyList(), // Session mode: checks run on demand, not during eval
                     flagDeclarations = contributions.flagDeclarations.toMap(),
                 )

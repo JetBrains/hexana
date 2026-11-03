@@ -895,6 +895,13 @@ html, body {
     background: var(--vscode-menu-separatorBackground, rgba(128, 128, 128, 0.35));
 }
 
+/* A provider-script tab whose rows() threw: shown above whatever rows it produced. */
+.hexana-provider-tab-error {
+    padding: 4px 12px;
+    color: var(--vscode-errorForeground, #F48771);
+    font-size: 12px;
+}
+
 /* File parser associations dialog: one row per file. */
 .hexana-file-associations-dialog {
     min-width: 520px;
