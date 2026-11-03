@@ -27,6 +27,22 @@ hexana.defineTab({           // = SliceSpec with appliesTo instead of formats
 
 `hexana.has("providers")` / `has("tabs")` are true.
 
+## Creating a script from the menu
+
+"Create New Provider Script…" (end of the badge menu's Scripts section, in both editors) asks
+for a name, writes `.hexana/providers/<slug>.js` from the shared stub
+(`providerScriptTemplate` / `providerScript` in `ScriptProviders.kt`), puts
+`hexana-scripting.d.ts` (+ `jsconfig.json` when the folder has no JS config) beside it, opens it
+and assigns the new provider to the current file. The id is derived from the file name actually
+used (`my-format-2.js` → `user:my-format-2`), so a repeated name never clashes. Neither the
+`.d.ts` nor `jsconfig.json` ends in `.js`, so neither is loaded as a provider script.
+
+VS Code: the webview owns the stub but the host owns the name prompt, so the webview sends the
+stub with `PROVIDER_ID_PLACEHOLDER` / `PROVIDER_NAME_PLACEHOLDER`; the host substitutes
+`JSON.stringify` literals, writes, and replies `provider-script-created { providerId }`, which the
+webview turns into an association save. `providerScriptSlug` exists twice (Kotlin + TS
+`WasmEditorProvider.ts`); keep them identical.
+
 ## Demo project
 
 `examples/providers/` is a self-contained project rather than a loose script: the script in its

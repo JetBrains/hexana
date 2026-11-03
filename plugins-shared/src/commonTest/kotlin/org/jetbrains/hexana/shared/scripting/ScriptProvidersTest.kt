@@ -47,4 +47,26 @@ class ScriptProvidersTest {
         assertTrue(appliesToFormats(emptyList(), ids))
         assertFalse(appliesToFormats(listOf("pe", "user:other"), ids))
     }
+
+    @Test
+    fun `slugs fold everything but letters and digits`() {
+        assertEquals("acme-firmware-v2", providerScriptSlug("ACME firmware (v2)"))
+        assertEquals("provider", providerScriptSlug("  ***  "))
+    }
+
+    @Test
+    fun `literals escape what would break the script`() {
+        assertEquals("\"a\\\"b\\\\c\\nd\"", jsStringLiteral("a\"b\\c\nd"))
+        assertEquals("\"\\u0001\"", jsStringLiteral("\u0001"))
+    }
+
+    @Test
+    fun `the template inserts the id everywhere it is used`() {
+        val text = providerScript("user:acme", "ACME")
+        assertTrue("id: \"user:acme\"," in text)
+        assertTrue("name: \"ACME\"," in text)
+        assertTrue("appliesTo: [\"user:acme\"]" in text)
+        assertFalse(PROVIDER_ID_PLACEHOLDER in text)
+        assertTrue(PROVIDER_ID_PLACEHOLDER in providerScriptTemplate(PROVIDER_ID_PLACEHOLDER, PROVIDER_NAME_PLACEHOLDER))
+    }
 }

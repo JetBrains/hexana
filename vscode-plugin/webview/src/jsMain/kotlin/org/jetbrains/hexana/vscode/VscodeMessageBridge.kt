@@ -63,6 +63,8 @@ data class VscodeMessage(
     val providerScripts: List<ProviderScriptSource>? = null,
     /** The scripts exist but were not sent because the workspace is not trusted. */
     val providerScriptsUntrusted: Boolean = false,
+    /** `provider-script-created`: the id of the provider the new script registers. */
+    val providerId: String = "",
     /** `select-table-row`: the table tab to select a row of. */
     val tabName: String = "",
     /** `select-table-row`: the top-level descriptor row to select. */
@@ -469,6 +471,18 @@ fun postOpenFileAssociationsFileToHost(json: String, schema: String) {
 }
 
 /**
+ * Asks the extension host to create a provider script from [template] (placeholders unfilled),
+ * with the scripting types and [jsConfig] beside it. The host replies with `provider-script-created`.
+ */
+fun postCreateProviderScriptToHost(template: String, jsConfig: String) {
+    val msg = js("{}")
+    msg.type = "create-provider-script"
+    msg.template = template
+    msg.jsConfigContent = jsConfig
+    vscodeApi.postMessage(msg)
+}
+
+/**
  * Asks the extension host to open a text document in a new VS Code editor tab.
  *
  * [fileName] is used as the suggested file name (e.g. "foo.cdx.json").
@@ -764,6 +778,8 @@ class VscodeHost(override val canRunApk: Boolean = false) : Host {
         postSaveFileAssociationsToHost(json, schema)
     override fun openFileAssociationsFile(json: String, schema: String) =
         postOpenFileAssociationsFileToHost(json, schema)
+    override fun createProviderScript(template: String, jsConfig: String) =
+        postCreateProviderScriptToHost(template, jsConfig)
     override fun createScriptFromTemplate(fileName: String, template: String?, jsConfigContent: String?) =
         postCreateScriptFromTemplateToHost(fileName, template, jsConfigContent)
     override fun openScriptForEditing(scriptPath: String, jsConfigContent: String?) =
@@ -918,6 +934,7 @@ internal fun decodeVscodeMessage(type: String, data: dynamic): VscodeMessage =
                 fileAssociationsJson = (data.fileAssociationsJson as? String) ?: "",
             )
         }
+        "provider-script-created" -> VscodeMessage(type = type, providerId = (data.providerId as? String) ?: "")
         "open-runtime-targets-dialog" -> VscodeMessage(type = type)
         "open-file-associations-dialog" -> VscodeMessage(type = type)
         "restore-script-tabs" -> {

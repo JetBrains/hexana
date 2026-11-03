@@ -132,6 +132,15 @@ interface Host {
     fun openFileAssociationsFile(json: String, schema: String) {}
 
     /**
+     * Asks the host to create a provider script in `.hexana/providers/` from [template] — the
+     * stub with the id and name placeholders still in it, which the host fills in once the user
+     * has named the provider — with the scripting types beside it, and to open it. [jsConfig] is
+     * written there too when the folder has no JavaScript project config. The host replies with
+     * `provider-script-created`.
+     */
+    fun createProviderScript(template: String, jsConfig: String) {}
+
+    /**
      * Creates a runnable script and selects it, so the user never starts from an
      * empty file. The host replies with `script-file-picked`.
      *

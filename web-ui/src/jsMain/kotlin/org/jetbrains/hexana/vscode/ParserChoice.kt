@@ -28,6 +28,7 @@ import org.jetbrains.hexana.shared.scripting.ProviderRegistrationInfo
  * @param scriptedProviders the providers the workspace's provider scripts define
  * @param onChoose records a new choice; `null` returns the file to automatic detection
  * @param onEdit opens `.hexana/file_associations.json` itself for editing
+ * @param onCreateScript has the host create a provider script; it is assigned to this file
  */
 class ParserChoice(
     val chosen: ParserRef?,
@@ -36,6 +37,7 @@ class ParserChoice(
     val scriptedProviders: List<ProviderRegistrationInfo>,
     val onChoose: (ParserRef?) -> Unit,
     val onEdit: () -> Unit,
+    val onCreateScript: () -> Unit,
 )
 
 /**
@@ -101,12 +103,14 @@ internal fun FormatBadge(label: String, choice: ParserChoice?) {
                             ?.takeIf { chosen -> choice.scriptedProviders.none { it.id == chosen.id } }
                             ?.let { it to "${it.id} (not loaded)" },
                     )
-                if (scripted.isNotEmpty()) {
-                    Div({ classes("hexana-format-menu-separator") }) {}
-                    Div({ classes("hexana-format-menu-title") }) { Text("Scripts") }
-                    for ((ref, name) in scripted) {
-                        ParserMenuItem(name, selected = choice.chosen == ref) { choose(ref) }
-                    }
+                Div({ classes("hexana-format-menu-separator") }) {}
+                Div({ classes("hexana-format-menu-title") }) { Text("Scripts") }
+                for ((ref, name) in scripted) {
+                    ParserMenuItem(name, selected = choice.chosen == ref) { choose(ref) }
+                }
+                ParserMenuItem("Create New Provider Script\u2026", selected = false) {
+                    menuVisible = false
+                    choice.onCreateScript()
                 }
                 Div({ classes("hexana-format-menu-separator") }) {}
                 ParserMenuItem("Edit File Associations\u2026", selected = false) {

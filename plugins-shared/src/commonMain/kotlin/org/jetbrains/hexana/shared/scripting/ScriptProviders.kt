@@ -133,3 +133,77 @@ fun scriptFormatIds(baseParser: BinaryParser, scriptedProviderId: String?): Set<
  */
 fun appliesToFormats(formats: List<String>, formatIds: Set<String>): Boolean =
     formats.isEmpty() || "*" in formats || formats.any { it in formatIds }
+
+/**
+ * Placeholders in [providerScriptTemplate] a host substitutes with JS string literals once it
+ * knows the provider's id and name — the VS Code extension asks for the name itself, after the
+ * webview (which owns the template) has already handed the text over.
+ */
+const val PROVIDER_ID_PLACEHOLDER: String = "__HEXANA_PROVIDER_ID__"
+const val PROVIDER_NAME_PLACEHOLDER: String = "__HEXANA_PROVIDER_NAME__"
+
+/**
+ * The file-name stem, and the part of the `user:` id after the prefix, for a provider named
+ * [name]: lowercase, with every run of other characters folded into one `-`. `provider` when
+ * nothing usable is left.
+ */
+fun providerScriptSlug(name: String): String =
+    name.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').ifEmpty { "provider" }
+
+/**
+ * The stub a new provider script starts from, with [idLiteral] and [nameLiteral] inserted
+ * verbatim — pass JS string literals ([jsStringLiteral]), or the placeholders above.
+ *
+ * Minimal but runnable: it registers the provider and reports one region, so assigning it to a
+ * file shows the provider working before a line is changed; the tab is left as a comment.
+ */
+fun providerScriptTemplate(idLiteral: String, nameLiteral: String): String = """
+    |// A binary provider. Assign it to a file from the format badge's parser menu ("Scripts"), or
+    |// in .hexana/file_associations.json under its id. Every .js file in this folder is loaded for
+    |// the project; hexana-scripting.d.ts next to it gives completion for the API.
+    |
+    |hexana.defineProvider({
+    |  id: $idLiteral,
+    |  name: $nameLiteral,
+    |  // Built-in parser the file is read with first ("elf", "pe", "wasm", ...); its tabs stay.
+    |  base: "generic",
+    |  parse(binary) {
+    |    // Regions tint the hex view and fill the Structure view.
+    |    return {
+    |      regions: [
+    |        { name: "Header", offset: 0, length: Math.min(16, binary.size) },
+    |      ],
+    |    };
+    |  },
+    |});
+    |
+    |// A tab for files opened with this provider:
+    |// hexana.defineTab({
+    |//   name: "user:Fields",
+    |//   appliesTo: [$idLiteral],
+    |//   columns: [{ name: "Field", type: "string" }, { name: "Offset", type: "offset" }],
+    |//   rows(binary) { return { rows: [{ cells: ["Magic", 0] }] }; },
+    |// });
+    |""".trimMargin()
+
+/** The stub for a provider [id] named [name]. */
+fun providerScript(id: String, name: String): String =
+    providerScriptTemplate(jsStringLiteral(id), jsStringLiteral(name))
+
+/** [value] as a double-quoted JS string literal. */
+fun jsStringLiteral(value: String): String = buildString {
+    append('"')
+    for (c in value) {
+        when (c) {
+            '"' -> append("\\\"")
+            '\\' -> append("\\\\")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            '\u2028' -> append("\\u2028")
+            '\u2029' -> append("\\u2029")
+            else -> if (c < ' ') append("\\u" + c.code.toString(16).padStart(4, '0')) else append(c)
+        }
+    }
+    append('"')
+}

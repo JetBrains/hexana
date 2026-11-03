@@ -45,6 +45,7 @@ import javax.swing.Icon
  *   the menu's "Scripts" section
  * @param onChoose records a new choice; `null` returns the file to automatic detection
  * @param onEdit opens the settings page listing every file's choice
+ * @param onCreateScript writes a new provider script, assigns it to this file and opens it
  */
 internal class ParserChoice(
     val chosen: ParserRef?,
@@ -53,6 +54,7 @@ internal class ParserChoice(
     val scriptedProviders: List<ProviderRegistrationInfo>,
     val onChoose: (ParserRef?) -> Unit,
     val onEdit: () -> Unit,
+    val onCreateScript: () -> Unit,
 )
 
 /**
@@ -102,14 +104,17 @@ internal fun FormatBadge(
 
 /**
  * One row of the parser popup: a parser to choose ([ref] `null` for automatic detection), or —
- * with [isEdit] — the link to the settings page that closes the list.
+ * with an [action] — a command such as creating a provider script.
  */
 private class ParserItem(
     val ref: ParserRef?,
     val text: String,
     val separatorAbove: ListSeparator? = null,
-    val isEdit: Boolean = false,
+    val action: ParserMenuAction? = null,
 )
+
+/** The rows that do something instead of choosing a parser. */
+private enum class ParserMenuAction { CREATE_SCRIPT, EDIT_ASSOCIATIONS }
 
 /** The popup's rows: detection, generic, the built-in formats, the scripts' providers, settings. */
 private fun parserItems(choice: ParserChoice): List<ParserItem> = buildList {
@@ -129,7 +134,15 @@ private fun parserItems(choice: ParserChoice): List<ParserItem> = buildList {
     scripted.forEachIndexed { index, (ref, name) ->
         add(ParserItem(ref, name, if (index == 0) ListSeparator("Scripts") else null))
     }
-    add(ParserItem(null, "Edit File Associations\u2026", ListSeparator(), isEdit = true))
+    // Ends the Scripts section, or is all of it while the project has no provider scripts.
+    add(
+        ParserItem(
+            null, "Create New Provider Script\u2026",
+            if (scripted.isEmpty()) ListSeparator("Scripts") else null,
+            ParserMenuAction.CREATE_SCRIPT,
+        ),
+    )
+    add(ParserItem(null, "Edit File Associations\u2026", ListSeparator(), ParserMenuAction.EDIT_ASSOCIATIONS))
 }
 
 /**
@@ -142,22 +155,26 @@ private fun showParserPopup(choice: ParserChoice) {
     val step = object : BaseListPopupStep<ParserItem>("Parse File As", items) {
         override fun getTextFor(value: ParserItem): String = value.text
 
-        override fun getIconFor(value: ParserItem): Icon? = when {
-            value.isEdit -> AllIcons.General.Settings
-            value.ref == choice.chosen -> AllIcons.Actions.Checked
-            else -> null
+        override fun getIconFor(value: ParserItem): Icon? = when (value.action) {
+            ParserMenuAction.CREATE_SCRIPT -> AllIcons.General.Add
+            ParserMenuAction.EDIT_ASSOCIATIONS -> AllIcons.General.Settings
+            null -> if (value.ref == choice.chosen) AllIcons.Actions.Checked else null
         }
 
         override fun getSeparatorAbove(value: ParserItem): ListSeparator? = value.separatorAbove
 
         override fun getDefaultOptionIndex(): Int =
-            items.indexOfFirst { !it.isEdit && it.ref == choice.chosen }
+            items.indexOfFirst { it.action == null && it.ref == choice.chosen }
 
         override fun isSpeedSearchEnabled(): Boolean = true
 
         override fun onChosen(selectedValue: ParserItem, finalChoice: Boolean): PopupStep<*>? {
-            // The settings dialog is modal; opened from the final step, once the popup is gone.
-            if (selectedValue.isEdit) return doFinalStep { choice.onEdit() }
+            // Both open modal dialogs; run from the final step, once the popup is gone.
+            when (selectedValue.action) {
+                ParserMenuAction.CREATE_SCRIPT -> return doFinalStep { choice.onCreateScript() }
+                ParserMenuAction.EDIT_ASSOCIATIONS -> return doFinalStep { choice.onEdit() }
+                null -> Unit
+            }
             if (selectedValue.ref != choice.chosen) choice.onChoose(selectedValue.ref)
             return FINAL_CHOICE
         }

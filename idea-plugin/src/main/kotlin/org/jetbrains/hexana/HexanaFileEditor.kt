@@ -25,6 +25,8 @@ import com.intellij.openapi.fileEditor.impl.text.TextEditorProvider
 import com.intellij.openapi.fileTypes.BinaryFileTypeDecompilers
 import com.intellij.openapi.fileTypes.FileType
 import com.intellij.openapi.options.ShowSettingsUtil
+import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.ui.NonEmptyInputValidator
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.UserDataHolderBase
@@ -68,6 +70,7 @@ import org.jetbrains.hexana.ui.CLASS_FILE_NAV_TARGET_KEY
 import org.jetbrains.hexana.ui.ClassFileNavTarget
 import org.jetbrains.hexana.ui.HexSearchField
 import org.jetbrains.hexana.ui.ParserChoice
+import org.jetbrains.hexana.ui.panel.ScriptTemplateWriter
 import org.jetbrains.hexana.ui.WASM_FUNCTION_NAV_TARGET_KEY
 import org.jetbrains.hexana.ui.WasmFunctionNavTarget
 import org.jetbrains.hexana.ui.createComposePanel
@@ -373,6 +376,24 @@ class HexanaFileEditor(
                 onEdit = {
                     ShowSettingsUtil.getInstance()
                         .showSettingsDialog(myProject, FileAssociationsConfigurable::class.java)
+                },
+                onCreateScript = {
+                    val name = Messages.showInputDialog(
+                        myProject,
+                        "Name shown in the format badge and the parser menu:",
+                        "New Provider Script",
+                        null,
+                        "My format",
+                        NonEmptyInputValidator(),
+                    )?.trim()
+                    if (!name.isNullOrEmpty()) {
+                        // Off the EDT: writes files and refreshes VFS. The new provider is then
+                        // assigned to this file, so the stub is in effect as soon as it loads.
+                        editorScope.launch {
+                            val created = ScriptTemplateWriter.createProviderScript(myProject, name) ?: return@launch
+                            associations.setParser(myFile, ParserRef.Scripted(created.providerId))
+                        }
+                    }
                 },
             )
         }

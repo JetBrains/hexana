@@ -19,7 +19,11 @@ import org.jetbrains.hexana.shared.features.parseRuntimeTargets
 import org.jetbrains.hexana.shared.features.serializeRuntimeTargets
 import org.jetbrains.hexana.shared.features.serializeRuntimeTargetsSchema
 import org.jetbrains.hexana.shared.features.FileAssociations
+import org.jetbrains.hexana.shared.scripting.PROVIDER_ID_PLACEHOLDER
+import org.jetbrains.hexana.shared.scripting.PROVIDER_NAME_PLACEHOLDER
 import org.jetbrains.hexana.shared.scripting.ProviderRegistrationInfo
+import org.jetbrains.hexana.shared.scripting.ScriptApiReference
+import org.jetbrains.hexana.shared.scripting.providerScriptTemplate
 import org.jetbrains.hexana.shared.features.parseFileAssociations
 import org.jetbrains.hexana.shared.features.serializeFileAssociations
 import org.jetbrains.hexana.shared.features.serializeFileAssociationsSchema
@@ -245,6 +249,12 @@ fun BinaryEditorContent(
                 host.openFileAssociationsFile(
                     serializeFileAssociations(fileAssociations),
                     serializeFileAssociationsSchema(scriptedProviders),
+                )
+            },
+            onCreateScript = {
+                host.createProviderScript(
+                    providerScriptTemplate(PROVIDER_ID_PLACEHOLDER, PROVIDER_NAME_PLACEHOLDER),
+                    ScriptApiReference.jsConfig(),
                 )
             },
         )

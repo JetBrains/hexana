@@ -7,7 +7,11 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.VirtualFile
+import org.jetbrains.hexana.shared.scripting.PROVIDER_SCRIPTS_DIR
 import org.jetbrains.hexana.shared.scripting.ScriptApiReference
+import org.jetbrains.hexana.shared.scripting.USER_CONTRIBUTION_PREFIX
+import org.jetbrains.hexana.shared.scripting.providerScript
+import org.jetbrains.hexana.shared.scripting.providerScriptSlug
 import java.io.File
 
 /**
@@ -57,6 +61,40 @@ internal object ScriptTemplateWriter {
             return null
         }
         return create(project, exampleFileName, content)
+    }
+
+    /** A provider script [createProviderScript] wrote, and the provider id it registers. */
+    class CreatedProviderScript(val file: VirtualFile, val providerId: String)
+
+    /**
+     * Writes a new provider script named [name] into `.hexana/providers/`, with the type
+     * definitions beside it, and opens it. The id is derived from the file name actually used,
+     * so a second "My format" becomes `my-format-2.js` with `user:my-format-2`: one script per
+     * id, and no clash with the first. Returns `null` when nothing could be written.
+     *
+     * Writes files and refreshes VFS synchronously, so never on the EDT.
+     */
+    fun createProviderScript(project: Project, name: String): CreatedProviderScript? {
+        val basePath = project.basePath ?: return null
+        val directory = File(basePath, PROVIDER_SCRIPTS_DIR)
+        if (!directory.isDirectory && !directory.mkdirs()) {
+            log.warn("Cannot create the provider scripts directory: $directory")
+            return null
+        }
+        val target = uniqueFile(directory, "${providerScriptSlug(name)}.js")
+        val providerId = USER_CONTRIBUTION_PREFIX + target.name.removeSuffix(".js")
+        try {
+            target.writeText(providerScript(providerId, name))
+        } catch (error: Exception) {
+            log.warn("Cannot write the provider script: $target", error)
+            return null
+        }
+        attachTypeDefinitions(directory)
+        val virtualFile = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(target) ?: return null
+        ApplicationManager.getApplication().invokeLater {
+            FileEditorManager.getInstance(project).openFile(virtualFile, true)
+        }
+        return CreatedProviderScript(virtualFile, providerId)
     }
 
     /**

@@ -11,6 +11,8 @@ import org.jetbrains.hexana.shared.PdbCompanionLoader
 import org.jetbrains.hexana.shared.diff.BinaryDiffInput
 import org.jetbrains.hexana.shared.features.ParserRef
 import org.jetbrains.hexana.shared.features.parseFileAssociations
+import org.jetbrains.hexana.shared.features.serializeFileAssociations
+import org.jetbrains.hexana.shared.features.serializeFileAssociationsSchema
 import org.jetbrains.hexana.shared.scripting.PROVIDER_SCRIPTS_DIR
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.await
@@ -44,6 +46,8 @@ fun BinaryEditorApp() {
     var openFileAssociationsRequest by remember { mutableStateOf(0) }
     var providerScripts by remember { mutableStateOf<List<ProviderScriptSource>>(emptyList()) }
     var providerScriptsUntrusted by remember { mutableStateOf(false) }
+    // A provider script the host just created from this editor's menu, to assign to its file.
+    var createdProviderId by remember { mutableStateOf<String?>(null) }
     // Row the host asked to select, e.g. for "Reveal in DEX" from an APK's editor.
     var tableRowSelection by remember { mutableStateOf<TableRowSelectionRequest?>(null) }
 
@@ -90,6 +94,9 @@ fun BinaryEditorApp() {
                 // parser it names for this file, so only the editors it affects reparse.
                 "file-associations-loaded" -> {
                     fileAssociationsJson = message.fileAssociationsJson
+                }
+                "provider-script-created" -> {
+                    if (message.providerId.isNotBlank()) createdProviderId = message.providerId
                 }
                 // The `hexana.configureFileAssociations` command.
                 "open-file-associations-dialog" -> {
@@ -267,6 +274,17 @@ fun BinaryEditorApp() {
                         "The ${overrideParser.displayName} parser cannot read this file."
                     }
                 else -> null
+            }
+            // Assigns a provider the user just created from the menu to this file. The script's
+            // own push follows from the watcher; until it arrives the badge reads "not loaded".
+            LaunchedEffect(createdProviderId) {
+                val id = createdProviderId ?: return@LaunchedEffect
+                createdProviderId = null
+                val key = fileAssociationKey.ifBlank { null } ?: return@LaunchedEffect
+                host.saveFileAssociations(
+                    serializeFileAssociations(associations.with(key, ParserRef.Scripted(id))),
+                    serializeFileAssociationsSchema(providerCatalog.providers),
+                )
             }
             // What the scripts contribute to this file: the provider's regions, and the tabs
             // that attach to it. Evaluated against the file itself, as on the JVM.

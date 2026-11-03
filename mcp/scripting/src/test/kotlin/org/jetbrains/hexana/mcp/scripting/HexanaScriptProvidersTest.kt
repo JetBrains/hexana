@@ -178,4 +178,17 @@ class HexanaScriptProvidersTest {
         // Committed exactly as the editors write it, so opening the demo leaves it unchanged.
         assertEquals(org.jetbrains.hexana.shared.features.serializeFileAssociations(associations), text)
     }
+
+    @Test
+    fun theNewProviderStubRunsAsWritten() {
+        // A name a user might type: quotes and a newline must not break the generated script.
+        val text = org.jetbrains.hexana.shared.scripting.providerScript("user:my-format", "My \"format\"\nv2")
+        session(text).use { s ->
+            assertTrue(s.initialResult.success, s.initialResult.diagnostics.toString())
+            val info = s.initialResult.providers.single()
+            assertEquals("My \"format\"\nv2", info.name)
+            val regions = assertIs<ProviderParseOutcome.Ok>(s.runParse("user:my-format")).result.regions
+            assertEquals(listOf(ProviderRegion("Header", 0, 16)), regions)
+        }
+    }
 }

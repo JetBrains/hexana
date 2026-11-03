@@ -102,6 +102,22 @@ const FILE_ASSOCIATIONS_SCHEMA_FILE = "file_associations.schema.json";
  */
 const PROVIDER_SCRIPTS_DIR = "providers";
 
+/**
+ * Placeholders in the provider-script stub the webview sends, substituted here with JS string
+ * literals once the user has named the provider. Mirror `PROVIDER_ID_PLACEHOLDER` /
+ * `PROVIDER_NAME_PLACEHOLDER` in `ScriptProviders.kt`.
+ */
+const PROVIDER_ID_PLACEHOLDER = "__HEXANA_PROVIDER_ID__";
+const PROVIDER_NAME_PLACEHOLDER = "__HEXANA_PROVIDER_NAME__";
+
+/**
+ * File-name stem for a provider named [name]; mirrors `providerScriptSlug` in
+ * `ScriptProviders.kt`, so both editors name the same provider's script the same way.
+ */
+function providerScriptSlug(name: string): string {
+    return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "provider";
+}
+
 /** One provider script as sent to the webview. */
 interface ProviderScriptSource {
     path: string;
@@ -1159,6 +1175,12 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     message.json as string,
                     message.schema as string | undefined,
                 );
+            } else if (message.type === "create-provider-script") {
+                await this.createProviderScript(
+                    webviewPanel,
+                    message.template as string,
+                    message.jsConfigContent as string | undefined,
+                );
             } else if (message.type === "save-file-associations") {
                 await this.saveFileAssociations(
                     webviewPanel,
@@ -2194,6 +2216,57 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
         } catch (error) {
             void vscode.window.showErrorMessage(
                 `Failed to open file parser associations: ${error instanceof Error ? error.message : String(error)}`,
+            );
+        }
+    }
+
+    /**
+     * Creates a provider script from the format badge's "Create New Provider Script..." item:
+     * asks for the provider's name, writes [template] - the webview's stub with
+     * `PROVIDER_ID_PLACEHOLDER` / `PROVIDER_NAME_PLACEHOLDER` still in it - into
+     * `.hexana/providers/` with the scripting types beside it, opens it, and tells the webview
+     * the new id so it can assign the provider to its file.
+     *
+     * The id comes from the file name actually used (`my-format-2.js` -> `user:my-format-2`),
+     * so a second provider with the same name never clashes with the first.
+     */
+    private async createProviderScript(
+        webviewPanel: vscode.WebviewPanel,
+        template: string,
+        jsConfigContent?: string,
+    ): Promise<void> {
+        const folder = runtimeTargetsFolder(this.openWebviews.get(webviewPanel));
+        if (!folder) {
+            void vscode.window.showWarningMessage(
+                `Open a folder to create a provider script: they live in ${HEXANA_PROJECT_DIR}/${PROVIDER_SCRIPTS_DIR}/.`,
+            );
+            return;
+        }
+        const name = (await vscode.window.showInputBox({
+            title: "New Provider Script",
+            prompt: "Name shown in the format badge and the parser menu",
+            value: "My format",
+            validateInput: (value) => (value.trim() ? undefined : "Enter a name"),
+        }))?.trim();
+        if (!name) {
+            return;
+        }
+        try {
+            const directory = vscode.Uri.joinPath(folder.uri, HEXANA_PROJECT_DIR, PROVIDER_SCRIPTS_DIR);
+            await vscode.workspace.fs.createDirectory(directory);
+            const target = await this.uniqueScriptUri(directory, `${providerScriptSlug(name)}.js`);
+            const providerId = `user:${path.basename(target.fsPath, ".js")}`;
+            // JSON string literals are valid JS string literals, which is what the stub expects.
+            const content = template
+                .split(PROVIDER_ID_PLACEHOLDER).join(JSON.stringify(providerId))
+                .split(PROVIDER_NAME_PLACEHOLDER).join(JSON.stringify(name));
+            await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(content));
+            await this.attachScriptTypes(directory, jsConfigContent);
+            await vscode.window.showTextDocument(target, { viewColumn: vscode.ViewColumn.Beside, preview: false });
+            void webviewPanel.webview.postMessage({ type: "provider-script-created", providerId });
+        } catch (error) {
+            void vscode.window.showErrorMessage(
+                `Failed to create provider script: ${error instanceof Error ? error.message : String(error)}`,
             );
         }
     }
