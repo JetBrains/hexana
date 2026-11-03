@@ -180,6 +180,8 @@ internal fun HexViewer(
         if (semanticHighlighting) (binaryProvider.structureRanges + extraStructureRanges).sortedBy { it.offset }
         else emptyList()
     }
+    // Script regions overlay the base parser's, so the ranges may overlap.
+    val structureLookup = remember(structureRanges) { StructureRangeLookup(structureRanges) }
     val structureColors = HexanaTheme.structureColors
 
     // Map from row index to the indices in structureRanges of every range that
@@ -759,7 +761,7 @@ internal fun HexViewer(
                                             }
                                             drawStructureRowBackground(
                                                 rowIndex, bytesPerRow, buf.limit(),
-                                                structureRanges, structureColors,
+                                                structureLookup, structureColors,
                                             )
                                         }
                                         .padding(horizontal = 8.dp)
@@ -898,7 +900,7 @@ internal fun HexViewer(
                                             }
                                             drawStructureRowBackground(
                                                 rowIndex, bytesPerRow, buf.limit(),
-                                                structureRanges, structureColors,
+                                                structureLookup, structureColors,
                                             )
                                         }
                                         .padding(horizontal = 8.dp),
@@ -1302,35 +1304,17 @@ fun Modifier.borderBottom(color: Color, width: Dp, verticalPadding: Dp): Modifie
 
 /**
  * Returns the structure-region background color for [offset], or [Color.Unspecified]
- * when the byte does not belong to any known region. Uses binary search on the
- * pre-sorted [ranges] list for O(log n) lookup.
+ * when the byte does not belong to any known region. Overlapping ranges resolve to the
+ * innermost one, see [StructureRangeLookup].
  */
 private fun structureColorForOffset(
     offset: Long,
-    ranges: List<StructureRange>,
+    lookup: StructureRangeLookup,
     palette: List<Color>,
 ): Color {
-    if (ranges.isEmpty() || palette.isEmpty()) return Color.Unspecified
-    // Binary search: find the last range whose start <= offset.
-    var lo = 0
-    var hi = ranges.size - 1
-    var found = -1
-    while (lo <= hi) {
-        val mid = (lo + hi) ushr 1
-        if (ranges[mid].offset <= offset) {
-            found = mid
-            lo = mid + 1
-        } else {
-            hi = mid - 1
-        }
-    }
-    if (found < 0) return Color.Unspecified
-    val range = ranges[found]
-    return if (offset < range.offset + range.size) {
-        palette[found % palette.size]
-    } else {
-        Color.Unspecified
-    }
+    if (palette.isEmpty()) return Color.Unspecified
+    val found = lookup.indexAt(offset)
+    return if (found >= 0) palette[found % palette.size] else Color.Unspecified
 }
 
 /**
@@ -1343,21 +1327,21 @@ private fun DrawScope.drawStructureRowBackground(
     rowIndex: Int,
     bytesPerRow: Int,
     totalBytes: Int,
-    ranges: List<StructureRange>,
+    lookup: StructureRangeLookup,
     palette: List<Color>,
 ) {
-    if (ranges.isEmpty() || palette.isEmpty()) return
+    if (lookup.isEmpty || palette.isEmpty()) return
     val rowStart = rowIndex.toLong() * bytesPerRow
     val rowEnd = min(rowStart + bytesPerRow, totalBytes.toLong())
     if (rowStart >= rowEnd) return
 
     // Collect contiguous color spans within this row.
     var spanStart = rowStart
-    var currentColor = structureColorForOffset(spanStart, ranges, palette)
+    var currentColor = structureColorForOffset(spanStart, lookup, palette)
 
     for (byteOffset in (rowStart + 1)..rowEnd) {
         val color = if (byteOffset < rowEnd) {
-            structureColorForOffset(byteOffset, ranges, palette)
+            structureColorForOffset(byteOffset, lookup, palette)
         } else {
             Color.Unspecified // sentinel to flush last span
         }

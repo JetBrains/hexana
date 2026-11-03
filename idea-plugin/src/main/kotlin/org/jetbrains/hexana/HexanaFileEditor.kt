@@ -390,7 +390,17 @@ class HexanaFileEditor(
                         // Off the EDT: writes files and refreshes VFS. The new provider is then
                         // assigned to this file, so the stub is in effect as soon as it loads.
                         editorScope.launch {
-                            val created = ScriptTemplateWriter.createProviderScript(myProject, name) ?: return@launch
+                            val created = ScriptTemplateWriter.createProviderScript(myProject, name)
+                            if (created == null) {
+                                withContext(Dispatchers.EDT) {
+                                    Messages.showErrorDialog(
+                                        myProject,
+                                        "Could not create the provider script in $PROVIDER_SCRIPTS_DIR. See the IDE log for details.",
+                                        "New Provider Script",
+                                    )
+                                }
+                                return@launch
+                            }
                             associations.setParser(myFile, ParserRef.Scripted(created.providerId))
                         }
                     }
@@ -441,12 +451,20 @@ class HexanaFileEditor(
                         providerScripts::openSession, catalog, provider, myFile.name, sourcePath,
                         scripted = scriptedProvider.takeIf { parserOverrideFailure == null },
                     )
-                    withContext(Dispatchers.EDT) {
-                        scriptBindings.close()
-                        scriptBindings = bound
-                        scriptBindingsState.value = bound
-                        parserChoiceState.value = parserChoice(catalog, bound.overlay)
-                        providerChangeListeners.forEach { it() }
+                    // The sessions hold live script contexts: if the editor is disposed before
+                    // the handoff, nobody else will close them.
+                    var installed = false
+                    try {
+                        withContext(Dispatchers.EDT) {
+                            scriptBindings.close()
+                            scriptBindings = bound
+                            installed = true
+                            scriptBindingsState.value = bound
+                            parserChoiceState.value = parserChoice(catalog, bound.overlay)
+                            providerChangeListeners.forEach { it() }
+                        }
+                    } finally {
+                        if (!installed) bound.close()
                     }
                 }
             }

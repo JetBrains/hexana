@@ -8,6 +8,7 @@ import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.providers.StructureRange
+import org.jetbrains.hexana.providers.StructureRangeLookup
 import org.jetbrains.hexana.shared.RowDetailData
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLInputElement
@@ -232,25 +233,6 @@ private val STRUCTURE_LABEL_COLORS = listOf(
 )
 
 /**
- * Returns the index into [structureRanges] that contains [byteOffset],
- * or -1 if no range covers it.
- */
-private fun structureIndexForOffset(structureRanges: List<StructureRange>, byteOffset: Long): Int {
-    var lo = 0
-    var hi = structureRanges.size - 1
-    while (lo <= hi) {
-        val mid = (lo + hi) ushr 1
-        val r = structureRanges[mid]
-        when {
-            byteOffset < r.offset -> hi = mid - 1
-            byteOffset >= r.offset + r.size -> lo = mid + 1
-            else -> return mid
-        }
-    }
-    return -1
-}
-
-/**
  * Compose for Web hex viewer panel with virtual scrolling and byte selection.
  *
  * Renders the raw binary content in a classic hex-dump layout:
@@ -271,6 +253,8 @@ fun HexViewerPanel(
 ) {
     val totalRows = (bytes.size + BYTES_PER_ROW - 1) / BYTES_PER_ROW
     val totalHeight = totalRows * ROW_HEIGHT_PX
+    // Script regions overlay the base parser's, so the ranges may overlap.
+    val structureLookup = remember(structureRanges) { StructureRangeLookup(structureRanges) }
 
     var scrollTop by remember { mutableStateOf(0) }
     var viewportHeight by remember { mutableStateOf(600) }
@@ -682,7 +666,7 @@ fun HexViewerPanel(
             }) {
                 key(editStamp) {
                     for (row in firstVisibleRow..lastVisibleRow) {
-                        HexRow(bytes, row, selection, hexSearchState, editState, editStamp, pendingDigit, structureRanges, onTabChangeRequest) { ox, oy ->
+                        HexRow(bytes, row, selection, hexSearchState, editState, editStamp, pendingDigit, structureRanges, structureLookup, onTabChangeRequest) { ox, oy ->
                             dragState.pendingOriginX = ox
                             dragState.pendingOriginY = oy
                         }
@@ -931,6 +915,7 @@ private fun HexRow(
     editStamp: Long,
     pendingDigit: Int?,
     structureRanges: List<StructureRange>,
+    structureLookup: StructureRangeLookup,
     onTabChangeRequest: ((String) -> Unit)? = null,
     onPendingDrag: (Double, Double) -> Unit,
 ) {
@@ -939,7 +924,7 @@ private fun HexRow(
 
     // Determine structure color for the offset column (use the first byte's range)
     val offsetStructureIdx = if (structureRanges.isNotEmpty()) {
-        structureIndexForOffset(structureRanges, offset.toLong())
+        structureLookup.indexAt(offset.toLong())
     } else -1
     val offsetStructureBg = if (offsetStructureIdx >= 0) {
         STRUCTURE_COLORS[offsetStructureIdx % STRUCTURE_COLORS.size]
@@ -995,7 +980,7 @@ private fun HexRow(
                 val hasPendingDigit = isCursor && pendingDigit != null
 
                 val byteStructureIdx = if (structureRanges.isNotEmpty()) {
-                    structureIndexForOffset(structureRanges, byteIndex.toLong())
+                    structureLookup.indexAt(byteIndex.toLong())
                 } else -1
                 val byteStructureBg = if (byteStructureIdx >= 0) {
                     STRUCTURE_COLORS[byteStructureIdx % STRUCTURE_COLORS.size]
@@ -1085,7 +1070,7 @@ private fun HexRow(
                 val isEdited = editState?.modifiedOffsets?.contains(byteIndex) == true
 
                 val asciiStructureIdx = if (structureRanges.isNotEmpty()) {
-                    structureIndexForOffset(structureRanges, byteIndex.toLong())
+                    structureLookup.indexAt(byteIndex.toLong())
                 } else -1
                 val asciiStructureBg = if (asciiStructureIdx >= 0) {
                     STRUCTURE_COLORS[asciiStructureIdx % STRUCTURE_COLORS.size]

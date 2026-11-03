@@ -56,6 +56,12 @@ private enum class FixedTab(val label: String) {
 class PanelTab(
     val label: String,
     val padding: Boolean = true,
+    /**
+     * What selects this tab ([HexanaPanel]'s `activeTab`, a region's tab link). The label,
+     * except for tabs whose shown name is shortened: a provider-script tab is labelled
+     * "Header" but identified as `user:Header`, so it cannot collide with a built-in tab.
+     */
+    val id: String = label,
     val content: @Composable (HexSelectionState) -> Unit,
 )
 
@@ -326,10 +332,10 @@ fun HexanaPanel(
     // to the first available tab.  Use SideEffect so the state update happens after
     // composition — calling onActiveTabChange directly during composition can be
     // swallowed and leave the panel empty until an external event forces recomposition.
-    val needsReset = tabs.none { it.label == activeTab } && tabs.isNotEmpty()
+    val needsReset = tabs.none { it.id == activeTab } && tabs.isNotEmpty()
     if (needsReset) {
         SideEffect {
-            onActiveTabChange(tabs.first().label)
+            onActiveTabChange(tabs.first().id)
         }
     }
 
@@ -491,7 +497,7 @@ fun HexanaPanel(
             )
         }
 
-        val currentTab = tabs.firstOrNull { it.label == activeTab }
+        val currentTab = tabs.firstOrNull { it.id == activeTab }
         var tabContentRef by remember { mutableStateOf<HTMLElement?>(null) }
 
         // Focus the tab content whenever the active tab changes
@@ -578,7 +584,7 @@ private fun ScrollableTabBar(
         updateScrollButtons(element)
     }
 
-    val activeIndex = tabs.indexOfFirst { it.label == activeTab }
+    val activeIndex = tabs.indexOfFirst { it.id == activeTab }
     LaunchedEffect(activeTab, tabs, tabListRef) {
         val element = tabListRef ?: return@LaunchedEffect
         if (activeIndex < 0) {
@@ -652,7 +658,7 @@ private fun ScrollableTabBar(
             }
         }) {
             for (tab in tabs) {
-                val isActive = tab.label == activeTab
+                val isActive = tab.id == activeTab
                 val isClosable = tab.label in closableTabs
                 Div({
                     classes("hexana-tab")
@@ -673,7 +679,7 @@ private fun ScrollableTabBar(
                         }
                     }
                     onClick {
-                        onActiveTabChange(tab.label)
+                        onActiveTabChange(tab.id)
                         host.tabSelected(tab.label)
                     }
                 }) {

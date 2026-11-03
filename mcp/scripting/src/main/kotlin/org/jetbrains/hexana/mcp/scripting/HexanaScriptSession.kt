@@ -401,13 +401,16 @@ class HexanaScriptSession private constructor(
      */
     /**
      * Reads `parse()`'s return value: `{ regions: [...] }`, or the array of regions itself.
-     * `undefined`/`null` means no regions. Called on the executor thread.
+     * `undefined`/`null`, or an object without `regions` (`regions` is optional in
+     * `ProviderParseResult`, as in the browser runtime), means no regions. Called on the
+     * executor thread.
      */
     private fun convertGraalParseResult(value: Value): ProviderParseResult {
         if (value.isNull) return ProviderParseResult(emptyList())
         val regions = when {
             value.hasArrayElements() -> value
-            value.hasMembers() && value.hasMember("regions") -> value.getMember("regions")
+            value.hasMembers() && !value.isString ->
+                if (value.hasMember("regions")) value.getMember("regions") else return ProviderParseResult(emptyList())
             else -> throw IllegalArgumentException("must return { regions: [...] } or an array of regions")
         }
         if (regions.isNull) return ProviderParseResult(emptyList())

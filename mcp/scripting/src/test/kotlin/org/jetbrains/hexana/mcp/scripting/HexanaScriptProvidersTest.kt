@@ -74,11 +74,13 @@ class HexanaScriptProvidersTest {
             hexana.defineProvider({ id: "user:a", name: "A", parse() { return [{ name: "R", offset: 0, length: 1 }]; } });
             hexana.defineProvider({ id: "user:b", name: "B", parse() {} });
             hexana.defineProvider({ id: "user:c", name: "C" });
+            hexana.defineProvider({ id: "user:d", name: "D", parse() { return {}; } });
             """,
         ).use { s ->
             assertEquals(1, assertIs<ProviderParseOutcome.Ok>(s.runParse("user:a")).result.regions.size)
             assertEquals(0, assertIs<ProviderParseOutcome.Ok>(s.runParse("user:b")).result.regions.size)
             assertEquals(0, assertIs<ProviderParseOutcome.Ok>(s.runParse("user:c")).result.regions.size)
+            assertEquals(0, assertIs<ProviderParseOutcome.Ok>(s.runParse("user:d")).result.regions.size)
         }
     }
 

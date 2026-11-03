@@ -404,9 +404,24 @@ internal fun BinaryEditorView(
         // script is edited, so they are swapped in place rather than rebuilt with the list.
         // Placed after the built-in tabs and before the user's own script tabs.
         LaunchedEffect(panels, scriptTabs) {
+            // The selection is an index, so keep it on the same logical tab: the tabs after
+            // the provider ones shift when their count changes. A replaced provider tab is
+            // found again by its name.
+            val selected = panels.getOrNull(state.currentState.value.tabIndex)
             panels.removeAll { it is ProviderTabPanel }
             val insertAt = panels.indexOfFirst { it is ScriptPanel }.takeIf { it >= 0 } ?: panels.size
             panels.addAll(insertAt, scriptTabs.map { binding -> ProviderTabPanel(binding, state) })
+            val reselected = when (selected) {
+                null -> -1
+                is ProviderTabPanel -> panels.indexOfFirst { it is ProviderTabPanel && it.tabName == selected.tabName }
+                else -> panels.indexOfFirst { it === selected }
+            }
+            if (reselected >= 0) {
+                if (reselected != state.currentState.value.tabIndex) state.setSelectedTab(reselected)
+            } else if (selected is ProviderTabPanel) {
+                // Its tab is gone: fall back to the first tab rather than whatever slid in.
+                state.setSelectedTab(0)
+            }
         }
         // Publish the live tab names so non-composition observers (the UI-test
         // probe) see what is actually rendered, including placeholder swaps.
@@ -777,7 +792,7 @@ internal fun BinaryEditorView(
                             onHexCommit = { hexEditedSinceOpen = true },
                             suppressEditHighlight = overwriteShadowRanges != null,
                             onSectionLabelClick = { tabName ->
-                                val idx = panels.indexOfFirst { it.description == tabName }
+                                val idx = panels.indexOfTabLink(tabName)
                                 if (idx >= 0) state.setSelectedTab(idx)
                             },
                         )
@@ -1219,7 +1234,20 @@ private fun NativeBinaryProvider.commonNativePanels(
  * Not closable: it belongs to the project's scripts, not to this file.
  */
 private class ProviderTabPanel(binding: ScriptTabBinding, state: HexViewStateHolder) :
-    Panel(binding.tab.displayName(), { ProviderTabContent(binding, state) })
+    Panel(binding.tab.displayName(), { ProviderTabContent(binding, state) }) {
+    /** The full `user:` name: what a region's `tab` links to, and stable across rebinds. */
+    val tabName: String = binding.tab.name
+}
+
+/**
+ * The panel a region's tab link [tabName] names: a provider-script tab by its full `user:`
+ * name — shown without the prefix, so it cannot be matched (or shadowed) by description —
+ * otherwise a panel by description.
+ */
+private fun List<Panel>.indexOfTabLink(tabName: String): Int =
+    indexOfFirst { it is ProviderTabPanel && it.tabName == tabName }
+        .takeIf { it >= 0 }
+        ?: indexOfFirst { it !is ProviderTabPanel && it.description == tabName }
 
 /**
  * Panels appended after the format's own — provider-script tabs, then the user's script

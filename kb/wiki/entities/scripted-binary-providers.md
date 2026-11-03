@@ -105,3 +105,14 @@ lists the built-in parser ids and would go stale; the editors write it on the fi
   returns hangs that editor (as a script tab would). JVM calls have the runner's timeout.
 - A region past the end of the file is filtered during conversion, not by the builder; count both
   kinds when reporting dropped regions (the first cut did not).
+- **Script regions overlap base-parser ranges.** Both hex viewers resolve colors through
+  `binaryProvider`'s `StructureRangeLookup` (flattened disjoint segments, innermost/later range
+  wins); a "last range starting at or before" binary search loses the enclosing color after a
+  nested overlay ends.
+- **A provider tab's identity is its full `user:` name**, not its label: regions link to
+  `user:Header` while the tab shows "Header". Web `PanelTab.id` / IntelliJ
+  `ProviderTabPanel.tabName` carry it; the IntelliJ provider-tab refresh restores the selection
+  by panel identity because the selection is a bare index.
+- **Catalog reloads are generation-guarded** (`ProviderScriptsService.publish`): `loadCatalog`
+  is blocking and ignores cancellation, so a superseded trusted reload could otherwise republish
+  scripts after the project became untrusted. Trust is rechecked at publish time.

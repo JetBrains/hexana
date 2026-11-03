@@ -14,6 +14,7 @@ import com.intellij.openapi.vfs.newvfs.events.VFilePropertyChangeEvent
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -58,6 +59,9 @@ class ProviderScriptsService(
 
     private var reloadJob: Job? = null
 
+    /** Bumped by every [reload]; only the newest reload may publish its catalog. */
+    private var reloadGeneration = 0L
+
     init {
         project.messageBus.connect(this).subscribe(
             VirtualFileManager.VFS_CHANGES,
@@ -84,8 +88,33 @@ class ProviderScriptsService(
 
     /** Re-reads the scripts in the background; a newer reload supersedes one in flight. */
     fun reload() {
-        reloadJob?.cancel()
-        reloadJob = scope.launch(Dispatchers.IO) { _catalog.value = loadCatalog() }
+        synchronized(this) {
+            reloadJob?.cancel()
+            val generation = ++reloadGeneration
+            reloadJob = scope.launch(Dispatchers.IO) {
+                val loaded = loadCatalog()
+                ensureActive()
+                publish(generation, loaded)
+            }
+        }
+    }
+
+    /**
+     * Publishes [loaded] unless a newer reload started meanwhile. Cancellation is cooperative
+     * and [loadCatalog] does blocking work, so a superseded reload can still finish; without
+     * this guard it could overwrite a newer catalog — e.g. republish executable scripts after
+     * the project became untrusted. Trust is rechecked here for the same reason.
+     */
+    private fun publish(generation: Long, loaded: ProviderScriptCatalog) {
+        synchronized(this) {
+            if (generation != reloadGeneration) return
+            _catalog.value =
+                if (loaded.scripts.isNotEmpty() && !TrustedProjects.isProjectTrusted(project)) {
+                    ProviderScriptCatalog(blockedByTrust = true)
+                } else {
+                    loaded
+                }
+        }
     }
 
     /** The scripts directory, whether or not it exists. */
