@@ -384,6 +384,8 @@
     "js-yaml": "5.4.1",
     "markdown-it": "14.3.3",
     "secretlint": "13.0.7",
-    "@azure/msal-node": "7.1.1"
+    "@azure/msal-node": "7.1.1",
+    "minimatch": "11.0.4",
+    "glob": "14.0.3"
   }
 }
