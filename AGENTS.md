@@ -55,6 +55,8 @@ All agents — the main session and every subagent it dispatches — MUST treat 
 - `parsing/elf/`: ELF parser module.
 - `parsing/macho/`: Mach-O parser module.
 - `parsing/pe/`: PE/COFF parser module.
+- `parsing/mlmodel/`: GGUF and safetensors model parsers (header, metadata and tensor tables; tensor data is never
+  read). Reference fixtures and their generator live in `parsing/mlmodel/test-data/`.
 - `disassembly/`: parent folder for native disassembly modules.
 - `disassembly/core/`: UI-free native disassembly model: functions, instructions, addresses, xrefs, source locations, relocations, and basic-block candidates.
 - `disassembly/llvm-objdump/`: JVM `llvm-objdump` command construction, candidate discovery, probing, execution result handling, output parsing, and conversion into the core disassembly model.

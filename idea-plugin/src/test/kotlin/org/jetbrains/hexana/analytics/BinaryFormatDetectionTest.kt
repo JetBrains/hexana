@@ -262,6 +262,20 @@ class BinaryFormatDetectionTest {
     }
 
     @Test
+    fun mlModelsReportTheirOwnFormat() {
+        // GGUF v3 header, whatever the name: GGUF files are often still called `.bin`.
+        assertEquals(
+            HexanaEvent.BinaryFormat.GGUF,
+            formatOf("ggml-model.bin", 0x47, 0x47, 0x55, 0x46, 0x03, 0x00, 0x00, 0x00),
+        )
+        val json = """{"w":{"dtype":"U8","shape":[1],"data_offsets":[0,1]}}""".encodeToByteArray()
+        val safetensors = ByteArray(8) { (json.size.toLong() ushr (8 * it)).toByte() } + json + ByteArray(1)
+        val provider = nativeOrGenericBinaryProvider(safetensors.toCommonByteBuffer())
+        assertEquals(HexanaEvent.BinaryFormat.SAFETENSORS, binaryFormatOf("model.safetensors", provider))
+        assertEquals(HexanaEvent.BinaryFormat.GGUF, binaryFormatOf("model.gguf", provider = null))
+    }
+
+    @Test
     fun providerlessZipFamilyExtensionReportsZip() {
         assertEquals(HexanaEvent.BinaryFormat.ZIP, binaryFormatOf("lib.aar", provider = null))
         assertEquals(HexanaEvent.BinaryFormat.APK, binaryFormatOf("app.apk", provider = null))

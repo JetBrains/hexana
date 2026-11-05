@@ -90,6 +90,16 @@ describe('binary format routing', function () {
             expect(editorAssociationPattern(uri('/work/firmware'))).to.equal('firmware');
         });
 
+        it('recognizes GGUF models by their magic and version, in either byte order', function () {
+            // GGUF files are still often named `.bin`, which no selector claims.
+            const {isNativeBinary} = requireDetector();
+            const gguf = (version: number[]) => new Uint8Array([0x47, 0x47, 0x55, 0x46, ...version, ...new Array(16).fill(0)]);
+
+            expect(isNativeBinary(gguf([3, 0, 0, 0]))).to.equal(true);
+            expect(isNativeBinary(gguf([0, 0, 0, 3]))).to.equal(true);
+            expect(isNativeBinary(gguf([9, 0, 0, 0]))).to.equal(false);
+        });
+
         it('still recognizes the formats it always did', function () {
             const {isNativeBinary} = requireDetector();
 

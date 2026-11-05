@@ -13,9 +13,13 @@ import org.jetbrains.hexana.providers.ArchiveBinaryProvider
 import org.jetbrains.hexana.providers.ArrowBinaryProvider
 import org.jetbrains.hexana.providers.ArscBinaryProvider
 import org.jetbrains.hexana.providers.ClrResourcesBinaryProvider
+import org.jetbrains.hexana.providers.GgufBinaryProvider
+import org.jetbrains.hexana.providers.SafetensorsBinaryProvider
 import org.jetbrains.hexana.providers.PdbBinaryProvider
 import org.jetbrains.hexana.providers.PortablePdbBinaryProvider
 import org.jetbrains.hexana.shared.scripting.clrResourcesScriptValue
+import org.jetbrains.hexana.shared.scripting.ggufScriptValue
+import org.jetbrains.hexana.shared.scripting.safetensorsScriptValue
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.providers.CoffBinaryProvider
@@ -318,6 +322,10 @@ private fun scriptValue(value: Any?): dynamic {
     if (value is ClrResourcesBinaryProvider) {
         defineScriptValue(objectValue, "parsedResources") { value.parsedResources?.let(::clrResourcesScriptValue) }
     }
+    if (value is GgufBinaryProvider) defineScriptValue(objectValue, "parsedGguf") { value.parsedGguf?.let(::ggufScriptValue) }
+    if (value is SafetensorsBinaryProvider) {
+        defineScriptValue(objectValue, "parsedSafetensors") { value.parsedSafetensors?.let(::safetensorsScriptValue) }
+    }
     @Suppress("UNUSED_VARIABLE")
     val sourceValue = value.asDynamic()
     @Suppress("UNUSED_VARIABLE")
@@ -568,6 +576,8 @@ private fun nonWasmFormat(provider: BinaryProvider): String = when (provider) {
     is DexBinaryProvider -> "dex"
     is ArscBinaryProvider -> "arsc"
     is ClrResourcesBinaryProvider -> "dotnet-resources"
+    is GgufBinaryProvider -> "gguf"
+    is SafetensorsBinaryProvider -> "safetensors"
     is PdbBinaryProvider -> "pdb"
     is PortablePdbBinaryProvider -> "portable-pdb"
     is PcapBinaryProvider -> "pcap"

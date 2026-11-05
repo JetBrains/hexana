@@ -1,3 +1,6 @@
+# Unreleased
+- **GGUF and safetensors models**: `.gguf` files (and GGUF content under any name, such as `.bin`) get "Header" (architecture, name, quantization, parameter count, bytes per tensor type), "Metadata" (arrays such as the tokenizer vocabulary expand into their elements) and "Tensors" (type, shape, size, offset; selecting one selects its data) tabs; `.safetensors` files get "Header" (including `__metadata__`) and "Tensors". Scripts reach the parsed files as `binary.raw.parsedGguf` / `binary.raw.parsedSafetensors`. Files over 2 GB still cannot be opened
+
 # 0.14.0 - 27.10.2026
 - **replay HTTP requests from a PCAP**: right-click an HTTP request in a capture's "Packets" tab and choose "Replay HTTP Request…" to edit the method, URL, headers and body, send it again, and see the response below; the dialog stays open for the next attempt. Cleartext requests are reassembled across TCP segments; HTTPS requests work once an SSL key log decrypts them. Redirects are reported rather than followed, and connection headers and `Content-Length` are recomputed
 - "Open Request as .http File" (in the menu and the replay dialog) writes the request to an `.http` file for the **REST Client** extension, with a binary body in a file next to it read with `<`; without REST Client installed the file opens as text and the extension is offered

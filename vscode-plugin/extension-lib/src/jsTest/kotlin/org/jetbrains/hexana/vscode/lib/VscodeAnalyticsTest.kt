@@ -153,14 +153,17 @@ class VscodeAnalyticsTest {
                 captureBinaryOpened("app.apk", zip)
                 captureBinaryOpened("libfoo.a", bytes(0x21, 0x3C, 0x61, 0x72, 0x63, 0x68, 0x3E, 0x0A)) // "!<arch>\n"
                 captureBinaryOpened("classes.dex", bytes(0x64, 0x65, 0x78, 0x0A, 0x30, 0x33, 0x35, 0x00))
+                captureBinaryOpened("ggml-model.bin", bytes(0x47, 0x47, 0x55, 0x46, 0x03, 0x00, 0x00, 0x00, 0, 0, 0, 0, 0, 0, 0, 0))
+                val json = "{\"w\":{\"dtype\":\"U8\",\"shape\":[1],\"data_offsets\":[0,1]}}".encodeToByteArray()
+                captureBinaryOpened("model.safetensors", ByteArray(8) { (json.size.toLong() ushr (8 * it)).toByte() } + json + ByteArray(1))
 
-                flushUntilEvents(server, expectedCount = 4)
+                flushUntilEvents(server, expectedCount = 6)
 
                 val formats = server.events()
                     .filter { it.name == "binary_opened" }
                     .map { "${it.properties["format"]}" }
                     .toSet()
-                assertEquals(setOf("zip", "apk", "archive", "dex"), formats)
+                assertEquals(setOf("zip", "apk", "archive", "dex", "gguf", "safetensors"), formats)
             }
         } finally {
             shutdownAnalytics()

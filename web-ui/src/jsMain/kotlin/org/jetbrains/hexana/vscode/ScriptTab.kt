@@ -8,6 +8,8 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.shared.scripting.ScriptApiReference
 import org.jetbrains.hexana.shared.scripting.clrResourcesScriptValue
+import org.jetbrains.hexana.shared.scripting.ggufScriptValue
+import org.jetbrains.hexana.shared.scripting.safetensorsScriptValue
 import org.jetbrains.hexana.shared.scripting.ScriptOutput
 import org.jetbrains.hexana.shared.scripting.SCRIPT_OPEN_REQUEST_MEMBER
 import org.jetbrains.hexana.shared.scripting.ScriptOpenRequestBlocked
@@ -91,7 +93,7 @@ internal fun wrapForJs(value: Any?): dynamic {
         is TarBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapTarBinaryProvider(obj, value) }
         is ClassFileBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapClassFileBinaryProvider(obj, value) }
         is DexBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapDexBinaryProvider(obj, value) }
-        // Both extend GenericBinaryProvider, so they must come before it or their own members vanish.
+        // These extend GenericBinaryProvider, so they must come before it or their own members vanish.
         is ArscBinaryProvider -> wrapBinaryProvider(obj, value).also {
             wrapGenericBinaryProvider(obj, value)
             defineLazyProp(obj, "parsedArscFile") { value.parsedArscFile }
@@ -101,6 +103,14 @@ internal fun wrapForJs(value: Any?): dynamic {
             // A plain value rather than the parsed object: production builds minimize member
             // names, so the reflective fallback below cannot see into Kotlin objects there.
             defineLazyProp(obj, "parsedResources") { value.parsedResources?.let(::clrResourcesScriptValue) }
+        }
+        is GgufBinaryProvider -> wrapBinaryProvider(obj, value).also {
+            wrapGenericBinaryProvider(obj, value)
+            defineLazyProp(obj, "parsedGguf") { value.parsedGguf?.let(::ggufScriptValue) }
+        }
+        is SafetensorsBinaryProvider -> wrapBinaryProvider(obj, value).also {
+            wrapGenericBinaryProvider(obj, value)
+            defineLazyProp(obj, "parsedSafetensors") { value.parsedSafetensors?.let(::safetensorsScriptValue) }
         }
         is GenericBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapGenericBinaryProvider(obj, value) }
         is BinaryProvider -> wrapBinaryProvider(obj, value)

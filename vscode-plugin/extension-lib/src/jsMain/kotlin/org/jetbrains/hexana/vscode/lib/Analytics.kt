@@ -10,6 +10,8 @@ import org.jetbrains.hexana.providers.ArscBinaryProvider
 import org.jetbrains.hexana.providers.BinaryProviderKind
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.providers.ClrResourcesBinaryProvider
+import org.jetbrains.hexana.providers.GgufBinaryProvider
+import org.jetbrains.hexana.providers.SafetensorsBinaryProvider
 import org.jetbrains.hexana.providers.DexBinaryProvider
 import org.jetbrains.hexana.providers.PcapBinaryProvider
 import org.jetbrains.hexana.providers.PdbBinaryProvider
@@ -155,6 +157,8 @@ private fun contentFormatOf(fileName: String, bytes: ByteArray): HexanaEvent.Bin
         DexBinaryProvider.isDexFile(buffer) -> HexanaEvent.BinaryFormat.DEX
         ArscBinaryProvider.isArscFile(buffer) -> HexanaEvent.BinaryFormat.ARSC
         ClrResourcesBinaryProvider.isResourcesFile(buffer) -> HexanaEvent.BinaryFormat.DOTNET_RESOURCES
+        GgufBinaryProvider.isGgufFile(buffer) -> HexanaEvent.BinaryFormat.GGUF
+        SafetensorsBinaryProvider.isSafetensorsFile(buffer) -> HexanaEvent.BinaryFormat.SAFETENSORS
         PdbBinaryProvider.isPdbFile(buffer) -> HexanaEvent.BinaryFormat.PDB
         PortablePdbBinaryProvider.isPortablePdbFile(buffer) -> HexanaEvent.BinaryFormat.PORTABLE_PDB
         PcapBinaryProvider.isPcapFile(buffer) -> HexanaEvent.BinaryFormat.PCAP

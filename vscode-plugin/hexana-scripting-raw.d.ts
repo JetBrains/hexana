@@ -4318,6 +4318,162 @@ interface ClrResourcesBinaryProvider extends GenericBinaryProvider {
   }[];
 }
 
+interface GgufBinaryProvider extends GenericBinaryProvider {
+  parsedGguf?: {
+    alignment: number;
+    architecture?: string;
+    bigEndian: boolean;
+    declaredMetadataCount: number;
+    declaredTensorCount: number;
+    diagnostics: {
+      code: string;
+      message: string;
+      range?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+    }[];
+    fileSize: number;
+    fileTypeLabel?: string;
+    headerRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    metadata: {
+      key: string;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+      value: {
+        bool?: boolean;
+        count?: number;
+        elementType?: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+        elements?: GgufValue[];
+        integer?: number;
+        real?: number;
+        string?: string;
+        truncated: boolean;
+        type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+      };
+    }[];
+    metadataRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    name?: string;
+    parameterCount?: number;
+    tensorDataOffset?: number;
+    tensorDataSize?: number;
+    tensorInfoRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    tensors: {
+      dataRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      dataSize?: number;
+      dims: number[];
+      elementCount?: number;
+      index: number;
+      infoRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      name: string;
+      relativeOffset: number;
+      type?: "F32" | "F16" | "Q4_0" | "Q4_1" | "Q5_0" | "Q5_1" | "Q8_0" | "Q8_1" | "Q2_K" | "Q3_K" | "Q4_K" | "Q5_K" | "Q6_K" | "Q8_K" | "IQ2_XXS" | "IQ2_XS" | "IQ3_XXS" | "IQ1_S" | "IQ4_NL" | "IQ3_S" | "IQ2_S" | "IQ4_XS" | "I8" | "I16" | "I32" | "I64" | "F64" | "IQ1_M" | "BF16" | "TQ1_0" | "TQ2_0" | "MXFP4";
+      typeId: number;
+      typeLabel: string;
+    }[];
+    version: number;
+  };
+  sizeAnalysis?: {
+    children: BinarySizeNode[];
+    name: string;
+    offset: number;
+    size: number;
+  };
+  structureRanges: {
+    label: string;
+    offset: number;
+    size: number;
+    tabName?: string;
+  }[];
+}
+
+interface SafetensorsBinaryProvider extends GenericBinaryProvider {
+  parsedSafetensors?: {
+    dataOffset: number;
+    diagnostics: {
+      code: string;
+      message: string;
+      range?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+    }[];
+    fileSize: number;
+    formatTag?: string;
+    headerRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    headerSize: number;
+    lengthRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    metadata: {
+      key: string;
+      value: string;
+    }[];
+    parameterCount?: number;
+    tensorDataSize: number;
+    tensors: {
+      begin: number;
+      dataRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      dataSize: number;
+      dtype: string;
+      elementBits?: number;
+      elementCount?: number;
+      end: number;
+      index: number;
+      name: string;
+      shape: number[];
+    }[];
+  };
+  sizeAnalysis?: {
+    children: BinarySizeNode[];
+    name: string;
+    offset: number;
+    size: number;
+  };
+  structureRanges: {
+    label: string;
+    offset: number;
+    size: number;
+    tabName?: string;
+  }[];
+}
+
 interface PdbSymbolsBinaryProvider extends GenericBinaryProvider {
   pdbGuid?: string;
 }
@@ -11358,6 +11514,387 @@ interface GarbageTypeEntry {
   };
 }
 
+interface GgufFile {
+  alignment: number;
+  architecture?: string;
+  bigEndian: boolean;
+  declaredMetadataCount: number;
+  declaredTensorCount: number;
+  diagnostics: {
+    code: string;
+    message: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+  }[];
+  fileSize: number;
+  fileTypeLabel?: string;
+  headerRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  metadata: {
+    key: string;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+    value: {
+      bool?: boolean;
+      count?: number;
+      elementType?: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+      elements?: GgufValue[];
+      integer?: number;
+      real?: number;
+      string?: string;
+      truncated: boolean;
+      type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+    };
+  }[];
+  metadataRange?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  name?: string;
+  parameterCount?: number;
+  tensorDataOffset?: number;
+  tensorDataSize?: number;
+  tensorInfoRange?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  tensors: {
+    dataRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    dataSize?: number;
+    dims: number[];
+    elementCount?: number;
+    index: number;
+    infoRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    name: string;
+    relativeOffset: number;
+    type?: "F32" | "F16" | "Q4_0" | "Q4_1" | "Q5_0" | "Q5_1" | "Q8_0" | "Q8_1" | "Q2_K" | "Q3_K" | "Q4_K" | "Q5_K" | "Q6_K" | "Q8_K" | "IQ2_XXS" | "IQ2_XS" | "IQ3_XXS" | "IQ1_S" | "IQ4_NL" | "IQ3_S" | "IQ2_S" | "IQ4_XS" | "I8" | "I16" | "I32" | "I64" | "F64" | "IQ1_M" | "BF16" | "TQ1_0" | "TQ2_0" | "MXFP4";
+    typeId: number;
+    typeLabel: string;
+  }[];
+  version: number;
+  copy(version: number, bigEndian: boolean, declaredTensorCount: number, declaredMetadataCount: number, metadata: {
+    key: string;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+    value: {
+      bool?: boolean;
+      count?: number;
+      elementType?: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+      elements?: GgufValue[];
+      integer?: number;
+      real?: number;
+      string?: string;
+      truncated: boolean;
+      type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+    };
+  }[], tensors: {
+    dataRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    dataSize?: number;
+    dims: number[];
+    elementCount?: number;
+    index: number;
+    infoRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    name: string;
+    relativeOffset: number;
+    type?: "F32" | "F16" | "Q4_0" | "Q4_1" | "Q5_0" | "Q5_1" | "Q8_0" | "Q8_1" | "Q2_K" | "Q3_K" | "Q4_K" | "Q5_K" | "Q6_K" | "Q8_K" | "IQ2_XXS" | "IQ2_XS" | "IQ3_XXS" | "IQ1_S" | "IQ4_NL" | "IQ3_S" | "IQ2_S" | "IQ4_XS" | "I8" | "I16" | "I32" | "I64" | "F64" | "IQ1_M" | "BF16" | "TQ1_0" | "TQ2_0" | "MXFP4";
+    typeId: number;
+    typeLabel: string;
+  }[], alignment: number, headerRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }, metadataRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null, tensorInfoRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null, tensorDataOffset: number | null, fileSize: number, diagnostics: {
+    code: string;
+    message: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+  }[]): {
+    alignment: number;
+    architecture?: string;
+    bigEndian: boolean;
+    declaredMetadataCount: number;
+    declaredTensorCount: number;
+    diagnostics: {
+      code: string;
+      message: string;
+      range?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+    }[];
+    fileSize: number;
+    fileTypeLabel?: string;
+    headerRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    metadata: {
+      key: string;
+      range: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+      value: {
+        bool?: boolean;
+        count?: number;
+        elementType?: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+        elements?: GgufValue[];
+        integer?: number;
+        real?: number;
+        string?: string;
+        truncated: boolean;
+        type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+      };
+    }[];
+    metadataRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    name?: string;
+    parameterCount?: number;
+    tensorDataOffset?: number;
+    tensorDataSize?: number;
+    tensorInfoRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    tensors: {
+      dataRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      dataSize?: number;
+      dims: number[];
+      elementCount?: number;
+      index: number;
+      infoRange: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      name: string;
+      relativeOffset: number;
+      type?: "F32" | "F16" | "Q4_0" | "Q4_1" | "Q5_0" | "Q5_1" | "Q8_0" | "Q8_1" | "Q2_K" | "Q3_K" | "Q4_K" | "Q5_K" | "Q6_K" | "Q8_K" | "IQ2_XXS" | "IQ2_XS" | "IQ3_XXS" | "IQ1_S" | "IQ4_NL" | "IQ3_S" | "IQ2_S" | "IQ4_XS" | "I8" | "I16" | "I32" | "I64" | "F64" | "IQ1_M" | "BF16" | "TQ1_0" | "TQ2_0" | "MXFP4";
+      typeId: number;
+      typeLabel: string;
+    }[];
+    version: number;
+  };
+  metadataInteger(key: string): number | null;
+  metadataString(key: string): string | null;
+  metadataValue(key: string): {
+    bool?: boolean;
+    count?: number;
+    elementType?: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+    elements?: GgufValue[];
+    integer?: number;
+    real?: number;
+    string?: string;
+    truncated: boolean;
+    type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+  } | null;
+}
+
+interface GgufMetadataEntry {
+  key: string;
+  range: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+  value: {
+    bool?: boolean;
+    count?: number;
+    elementType?: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+    elements?: GgufValue[];
+    integer?: number;
+    real?: number;
+    string?: string;
+    truncated: boolean;
+    type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+  };
+  copy(key: string, type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64", value: {
+    bool?: boolean;
+    count?: number;
+    elementType?: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+    elements?: GgufValue[];
+    integer?: number;
+    real?: number;
+    string?: string;
+    truncated: boolean;
+    type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+  }, range: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    key: string;
+    range: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+    value: {
+      bool?: boolean;
+      count?: number;
+      elementType?: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+      elements?: GgufValue[];
+      integer?: number;
+      real?: number;
+      string?: string;
+      truncated: boolean;
+      type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+    };
+  };
+}
+
+interface GgufTensorInfo {
+  dataRange?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  dataSize?: number;
+  dims: number[];
+  elementCount?: number;
+  index: number;
+  infoRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  name: string;
+  relativeOffset: number;
+  type?: "F32" | "F16" | "Q4_0" | "Q4_1" | "Q5_0" | "Q5_1" | "Q8_0" | "Q8_1" | "Q2_K" | "Q3_K" | "Q4_K" | "Q5_K" | "Q6_K" | "Q8_K" | "IQ2_XXS" | "IQ2_XS" | "IQ3_XXS" | "IQ1_S" | "IQ4_NL" | "IQ3_S" | "IQ2_S" | "IQ4_XS" | "I8" | "I16" | "I32" | "I64" | "F64" | "IQ1_M" | "BF16" | "TQ1_0" | "TQ2_0" | "MXFP4";
+  typeId: number;
+  typeLabel: string;
+  copy(index: number, name: string, dims: number[], typeId: number, type: "F32" | "F16" | "Q4_0" | "Q4_1" | "Q5_0" | "Q5_1" | "Q8_0" | "Q8_1" | "Q2_K" | "Q3_K" | "Q4_K" | "Q5_K" | "Q6_K" | "Q8_K" | "IQ2_XXS" | "IQ2_XS" | "IQ3_XXS" | "IQ1_S" | "IQ4_NL" | "IQ3_S" | "IQ2_S" | "IQ4_XS" | "I8" | "I16" | "I32" | "I64" | "F64" | "IQ1_M" | "BF16" | "TQ1_0" | "TQ2_0" | "MXFP4" | null, relativeOffset: number, elementCount: number | null, dataSize: number | null, dataRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null, infoRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }): {
+    dataRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    dataSize?: number;
+    dims: number[];
+    elementCount?: number;
+    index: number;
+    infoRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    name: string;
+    relativeOffset: number;
+    type?: "F32" | "F16" | "Q4_0" | "Q4_1" | "Q5_0" | "Q5_1" | "Q8_0" | "Q8_1" | "Q2_K" | "Q3_K" | "Q4_K" | "Q5_K" | "Q6_K" | "Q8_K" | "IQ2_XXS" | "IQ2_XS" | "IQ3_XXS" | "IQ1_S" | "IQ4_NL" | "IQ3_S" | "IQ2_S" | "IQ4_XS" | "I8" | "I16" | "I32" | "I64" | "F64" | "IQ1_M" | "BF16" | "TQ1_0" | "TQ2_0" | "MXFP4";
+    typeId: number;
+    typeLabel: string;
+  };
+}
+
+interface GgufValue {
+  bool?: boolean;
+  count?: number;
+  elementType?: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+  elements?: {
+    bool?: boolean;
+    count?: number;
+    elementType?: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+    elements?: GgufValue[];
+    integer?: number;
+    real?: number;
+    string?: string;
+    truncated: boolean;
+    type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+  }[];
+  integer?: number;
+  real?: number;
+  string?: string;
+  truncated: boolean;
+  type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+  copy(type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64", integer: number | null, real: number | null, bool: boolean | null, string: string | null, elementType: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64" | null, count: number | null, elements: {
+    bool?: boolean;
+    count?: number;
+    elementType?: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+    elements?: GgufValue[];
+    integer?: number;
+    real?: number;
+    string?: string;
+    truncated: boolean;
+    type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+  }[] | null): {
+    bool?: boolean;
+    count?: number;
+    elementType?: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+    elements?: GgufValue[];
+    integer?: number;
+    real?: number;
+    string?: string;
+    truncated: boolean;
+    type: "UINT8" | "INT8" | "UINT16" | "INT16" | "UINT32" | "INT32" | "FLOAT32" | "BOOL" | "STRING" | "ARRAY" | "UINT64" | "INT64" | "FLOAT64";
+  };
+  display(maxArrayElements: number, maxStringChars: number): string;
+}
+
 interface GraalWebImageInfo {
   canResolveSymbols: boolean;
   hasNameSection: boolean;
@@ -12310,6 +12847,40 @@ interface MinificationResult {
     confidence: number;
     evidence: string;
     minified: boolean;
+  };
+}
+
+interface ModelByteRange {
+  endExclusive: number;
+  offset: number;
+  size: number;
+  copy(offset: number, size: number): {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+}
+
+interface ModelDiagnostic {
+  code: string;
+  message: string;
+  range?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  copy(code: string, message: string, range: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null): {
+    code: string;
+    message: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
   };
 }
 
@@ -14731,6 +15302,181 @@ interface RowGroup {
     }[];
     numRows: number;
     totalByteSize: number;
+  };
+}
+
+interface SafetensorsFile {
+  dataOffset: number;
+  diagnostics: {
+    code: string;
+    message: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+  }[];
+  fileSize: number;
+  formatTag?: string;
+  headerRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  headerSize: number;
+  lengthRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  metadata: {
+    key: string;
+    value: string;
+  }[];
+  parameterCount?: number;
+  tensorDataSize: number;
+  tensors: {
+    begin: number;
+    dataRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    dataSize: number;
+    dtype: string;
+    elementBits?: number;
+    elementCount?: number;
+    end: number;
+    index: number;
+    name: string;
+    shape: number[];
+  }[];
+  copy(headerSize: number, lengthRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }, headerRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  }, metadata: {
+    key: string;
+    value: string;
+  }[], tensors: {
+    begin: number;
+    dataRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    dataSize: number;
+    dtype: string;
+    elementBits?: number;
+    elementCount?: number;
+    end: number;
+    index: number;
+    name: string;
+    shape: number[];
+  }[], dataOffset: number, fileSize: number, diagnostics: {
+    code: string;
+    message: string;
+    range?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+  }[]): {
+    dataOffset: number;
+    diagnostics: {
+      code: string;
+      message: string;
+      range?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+    }[];
+    fileSize: number;
+    formatTag?: string;
+    headerRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    headerSize: number;
+    lengthRange: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    metadata: {
+      key: string;
+      value: string;
+    }[];
+    parameterCount?: number;
+    tensorDataSize: number;
+    tensors: {
+      begin: number;
+      dataRange?: {
+        endExclusive: number;
+        offset: number;
+        size: number;
+      };
+      dataSize: number;
+      dtype: string;
+      elementBits?: number;
+      elementCount?: number;
+      end: number;
+      index: number;
+      name: string;
+      shape: number[];
+    }[];
+  };
+}
+
+interface SafetensorsMetadataEntry {
+  key: string;
+  value: string;
+  copy(key: string, value: string): {
+    key: string;
+    value: string;
+  };
+}
+
+interface SafetensorsTensor {
+  begin: number;
+  dataRange?: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  };
+  dataSize: number;
+  dtype: string;
+  elementBits?: number;
+  elementCount?: number;
+  end: number;
+  index: number;
+  name: string;
+  shape: number[];
+  copy(index: number, name: string, dtype: string, shape: number[], begin: number, end: number, elementCount: number | null, dataRange: {
+    endExclusive: number;
+    offset: number;
+    size: number;
+  } | null): {
+    begin: number;
+    dataRange?: {
+      endExclusive: number;
+      offset: number;
+      size: number;
+    };
+    dataSize: number;
+    dtype: string;
+    elementBits?: number;
+    elementCount?: number;
+    end: number;
+    index: number;
+    name: string;
+    shape: number[];
   };
 }
 

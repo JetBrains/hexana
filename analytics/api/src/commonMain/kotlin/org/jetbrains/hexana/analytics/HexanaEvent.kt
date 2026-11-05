@@ -225,6 +225,8 @@ sealed class HexanaEvent {
         PORTABLE_PDB("portable_pdb"),
         ARSC("arsc"),
         DOTNET_RESOURCES("dotnet_resources"),
+        GGUF("gguf"),
+        SAFETENSORS("safetensors"),
         OTHER("other"),
         GENERIC("generic"),
         ;
@@ -281,6 +283,8 @@ sealed class HexanaEvent {
                 "dex" -> DEX
                 "pcap", "pcapng" -> PCAP
                 "pdb" -> PDB
+                "gguf" -> GGUF
+                "safetensors" -> SAFETENSORS
                 else -> if (ext in ZIP_FAMILY_EXTENSIONS) ZIP else null
             }
         }

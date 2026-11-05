@@ -119,6 +119,8 @@ private fun String?.toBoundedBinaryFormat(): HexanaEvent.BinaryFormat = when (th
     "portable-pdb" -> HexanaEvent.BinaryFormat.PORTABLE_PDB
     "arsc" -> HexanaEvent.BinaryFormat.ARSC
     "dotnet-resources" -> HexanaEvent.BinaryFormat.DOTNET_RESOURCES
+    "gguf" -> HexanaEvent.BinaryFormat.GGUF
+    "safetensors" -> HexanaEvent.BinaryFormat.SAFETENSORS
     "generic" -> HexanaEvent.BinaryFormat.GENERIC
     else -> HexanaEvent.BinaryFormat.OTHER
 }

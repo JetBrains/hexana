@@ -64,8 +64,9 @@ interface HexanaBinary {
   /**
    * Stable format id: "wasm", "wasm-component", "elf", "macho",
    * "macho-universal", "pe", "coff", "archive", "zip", "tar", "class",
-   * "dex", "arsc", "dotnet-resources", "pdb", "portable-pdb", "pcap",
-   * "pcapng", "parquet", "arrow", "protobuf" or "binary". Safe to branch on.
+   * "dex", "arsc", "dotnet-resources", "gguf", "safetensors", "pdb",
+   * "portable-pdb", "pcap", "pcapng", "parquet", "arrow", "protobuf" or
+   * "binary". Safe to branch on.
    *
    * @example if (binary.format === "elf") print(binary.raw.header.machine);
    */
@@ -561,7 +562,7 @@ interface TabSpec extends Omit<SliceSpec, "formats"> {
 
 /** Built-in parser id a provider can build on, as used in .hexana/file_associations.json. */
 type BuiltinParserId =
-  "generic" | "wasm" | "wasm-component" | "elf" | "macho" | "pe" | "coff" | "archive" | "zip" | "tar" | "class" | "dex" | "arsc" | "dotnet-resources" | "pdb" | "portable-pdb" | "pcap" | "protobuf" | "protobuf-message" | "parquet" | "arrow";
+  "generic" | "wasm" | "wasm-component" | "elf" | "macho" | "pe" | "coff" | "archive" | "zip" | "tar" | "class" | "dex" | "arsc" | "dotnet-resources" | "gguf" | "safetensors" | "pdb" | "portable-pdb" | "pcap" | "protobuf" | "protobuf-message" | "parquet" | "arrow";
 
 /** One region reported by a provider's parse(). */
 interface ProviderRegion {

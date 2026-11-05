@@ -7,6 +7,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.util.io.ByteSequence
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
+import org.jetbrains.hexana.providers.GgufBinaryProvider
 import org.jetbrains.hexana.providers.PdbSymbolsBinaryProvider
 
 /**
@@ -89,6 +90,14 @@ class NativeBinaryFileTypeDetector : FileTypeRegistry.FileTypeDetector {
             if (version1 == 0x00 && (version0 == 0x01 || version0 == 0x0D)) {
                 return WasmFileType.INSTANCE
             }
+        }
+
+        // GGUF model ("GGUF" + a version the parser knows). Content-typed because GGUF files
+        // are still often named `.bin`. Safetensors is not detected here: its only signature
+        // is a length prefix plus a JSON object, too weak for a 256-byte prefix, and the
+        // `.safetensors` extension is universal.
+        if (b0 == 0x47 && b1 == 0x47 && b2 == 0x55 && b3 == 0x46) {
+            if (GgufBinaryProvider.isGgufFile(firstBytes.toBytes().toCommonByteBuffer())) return BinaryFileType.INSTANCE
         }
 
         // Windows PDB ("Microsoft C/C++ MSF 7.00") or Portable PDB (metadata root "BSJB" with a

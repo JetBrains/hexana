@@ -36,6 +36,7 @@ kotlin {
                 api(project(":parsing:protobuf"))
                 api(project(":parsing:parquet"))
                 api(project(":parsing:arrow"))
+                api(project(":parsing:mlmodel"))
                 implementation(project(":debugInfo:dwarf"))
                 api(project(":debugInfo:pdb"))
             }

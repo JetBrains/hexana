@@ -173,3 +173,5 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-03 — `entities/file-parser-associations` — VS Code: associated files reopen in Hexana from the text tab; removed `.bin` drift from KNOWN_EXTENSIONS (pinned to package.json by a test).
 - 2026-11-03 — `entities/file-parser-associations` — VS Code: associated files now reroute on every open (loop guard scoped to the in-flight reopen).
 - 2026-11-03 — `entities/scripted-binary-providers` — review fixes: overlap-aware StructureRangeLookup, stable provider-tab ids, generation-guarded catalog publish, session close on cancelled handoff, virtualized web provider tab.
+- 2026-11-05 — `entities/binary-opened-format-analytics` — how `generic` opens arise per surface, HogQL breakdown queries (distinct users, post-fix versions only), and the list of formats `DetectedFormat` does not sniff.
+- 2026-11-05 — `entities/ml-model-formats` — new: GGUF + safetensors support (parsers, providers, tabs, script values, routing on all hosts, reference fixtures); >2 GB files still unsupported.

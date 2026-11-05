@@ -317,7 +317,7 @@ async function readRuntimeTargetsJson(scope?: vscode.Uri): Promise<string> {
  */
 const HEXANA_DIFF_EXTENSIONS = new Set([
     "wasm", "elf", "exe", "so", "o", "a", "dll", "dylib", "jar", "zip", "war", "apk", "class", "dex", "arsc",
-    "resources", "desc", "protoset", "pcap", "cap", "pcapng", "parquet", "arrow", "arrows", "pb", "tar", "tgz", "gz",
+    "resources", "gguf", "safetensors", "desc", "protoset", "pcap", "cap", "pcapng", "parquet", "arrow", "arrows", "pb", "tar", "tgz", "gz",
     "obj", "lib", "ko", "sys", "axf", "bin", "out",
 ]);
 
@@ -331,7 +331,7 @@ const COMPARABLE_NATIVE_EXTENSIONS = ["o", "obj", "so", "dylib", "dll", "exe", "
 const CONTENT_TYPED_EXTENSIONS = new Set(["pdb"]);
 
 const OPENABLE_ENTRY_EXTENSIONS = new Set([
-    "wasm", "class", "dex", "arsc", "resources", "jar", "zip", "war", "apk", "bin",
+    "wasm", "class", "dex", "arsc", "resources", "gguf", "safetensors", "jar", "zip", "war", "apk", "bin",
     "elf", "exe", "so", "o", "a", "dll", "dylib",
     "tar", "tgz", "gz", "desc", "protoset", "pcap", "cap", "pcapng",
     "parquet", "arrow", "arrows", "pb",

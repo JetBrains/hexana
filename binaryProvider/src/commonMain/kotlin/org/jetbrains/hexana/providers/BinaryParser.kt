@@ -34,6 +34,8 @@ enum class BinaryParser(val id: String, val displayName: String) {
     DEX("dex", "Android DEX"),
     ARSC("arsc", "Android resource table"),
     DOTNET_RESOURCES("dotnet-resources", ".NET resources"),
+    GGUF("gguf", "GGUF model"),
+    SAFETENSORS("safetensors", "Safetensors model"),
     PDB("pdb", "Windows PDB"),
     PORTABLE_PDB("portable-pdb", "Portable PDB"),
     PCAP("pcap", "PCAP capture"),
@@ -70,6 +72,8 @@ fun binaryParserOf(provider: BinaryProvider): BinaryParser = when (provider) {
     is DexBinaryProvider -> BinaryParser.DEX
     is ArscBinaryProvider -> BinaryParser.ARSC
     is ClrResourcesBinaryProvider -> BinaryParser.DOTNET_RESOURCES
+    is GgufBinaryProvider -> BinaryParser.GGUF
+    is SafetensorsBinaryProvider -> BinaryParser.SAFETENSORS
     is PdbBinaryProvider -> BinaryParser.PDB
     is PortablePdbBinaryProvider -> BinaryParser.PORTABLE_PDB
     is PcapBinaryProvider -> BinaryParser.PCAP
@@ -129,6 +133,8 @@ fun createBinaryProvider(
             BinaryParser.DEX -> DexBinaryProvider(shared)
             BinaryParser.ARSC -> ArscBinaryProvider(shared)
             BinaryParser.DOTNET_RESOURCES -> ClrResourcesBinaryProvider(shared)
+            BinaryParser.GGUF -> GgufBinaryProvider(shared)
+            BinaryParser.SAFETENSORS -> SafetensorsBinaryProvider(shared)
             BinaryParser.PDB -> PdbBinaryProvider(shared)
             BinaryParser.PORTABLE_PDB -> PortablePdbBinaryProvider(shared)
             BinaryParser.PCAP -> PcapBinaryProvider(shared, sourcePath)

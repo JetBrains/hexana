@@ -47,6 +47,8 @@ class HexanaFileEditorProvider : FileEditorProvider, DumbAware {
                 file.extension.equals("dex", ignoreCase = true) ||
                 file.extension.equals("arsc", ignoreCase = true) ||
                 file.extension.equals("resources", ignoreCase = true) ||
+                file.extension.equals("gguf", ignoreCase = true) ||
+                file.extension.equals("safetensors", ignoreCase = true) ||
                 file.extension.equals("parquet", ignoreCase = true) ||
                 file.extension.equals("arrow", ignoreCase = true) ||
                 file.extension.equals("arrows", ignoreCase = true) ||

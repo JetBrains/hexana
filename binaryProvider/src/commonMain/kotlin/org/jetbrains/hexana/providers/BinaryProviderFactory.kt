@@ -26,8 +26,8 @@ sealed interface BinaryProviderKind {
 
     /**
      * Everything [nativeOrGenericBinaryProvider] resolves from magic bytes alone:
-     * ZIP, tar, `.class`, DEX, ARSC, pcap, protobuf descriptor sets, the native
-     * formats, and the generic fallback.
+     * ZIP, tar, `.class`, DEX, ARSC, .NET resources, GGUF and safetensors models, PDBs,
+     * pcap, protobuf descriptor sets, the native formats, and the generic fallback.
      */
     object NativeOrGeneric : BinaryProviderKind
 }

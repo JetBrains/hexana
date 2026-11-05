@@ -8,6 +8,8 @@ import org.jetbrains.hexana.providers.ArscBinaryProvider
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.providers.ClrResourcesBinaryProvider
+import org.jetbrains.hexana.providers.GgufBinaryProvider
+import org.jetbrains.hexana.providers.SafetensorsBinaryProvider
 import org.jetbrains.hexana.providers.CoffBinaryProvider
 import org.jetbrains.hexana.providers.DexBinaryProvider
 import org.jetbrains.hexana.providers.ElfBinaryProvider
@@ -71,6 +73,8 @@ internal fun binaryFormatOf(
         is ProtobufBinaryProvider -> return HexanaEvent.BinaryFormat.PROTOBUF
         is ArscBinaryProvider -> return HexanaEvent.BinaryFormat.ARSC
         is ClrResourcesBinaryProvider -> return HexanaEvent.BinaryFormat.DOTNET_RESOURCES
+        is GgufBinaryProvider -> return HexanaEvent.BinaryFormat.GGUF
+        is SafetensorsBinaryProvider -> return HexanaEvent.BinaryFormat.SAFETENSORS
         // ProtobufMessageBinaryProvider (explicit Open-As) intentionally reports as GENERIC — not an auto-detected format.
         is GenericBinaryProvider -> return HexanaEvent.BinaryFormat.GENERIC
         // No provider: the archive / class editors; classified by extension below.

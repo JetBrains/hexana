@@ -44,3 +44,44 @@ Rules now:
 - Explicit "Open as Protobuf message" (`ProtobufMessageBinaryProvider`) stays `generic` by design.
 - `GenericExt` gained firmware/object/dump buckets: o, obj, exe, elf, ko, efi, sys, hex, uf2, fw,
   rom, pak, dmp, core, raw.
+
+## How `generic` opens happen per surface
+
+- IntelliJ: Hexana claims only its own file types and extensions (`HexanaFileEditorProvider.acceptsFile`).
+  So a `generic` open is one of: a claimed extension whose content check failed, a `.gz` whose inner
+  name is unknown, an explicit "Open in Hex View" (`HexFileTypeOverrider` sets `BinaryFileType`), or a
+  parser the user forced to generic in [[entities/file-parser-associations]].
+- VS Code: `hexana.binaryEditor` matches `*` at `option` priority. Every "Reopen With → Hexana Binary
+  Editor" on any file (text files too) is a deliberate generic open.
+
+## Queries for breaking down `generic` (HogQL)
+
+Count distinct users, not opens: one user reopening one file inflates the event count. Exclude
+`plugin_version`s built before 2026-10-21, because those builds still misreport supported formats.
+
+```sql
+-- known magic / extension
+SELECT properties.surface s, coalesce(properties.detected_format,'none') d,
+       properties.generic_ext e, count() opens, count(DISTINCT person_id) users
+FROM events WHERE event='binary_opened' AND properties.format='generic'
+  AND timestamp >= toDateTime('2026-10-22')
+GROUP BY s,d,e ORDER BY users DESC LIMIT 100
+-- unknown-unknowns: decode the top headers by hand
+SELECT properties.generic_header h, properties.generic_ext e,
+       count() opens, count(DISTINCT person_id) users
+FROM events WHERE event='binary_opened' AND properties.format='generic'
+  AND properties.detected_format IS NULL AND timestamp >= toDateTime('2026-10-22')
+GROUP BY h,e ORDER BY users DESC LIMIT 100
+```
+
+## Magic gaps in `DetectedFormat` (as of 2026-11-05)
+
+These formats are common in Hexana's audience but `fromMagic` does not sniff them, so they show up
+only as a raw `generic_header`: Java `.hprof` (`JAVA PROFILE`), JFR (`FLR\0`), Windows minidump
+(`MDMP`), Java serialization (`AC ED 00 05`), `.pyc` (`?? ?? 0D 0A`), TrueType (`00 01 00 00`),
+Android `boot.img` (`ANDROID!`), device tree `.dtb` (`D0 0D FE ED`), git pack/index (`PACK`/`DIRC`),
+Lua bytecode (`1B Lua`), Erlang BEAM (`FOR1`), Unity bundles (`UnityFS`), Android VDEX/ART
+(`vdex`/`art\n`), Intel HEX (text, `:`-prefixed lines).
+
+Since 2026-11-05 GGUF and safetensors models report `gguf` / `safetensors` instead of `generic`
+(see [[entities/ml-model-formats]]); only files ≤2 GB can be opened at all.

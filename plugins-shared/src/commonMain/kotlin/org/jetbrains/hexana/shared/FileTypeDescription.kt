@@ -8,6 +8,8 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.binaryParserOf
 import org.jetbrains.hexana.providers.ClassFileBinaryProvider
 import org.jetbrains.hexana.providers.ClrResourcesBinaryProvider
+import org.jetbrains.hexana.providers.GgufBinaryProvider
+import org.jetbrains.hexana.providers.SafetensorsBinaryProvider
 import org.jetbrains.hexana.providers.PdbBinaryProvider
 import org.jetbrains.hexana.providers.PortablePdbBinaryProvider
 import org.jetbrains.hexana.providers.CoffBinaryProvider
@@ -62,6 +64,8 @@ fun fileTypeDescription(
     is DexBinaryProvider -> "Android DEX File"
     is ArscBinaryProvider -> "Android Resource Table"
     is ClrResourcesBinaryProvider -> ".NET Resources"
+    is GgufBinaryProvider -> "GGUF Model"
+    is SafetensorsBinaryProvider -> "Safetensors Model"
     is PdbBinaryProvider -> "Windows PDB"
     is PortablePdbBinaryProvider -> "Portable PDB"
     is PcapBinaryProvider -> if (binaryProvider.isPcapNg) "PCAP-NG Capture" else "PCAP Capture"
@@ -94,6 +98,8 @@ fun binaryFormatId(binaryProvider: BinaryProvider): String = when (binaryProvide
     is DexBinaryProvider -> "dex"
     is ArscBinaryProvider -> "arsc"
     is ClrResourcesBinaryProvider -> "dotnet-resources"
+    is GgufBinaryProvider -> "gguf"
+    is SafetensorsBinaryProvider -> "safetensors"
     is PdbBinaryProvider -> "pdb"
     is PortablePdbBinaryProvider -> "portable-pdb"
     is PcapBinaryProvider -> if (binaryProvider.isPcapNg) "pcapng" else "pcap"

@@ -41,7 +41,7 @@ const COFF_MACHINE_TYPES = new Set([0x014C, 0x01C0, 0x01C4, 0x0200, 0x8664, 0xAA
  */
 export const KNOWN_EXTENSIONS = new Set([
     ".wasm", ".elf", ".exe", ".so", ".o", ".a", ".dll", ".dylib",
-    ".jar", ".zip", ".war", ".apk", ".class", ".dex", ".arsc", ".resources", ".desc", ".protoset",
+    ".jar", ".zip", ".war", ".apk", ".class", ".dex", ".arsc", ".resources", ".gguf", ".safetensors", ".desc", ".protoset",
     ".pcap", ".cap", ".pcapng", ".parquet", ".arrow", ".arrows", ".pb",
     ".tar", ".tgz", ".gz",
 ]);
@@ -49,7 +49,7 @@ export const KNOWN_EXTENSIONS = new Set([
 /**
  * Detects whether the given byte prefix matches a binary format Hexana can open.
  * Returns true for ELF, Mach-O (thin and fat/universal), PE, static-library
- * archive, COFF object files, WebAssembly, .NET resource sets, Windows and Portable PDBs, pcap/pcapng,
+ * archive, COFF object files, WebAssembly, .NET resource sets, GGUF models, Windows and Portable PDBs, pcap/pcapng,
  * Parquet and Arrow IPC files.
  */
 export function isNativeBinary(bytes: Uint8Array): boolean {
@@ -124,6 +124,17 @@ export function isNativeBinary(bytes: Uint8Array): boolean {
     // WebAssembly: 00 61 73 6D ("\0asm")
     if (b0 === 0x00 && b1 === 0x61 && b2 === 0x73 && b3 === 0x6D) {
         return true;
+    }
+
+    // GGUF model: "GGUF" then a u32 version 1..3, in either byte order. GGUF files are still
+    // often named `.bin`, so they are routed by content. Safetensors has no magic (a length
+    // prefix plus JSON) and is claimed by its universal `.safetensors` extension only.
+    if (b0 === 0x47 && b1 === 0x47 && b2 === 0x55 && b3 === 0x46 && len >= 8) {
+        const le = bytes[4] | (bytes[5] << 8) | (bytes[6] << 16) | (bytes[7] << 24);
+        const be = bytes[7] | (bytes[6] << 8) | (bytes[5] << 16) | (bytes[4] << 24);
+        if ((le >= 1 && le <= 3) || (be >= 1 && be <= 3)) {
+            return true;
+        }
     }
 
     // .NET resource set (.resources): ResourceManager magic 0xBEEFCACE, little-endian
