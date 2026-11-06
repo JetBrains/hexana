@@ -1,5 +1,8 @@
 package org.jetbrains.hexana.shared
 
+import org.jetbrains.hexana.providers.wholeFile
+import org.jetbrains.hexana.io.containsRange
+import org.jetbrains.hexana.io.LargeBytes
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.parsing.common.NativeBinaryEndian
 import org.jetbrains.hexana.parsing.common.NativeByteRange
@@ -65,6 +68,7 @@ object NativeDebugCompanionScanner {
         return scan(
             binaryPath = provider.sourcePath,
             bytes = provider.bytes,
+            wholeFile = provider.wholeFile,
             sections = elfSections,
             machOSections = machO?.sections.orEmpty(),
             machOUuid = machO?.uuid?.value,
@@ -81,6 +85,8 @@ object NativeDebugCompanionScanner {
         binaryPath: String?,
         bytes: CommonByteBuffer,
         sections: List<ElfSectionHeader>,
+        /** The whole file, when [bytes] is only its head: notes and the debug link can sit past it. */
+        wholeFile: LargeBytes? = null,
         machOSections: List<MachOSection> = emptyList(),
         machOUuid: String? = null,
         machOUuidRange: NativeByteRange? = null,
@@ -94,8 +100,10 @@ object NativeDebugCompanionScanner {
         val embeddedMachODebug = machOSections.filter { it.isMachOdebugSection() }
         val embeddedPortablePdb = peDebugSymbols is PeDebugSymbols.Embedded
         val embeddedDebugInfoPresent = embeddedElfDebug.isNotEmpty() || embeddedMachODebug.isNotEmpty() || embeddedPortablePdb
-        val buildId = parseElfBuildId(bytes, sections.firstOrNull { it.name == ".note.gnu.build-id" })
-        val debugLink = parseGnuDebugLink(bytes, sections.firstOrNull { it.name == ".gnu_debuglink" })
+        val buildId = sectionView(bytes, wholeFile, sections.firstOrNull { it.name == ".note.gnu.build-id" })
+            ?.let { (buffer, section) -> parseElfBuildId(buffer, section, inferEndian(bytes)) }
+        val debugLink = sectionView(bytes, wholeFile, sections.firstOrNull { it.name == ".gnu_debuglink" })
+            ?.let { (buffer, section) -> parseGnuDebugLink(buffer, section) }
         val codeView = peDebugEntries.firstNotNullOfOrNull { it.codeView }
         val pePdbPath = codeView?.pdbPath?.takeIf { it.isNotBlank() }
         val peCodeViewId = codeView?.let { info ->
@@ -297,9 +305,25 @@ private fun parseGnuDebugLink(bytes: CommonByteBuffer, section: ElfSectionHeader
     return builder.toString().takeIf { it.isNotBlank() }
 }
 
-private fun parseElfBuildId(bytes: CommonByteBuffer, section: ElfSectionHeader?): String? {
+/**
+ * [section]'s content in a buffer the note parsers below can index with `Int`s: [bytes] when it
+ * lies inside them, else a window of [wholeFile] with the range rebased onto it (an ELF past 2 GiB
+ * keeps `.gnu_debuglink` near its end). `null` when the section cannot be read.
+ */
+private fun sectionView(bytes: CommonByteBuffer, wholeFile: LargeBytes?, section: ElfSectionHeader?): Pair<CommonByteBuffer, ElfSectionHeader>? {
     val range = section?.contentRange ?: return null
-    val endian = inferEndian(bytes) ?: return null
+    if (range.end <= bytes.size) return bytes to section
+    val source = wholeFile ?: return null
+    if (range.length > MAX_NOTE_SECTION_BYTES || !source.containsRange(range.start, range.length)) return null
+    return source.window(range.start, range.length.toInt()) to section.copy(contentRange = NativeByteRange(0, range.length.toInt()))
+}
+
+/** Largest note or debug-link section read; real ones are tens of bytes. */
+private const val MAX_NOTE_SECTION_BYTES = 1L shl 20
+
+private fun parseElfBuildId(bytes: CommonByteBuffer, section: ElfSectionHeader?, endian: NativeBinaryEndian?): String? {
+    val range = section?.contentRange ?: return null
+    endian ?: return null
     var offset = range.offset
     val end = range.offset + range.size
 

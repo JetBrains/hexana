@@ -27,7 +27,9 @@ class LargeElfTest {
     private val textOffset = 5L * 512 * 1024 * 1024
     private val sectionTableOffset = 3L * 1024 * 1024 * 1024
     private val namesOffset = sectionTableOffset + 0x100
-    private val names = "\u0000.text\u0000.shstrtab\u0000".encodeToByteArray()
+    private val names = "\u0000.text\u0000.shstrtab\u0000.gnu_debuglink\u0000".encodeToByteArray()
+    private val debugLinkOffset = 11L * 256 * 1024 * 1024 // 2.75 GiB
+    private val debugLink = "big.debug\u0000\u0000\u0000".encodeToByteArray() + ByteArray(4)
 
     @AfterTest
     fun cleanUp() {
@@ -45,7 +47,7 @@ class LargeElfTest {
         putLong(sectionTableOffset)
         putInt(0) // flags
         putShort(64); putShort(56); putShort(0) // ehsize, phentsize, phnum
-        putShort(64); putShort(3); putShort(2) // shentsize, shnum, shstrndx
+        putShort(64); putShort(4); putShort(2) // shentsize, shnum, shstrndx
     }
 
     private fun section(name: Int, type: Int, flags: Long, address: Long, offset: Long, length: Long) = le(64) {
@@ -63,7 +65,9 @@ class LargeElfTest {
             raf.write(ByteArray(64))
             raf.write(section(name = 1, type = 1, flags = 6, address = 0x400000, offset = textOffset, length = 16))
             raf.write(section(name = 7, type = 3, flags = 0, address = 0, offset = namesOffset, length = names.size.toLong()))
+            raf.write(section(name = 17, type = 1, flags = 0, address = 0, offset = debugLinkOffset, length = debugLink.size.toLong()))
             raf.seek(namesOffset); raf.write(names)
+            raf.seek(debugLinkOffset); raf.write(debugLink)
         }
         return MappedFileBytes.open(file)
     }
@@ -76,13 +80,16 @@ class LargeElfTest {
 
         assertEquals(size, provider.fileSize)
         val sections = assertNotNull(provider.sections)
-        assertEquals(listOf("", ".text", ".shstrtab"), sections.map { it.name })
+        assertEquals(listOf("", ".text", ".shstrtab", ".gnu_debuglink"), sections.map { it.name })
         val text = sections[1].contentRange!!
         assertEquals(textOffset, text.start)
         assertEquals(16L, text.length)
         assertTrue(provider.structureRanges.any { it.label == ".text" && it.offset == textOffset })
         assertNull(provider.sizeAnalysis, "an Int size tree cannot describe a 3 GiB file")
         assertEquals(emptyList(), provider.parseDiagnostics.filter { it.severity.name == "Error" })
+
+        // The debug link sits past 2 GiB too, as it does at the end of a large binary.
+        assertEquals("big.debug", NativeDebugCompanionScanner.scan(provider).gnuDebugLink)
 
         // The Sections tab selects the section where it is, past 2 GiB.
         val tab = NativeTableTabsProvider().tableTabs(provider).single { it.name == "Sections" }
