@@ -119,8 +119,8 @@ fun createBinaryProvider(
             BinaryParser.ELF -> (detectNative(shared) as? NativeBinaryFormat.Elf)
                 ?.let { ElfBinaryProvider(shared, it, sourcePath, source ?: shared.asLargeBytes()) }
             BinaryParser.MACH_O -> when (val format = detectNative(shared)) {
-                is NativeBinaryFormat.MachO -> MachOBinaryProvider(shared, format, sourcePath)
-                is NativeBinaryFormat.FatMachO -> FatMachOBinaryProvider(shared, format, sourcePath)
+                is NativeBinaryFormat.MachO -> MachOBinaryProvider(shared, format, sourcePath, source ?: shared.asLargeBytes())
+                is NativeBinaryFormat.FatMachO -> FatMachOBinaryProvider(shared, format, sourcePath, source ?: shared.asLargeBytes())
                 else -> null
             }
             BinaryParser.PE -> (detectNative(shared) as? NativeBinaryFormat.Pe)

@@ -1,6 +1,10 @@
 package org.jetbrains.hexana.providers.macho
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.LargeBytes
+import org.jetbrains.hexana.io.asLargeBytes
+import org.jetbrains.hexana.io.containsRange
+import org.jetbrains.hexana.io.readBytes
 import org.jetbrains.hexana.parsing.common.NativeBinaryEndian
 import org.jetbrains.hexana.parsing.common.NativeBinaryWordSize
 import org.jetbrains.hexana.parsing.common.NativeByteRange
@@ -11,8 +15,52 @@ import org.jetbrains.hexana.parsing.common.NativeUnresolvedRecord
 import org.jetbrains.hexana.parsing.common.nativeParseFailure
 import org.jetbrains.hexana.parsing.common.nativeParseSuccess
 
+/**
+ * Mach-O and universal (fat) Mach-O parser. Reads through [LargeBytes] with 64-bit offsets: segment
+ * file offsets are u64, symbol, string and relocation table offsets u32 (so up to 4 GiB), and
+ * `fat_arch_64` slices can sit anywhere — a large debug build or a universal binary with a big slice
+ * puts them past 2 GiB. Ranges are 64-bit ([NativeByteRange.start]).
+ * The [CommonByteBuffer] overloads serve callers holding an in-memory buffer.
+ */
 object MachOParser {
-    fun parse(bytes: CommonByteBuffer): NativeParseResult<MachOFile> {
+    fun parse(bytes: CommonByteBuffer): NativeParseResult<MachOFile> = parse(bytes.asLargeBytes())
+
+    fun parseFatHeader(bytes: CommonByteBuffer): MachOFatHeader? = parseFatHeader(bytes.asLargeBytes())
+
+    fun parseFatArchitectures(bytes: CommonByteBuffer, header: MachOFatHeader): List<MachOFatArch>? =
+        parseFatArchitectures(bytes.asLargeBytes(), header)
+
+    fun parseHeader(bytes: CommonByteBuffer): MachOHeader? = parseHeader(bytes.asLargeBytes())
+
+    fun parseLoadCommands(bytes: CommonByteBuffer, header: MachOHeader): List<MachOLoadCommand>? =
+        parseLoadCommands(bytes.asLargeBytes(), header)
+
+    fun parseSegments(bytes: CommonByteBuffer, header: MachOHeader, loadCommands: List<MachOLoadCommand>): List<MachOSegment>? =
+        parseSegments(bytes.asLargeBytes(), header, loadCommands)
+
+    fun parseUuid(bytes: CommonByteBuffer, loadCommands: List<MachOLoadCommand>): MachOUuid? =
+        parseUuid(bytes.asLargeBytes(), loadCommands)
+
+    fun parseSymtab(bytes: CommonByteBuffer, header: MachOHeader, loadCommands: List<MachOLoadCommand>): MachOSymtabCommand? =
+        parseSymtab(bytes.asLargeBytes(), header, loadCommands)
+
+    fun parseDysymtab(bytes: CommonByteBuffer, header: MachOHeader, loadCommands: List<MachOLoadCommand>): MachODysymtabCommand? =
+        parseDysymtab(bytes.asLargeBytes(), header, loadCommands)
+
+    fun parseSymbols(bytes: CommonByteBuffer, header: MachOHeader, symtab: MachOSymtabCommand): List<MachOSymbol>? =
+        parseSymbols(bytes.asLargeBytes(), header, symtab)
+
+    fun parseDylibs(bytes: CommonByteBuffer, header: MachOHeader, loadCommands: List<MachOLoadCommand>): List<MachODylibCommand>? =
+        parseDylibs(bytes.asLargeBytes(), header, loadCommands)
+
+    fun parseRelocations(
+        bytes: CommonByteBuffer,
+        header: MachOHeader,
+        sections: List<MachOSection>,
+        symbols: List<MachOSymbol>,
+    ): List<MachORelocation>? = parseRelocations(bytes.asLargeBytes(), header, sections, symbols)
+
+    fun parse(bytes: LargeBytes): NativeParseResult<MachOFile> {
         val fatHeader = parseFatHeader(bytes)
         if (fatHeader != null) {
             val architectures = parseFatArchitectures(bytes, fatHeader)
@@ -88,7 +136,7 @@ object MachOParser {
         return nativeParseSuccess(file, diagnostics)
     }
 
-    fun parseFatHeader(bytes: CommonByteBuffer): MachOFatHeader? {
+    fun parseFatHeader(bytes: LargeBytes): MachOFatHeader? {
         if (bytes.size < FAT_HEADER_SIZE) return null
 
         val magicBe = bytes.u32OrNull(0, NativeBinaryEndian.Big) ?: return null
@@ -118,26 +166,26 @@ object MachOParser {
         val archCountInt = archCount.toBoundedInt() ?: return null
         val archSize = if (wordSize == NativeBinaryWordSize.Bits64) FAT_ARCH_64_SIZE else FAT_ARCH_32_SIZE
         val archTableSize = checkedMultiply(archCountInt, archSize) ?: return null
-        if (!bytes.containsRange(FAT_HEADER_SIZE, archTableSize)) return null
+        if (!bytes.containsRange(FAT_HEADER_SIZE.toLong(), archTableSize)) return null
 
         return MachOFatHeader(
             wordSize = wordSize,
             endian = endian,
             archCount = archCount,
             headerRange = NativeByteRange(0, FAT_HEADER_SIZE),
-            archTableRange = NativeByteRange(FAT_HEADER_SIZE, archTableSize),
+            archTableRange = NativeByteRange(FAT_HEADER_SIZE.toLong(), archTableSize),
         )
     }
 
-    fun parseFatArchitectures(bytes: CommonByteBuffer, header: MachOFatHeader): List<MachOFatArch>? {
+    fun parseFatArchitectures(bytes: LargeBytes, header: MachOFatHeader): List<MachOFatArch>? {
         val result = mutableListOf<MachOFatArch>()
         val count = header.archCount.toBoundedInt() ?: return null
         val archSize = if (header.wordSize == NativeBinaryWordSize.Bits64) FAT_ARCH_64_SIZE else FAT_ARCH_32_SIZE
         val sliceRanges = mutableListOf<NativeByteRange>()
 
         repeat(count) { index ->
-            val offset = header.archTableRange.offset + index * archSize
-            if (offset + archSize > header.archTableRange.offset + header.archTableRange.size) return null
+            val offset = header.archTableRange.start + index.toLong() * archSize
+            if (offset + archSize > header.archTableRange.end) return null
 
             val sliceOffset: ULong
             val sliceSize: ULong
@@ -168,7 +216,7 @@ object MachOParser {
                     size = sliceSize,
                     alignment = alignment,
                     reserved = reserved,
-                    archRange = NativeByteRange(offset, archSize),
+                    archRange = NativeByteRange(offset, archSize.toLong()),
                     sliceRange = sliceRange,
                 )
             )
@@ -177,7 +225,7 @@ object MachOParser {
         return result
     }
 
-    fun parseHeader(bytes: CommonByteBuffer): MachOHeader? {
+    fun parseHeader(bytes: LargeBytes): MachOHeader? {
         if (bytes.size < MACH_HEADER_32_SIZE) return null
 
         val magicBe = bytes.u32OrNull(0, NativeBinaryEndian.Big) ?: return null
@@ -217,7 +265,7 @@ object MachOParser {
         val loadCommandCount = bytes.u32OrNull(16, endian) ?: return null
         val loadCommandsSize = bytes.u32OrNull(20, endian) ?: return null
         val loadCommandsSizeInt = loadCommandsSize.toBoundedInt() ?: return null
-        if (!bytes.containsRange(headerSize, loadCommandsSizeInt)) return null
+        if (!bytes.containsRange(headerSize.toLong(), loadCommandsSizeInt.toLong())) return null
 
         return MachOHeader(
             wordSize = wordSize,
@@ -235,33 +283,33 @@ object MachOParser {
         )
     }
 
-    fun parseLoadCommands(bytes: CommonByteBuffer, header: MachOHeader): List<MachOLoadCommand>? {
+    fun parseLoadCommands(bytes: LargeBytes, header: MachOHeader): List<MachOLoadCommand>? {
         val result = mutableListOf<MachOLoadCommand>()
-        var offset = header.loadCommandsRange.offset
-        val end = header.loadCommandsRange.offset + header.loadCommandsRange.size
+        var offset = header.loadCommandsRange.start
+        val end = header.loadCommandsRange.end
         val count = header.loadCommandCount.toBoundedInt() ?: return null
         repeat(count) { index ->
             if (offset + LOAD_COMMAND_SIZE > end) return null
             val type = bytes.u32OrNull(offset, header.endian) ?: return null
             val size = bytes.u32OrNull(offset + 4, header.endian) ?: return null
-            val sizeInt = size.toBoundedInt() ?: return null
-            if (sizeInt < LOAD_COMMAND_SIZE || offset + sizeInt > end) return null
+            val sizeLong = size.toLong()
+            if (sizeLong < LOAD_COMMAND_SIZE || offset + sizeLong > end) return null
             result.add(
                 MachOLoadCommand(
                     index = index,
                     type = type,
                     size = size,
-                    range = NativeByteRange(offset, sizeInt),
+                    range = NativeByteRange(offset, sizeLong),
                 )
             )
-            offset += sizeInt
+            offset += sizeLong
         }
         if (offset != end) return null
         return result
     }
 
     fun parseSegments(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: MachOHeader,
         loadCommands: List<MachOLoadCommand>,
     ): List<MachOSegment>? {
@@ -275,10 +323,10 @@ object MachOParser {
         return segments
     }
 
-    fun parseUuid(bytes: CommonByteBuffer, loadCommands: List<MachOLoadCommand>): MachOUuid? {
+    fun parseUuid(bytes: LargeBytes, loadCommands: List<MachOLoadCommand>): MachOUuid? {
         val command = loadCommands.firstOrNull { it.type == LC_UUID } ?: return null
-        if (command.range.size < 24) return null
-        val uuidOffset = command.range.offset + 8
+        if (command.range.length < 24) return null
+        val uuidOffset = command.range.start + 8
         val raw = (0 until 16).map { bytes.byteOrNull(uuidOffset + it) ?: return null }
         val text = buildString {
             raw.forEachIndexed { index, byte ->
@@ -289,18 +337,18 @@ object MachOParser {
         return MachOUuid(
             value = text,
             commandRange = command.range,
-            uuidRange = NativeByteRange(uuidOffset, 16),
+            uuidRange = NativeByteRange(uuidOffset, 16L),
         )
     }
 
     fun parseSymtab(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: MachOHeader,
         loadCommands: List<MachOLoadCommand>,
     ): MachOSymtabCommand? {
         val command = loadCommands.firstOrNull { it.type == LC_SYMTAB } ?: return null
-        if (command.range.size < SYMTAB_COMMAND_SIZE) return null
-        val offset = command.range.offset
+        if (command.range.length < SYMTAB_COMMAND_SIZE) return null
+        val offset = command.range.start
         val symbolTableOffset = bytes.u32OrNull(offset + 8, header.endian) ?: return null
         val symbolCount = bytes.u32OrNull(offset + 12, header.endian) ?: return null
         val stringTableOffset = bytes.u32OrNull(offset + 16, header.endian) ?: return null
@@ -327,13 +375,13 @@ object MachOParser {
     }
 
     fun parseDysymtab(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: MachOHeader,
         loadCommands: List<MachOLoadCommand>,
     ): MachODysymtabCommand? {
         val command = loadCommands.firstOrNull { it.type == LC_DYSYMTAB } ?: return null
-        if (command.range.size < DYSYMTAB_COMMAND_SIZE) return null
-        val offset = command.range.offset
+        if (command.range.length < DYSYMTAB_COMMAND_SIZE) return null
+        val offset = command.range.start
         fun field(index: Int): UInt? = bytes.u32OrNull(offset + 8 + index * 4, header.endian)
 
         return MachODysymtabCommand(
@@ -360,14 +408,14 @@ object MachOParser {
     }
 
     fun parseSymbols(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: MachOHeader,
         symtab: MachOSymtabCommand,
     ): List<MachOSymbol>? {
         val symbolCount = symtab.symbolCount.toBoundedInt() ?: return null
-        val symbolOffset = symtab.symbolTableOffset.toBoundedInt() ?: return null
-        val stringTableOffset = symtab.stringTableOffset.toBoundedInt() ?: return null
-        val stringTableSize = symtab.stringTableSize.toBoundedInt() ?: return null
+        val symbolOffset = symtab.symbolTableOffset.toLong()
+        val stringTableOffset = symtab.stringTableOffset.toLong()
+        val stringTableSize = symtab.stringTableSize.toLong()
         val symbolEntrySize = when (header.wordSize) {
             NativeBinaryWordSize.Bits32 -> NLIST_32_SIZE
             NativeBinaryWordSize.Bits64 -> NLIST_64_SIZE
@@ -376,30 +424,31 @@ object MachOParser {
         val symbolTableSize = checkedMultiply(symbolCount, symbolEntrySize) ?: return null
         if (!bytes.containsRange(symbolOffset, symbolTableSize)) return null
         if (!bytes.containsRange(stringTableOffset, stringTableSize)) return null
+        val stringTable = MachOStringTable(bytes, stringTableOffset, stringTableSize)
 
         return buildList {
             repeat(symbolCount) { index ->
-                val offset = symbolOffset + index * symbolEntrySize
-                add(parseSymbol(bytes, header, index, offset, symbolEntrySize, stringTableOffset, stringTableSize) ?: return null)
+                val offset = symbolOffset + index.toLong() * symbolEntrySize
+                add(parseSymbol(bytes, header, index, offset, symbolEntrySize, stringTable) ?: return null)
             }
         }
     }
 
     fun parseDylibs(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: MachOHeader,
         loadCommands: List<MachOLoadCommand>,
     ): List<MachODylibCommand>? {
         val dylibs = mutableListOf<MachODylibCommand>()
         for (command in loadCommands) {
             val kind = dylibKind(command.type) ?: continue
-            if (command.range.size < DYLIB_COMMAND_SIZE) return null
-            val offset = command.range.offset
+            if (command.range.length < DYLIB_COMMAND_SIZE) return null
+            val offset = command.range.start
             val nameOffset = bytes.u32OrNull(offset + 8, header.endian) ?: return null
-            val nameOffsetInt = nameOffset.toBoundedInt() ?: return null
-            if (nameOffsetInt !in DYLIB_COMMAND_SIZE..command.range.size) return null
-            val nameStart = offset + nameOffsetInt
-            val nameEndLimit = offset + command.range.size
+            val nameOffsetLong = nameOffset.toLong()
+            if (nameOffsetLong !in DYLIB_COMMAND_SIZE..command.range.length) return null
+            val nameStart = offset + nameOffsetLong
+            val nameEndLimit = command.range.end
             val nameEnd = findNullTerminator(bytes, nameStart, nameEndLimit) ?: nameEndLimit
             dylibs.add(
                 MachODylibCommand(
@@ -419,7 +468,7 @@ object MachOParser {
     }
 
     fun parseRelocations(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: MachOHeader,
         sections: List<MachOSection>,
         symbols: List<MachOSymbol>,
@@ -430,12 +479,12 @@ object MachOParser {
             val relocationCount = section.relocationCount.toBoundedInt() ?: return null
             if (relocationCount == 0) continue
 
-            val relocationOffset = section.relocationOffset.toBoundedInt() ?: return null
+            val relocationOffset = section.relocationOffset.toLong()
             val tableSize = checkedMultiply(relocationCount, RELOCATION_INFO_SIZE) ?: return null
             if (!bytes.containsRange(relocationOffset, tableSize)) return null
 
             repeat(relocationCount) { indexInSection ->
-                val offset = relocationOffset + indexInSection * RELOCATION_INFO_SIZE
+                val offset = relocationOffset + indexInSection.toLong() * RELOCATION_INFO_SIZE
                 relocations.add(
                     parseRelocation(
                         bytes = bytes,
@@ -452,87 +501,91 @@ object MachOParser {
     }
 
     private fun parseSegment64(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: MachOHeader,
         command: MachOLoadCommand,
         segmentIndex: Int,
     ): MachOSegment? {
-        if (command.range.size < SEGMENT_COMMAND_64_SIZE) return null
-        val offset = command.range.offset
+        if (command.range.length < SEGMENT_COMMAND_64_SIZE) return null
+        val offset = command.range.start
         val sectionCount = bytes.u32OrNull(offset + 64, header.endian) ?: return null
         val sectionCountInt = sectionCount.toBoundedInt() ?: return null
         val sectionsOffset = offset + SEGMENT_COMMAND_64_SIZE
         val sectionsSize = checkedMultiply(sectionCountInt, SECTION_64_SIZE) ?: return null
-        if (sectionsOffset + sectionsSize > offset + command.range.size) return null
+        if (sectionsOffset + sectionsSize > command.range.end) return null
 
+        val fileOffset = bytes.u64OrNull(offset + 40, header.endian) ?: return null
+        val fileSize = bytes.u64OrNull(offset + 48, header.endian) ?: return null
         val segment = MachOSegment(
             index = segmentIndex,
             name = bytes.fixedString(offset + 8, 16),
             virtualAddress = bytes.u64OrNull(offset + 24, header.endian) ?: return null,
             virtualSize = bytes.u64OrNull(offset + 32, header.endian) ?: return null,
-            fileOffset = bytes.u64OrNull(offset + 40, header.endian) ?: return null,
-            fileSize = bytes.u64OrNull(offset + 48, header.endian) ?: return null,
+            fileOffset = fileOffset,
+            fileSize = fileSize,
             maxProtection = bytes.u32OrNull(offset + 56, header.endian) ?: return null,
             initialProtection = bytes.u32OrNull(offset + 60, header.endian) ?: return null,
             sectionCount = sectionCount,
             flags = bytes.u32OrNull(offset + 68, header.endian) ?: return null,
             commandRange = command.range,
-            fileRange = fileRange(bytes, bytes.u64OrNull(offset + 40, header.endian) ?: return null, bytes.u64OrNull(offset + 48, header.endian) ?: return null),
+            fileRange = fileRange(bytes, fileOffset, fileSize),
             sections = emptyList(),
         )
 
         val sections = buildList {
             repeat(sectionCountInt) { sectionIndex ->
-                add(parseSection64(bytes, header, segment, sectionIndex, sectionsOffset + sectionIndex * SECTION_64_SIZE) ?: return null)
+                add(parseSection64(bytes, header, segment, sectionIndex, sectionsOffset + sectionIndex.toLong() * SECTION_64_SIZE) ?: return null)
             }
         }
         return segment.copy(sections = sections)
     }
 
     private fun parseSegment32(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: MachOHeader,
         command: MachOLoadCommand,
         segmentIndex: Int,
     ): MachOSegment? {
-        if (command.range.size < SEGMENT_COMMAND_32_SIZE) return null
-        val offset = command.range.offset
+        if (command.range.length < SEGMENT_COMMAND_32_SIZE) return null
+        val offset = command.range.start
         val sectionCount = bytes.u32OrNull(offset + 48, header.endian) ?: return null
         val sectionCountInt = sectionCount.toBoundedInt() ?: return null
         val sectionsOffset = offset + SEGMENT_COMMAND_32_SIZE
         val sectionsSize = checkedMultiply(sectionCountInt, SECTION_32_SIZE) ?: return null
-        if (sectionsOffset + sectionsSize > offset + command.range.size) return null
+        if (sectionsOffset + sectionsSize > command.range.end) return null
 
+        val fileOffset = (bytes.u32OrNull(offset + 32, header.endian) ?: return null).toULong()
+        val fileSize = (bytes.u32OrNull(offset + 36, header.endian) ?: return null).toULong()
         val segment = MachOSegment(
             index = segmentIndex,
             name = bytes.fixedString(offset + 8, 16),
             virtualAddress = (bytes.u32OrNull(offset + 24, header.endian) ?: return null).toULong(),
             virtualSize = (bytes.u32OrNull(offset + 28, header.endian) ?: return null).toULong(),
-            fileOffset = (bytes.u32OrNull(offset + 32, header.endian) ?: return null).toULong(),
-            fileSize = (bytes.u32OrNull(offset + 36, header.endian) ?: return null).toULong(),
+            fileOffset = fileOffset,
+            fileSize = fileSize,
             maxProtection = bytes.u32OrNull(offset + 40, header.endian) ?: return null,
             initialProtection = bytes.u32OrNull(offset + 44, header.endian) ?: return null,
             sectionCount = sectionCount,
             flags = bytes.u32OrNull(offset + 52, header.endian) ?: return null,
             commandRange = command.range,
-            fileRange = fileRange(bytes, (bytes.u32OrNull(offset + 32, header.endian) ?: return null).toULong(), (bytes.u32OrNull(offset + 36, header.endian) ?: return null).toULong()),
+            fileRange = fileRange(bytes, fileOffset, fileSize),
             sections = emptyList(),
         )
 
         val sections = buildList {
             repeat(sectionCountInt) { sectionIndex ->
-                add(parseSection32(bytes, header, segment, sectionIndex, sectionsOffset + sectionIndex * SECTION_32_SIZE) ?: return null)
+                add(parseSection32(bytes, header, segment, sectionIndex, sectionsOffset + sectionIndex.toLong() * SECTION_32_SIZE) ?: return null)
             }
         }
         return segment.copy(sections = sections)
     }
 
     private fun parseSection64(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: MachOHeader,
         segment: MachOSegment,
         index: Int,
-        offset: Int,
+        offset: Long,
     ): MachOSection? {
         val fileOffset = bytes.u32OrNull(offset + 48, header.endian)?.toULong() ?: return null
         val size = bytes.u64OrNull(offset + 40, header.endian) ?: return null
@@ -548,17 +601,17 @@ object MachOParser {
             relocationOffset = bytes.u32OrNull(offset + 56, header.endian) ?: return null,
             relocationCount = bytes.u32OrNull(offset + 60, header.endian) ?: return null,
             flags = bytes.u32OrNull(offset + 64, header.endian) ?: return null,
-            headerRange = NativeByteRange(offset, SECTION_64_SIZE),
+            headerRange = NativeByteRange(offset, SECTION_64_SIZE.toLong()),
             contentRange = fileRange(bytes, fileOffset, size),
         )
     }
 
     private fun parseSection32(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: MachOHeader,
         segment: MachOSegment,
         index: Int,
-        offset: Int,
+        offset: Long,
     ): MachOSection? {
         val fileOffset = bytes.u32OrNull(offset + 40, header.endian)?.toULong() ?: return null
         val size = bytes.u32OrNull(offset + 36, header.endian)?.toULong() ?: return null
@@ -574,19 +627,18 @@ object MachOParser {
             relocationOffset = bytes.u32OrNull(offset + 48, header.endian) ?: return null,
             relocationCount = bytes.u32OrNull(offset + 52, header.endian) ?: return null,
             flags = bytes.u32OrNull(offset + 56, header.endian) ?: return null,
-            headerRange = NativeByteRange(offset, SECTION_32_SIZE),
+            headerRange = NativeByteRange(offset, SECTION_32_SIZE.toLong()),
             contentRange = fileRange(bytes, fileOffset, size),
         )
     }
 
     private fun parseSymbol(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: MachOHeader,
         index: Int,
-        offset: Int,
+        offset: Long,
         entrySize: Int,
-        stringTableOffset: Int,
-        stringTableSize: Int,
+        stringTable: MachOStringTable,
     ): MachOSymbol? {
         val nameOffset = bytes.u32OrNull(offset, header.endian) ?: return null
         val type = bytes.byteOrNull(offset + 4) ?: return null
@@ -600,21 +652,21 @@ object MachOParser {
         return MachOSymbol(
             index = index,
             nameOffset = nameOffset,
-            name = readStringTableEntry(bytes, stringTableOffset, stringTableSize, nameOffset),
+            name = stringTable.entry(nameOffset),
             type = type,
             sectionIndex = sectionIndex,
             description = description,
             value = value,
-            recordRange = NativeByteRange(offset, entrySize),
+            recordRange = NativeByteRange(offset, entrySize.toLong()),
         )
     }
 
     private fun parseRelocation(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: MachOHeader,
         section: MachOSection,
         index: Int,
-        offset: Int,
+        offset: Long,
         symbolsByIndex: Map<Int, MachOSymbol>,
     ): MachORelocation? {
         val addressWord = bytes.u32OrNull(offset, header.endian) ?: return null
@@ -634,7 +686,7 @@ object MachOParser {
                 scattered = true,
                 value = info,
                 symbol = null,
-                recordRange = NativeByteRange(offset, RELOCATION_INFO_SIZE),
+                recordRange = NativeByteRange(offset, RELOCATION_INFO_SIZE.toLong()),
             )
         } else {
             val symbolOrSectionIndex = info and 0x00FFFFFFu
@@ -652,7 +704,7 @@ object MachOParser {
                 scattered = false,
                 value = null,
                 symbol = if (external) symbolsByIndex[symbolOrSectionIndex.toInt()] else null,
-                recordRange = NativeByteRange(offset, RELOCATION_INFO_SIZE),
+                recordRange = NativeByteRange(offset, RELOCATION_INFO_SIZE.toLong()),
             )
         }
     }
@@ -678,7 +730,7 @@ private const val FAT_ARCH_64_SIZE = 32
 private const val LOAD_COMMAND_SIZE = 8
 private const val SYMTAB_COMMAND_SIZE = 24
 private const val DYSYMTAB_COMMAND_SIZE = 80
-private const val DYLIB_COMMAND_SIZE = 24
+private const val DYLIB_COMMAND_SIZE = 24L
 private const val SEGMENT_COMMAND_32_SIZE = 56
 private const val SEGMENT_COMMAND_64_SIZE = 72
 private const val SECTION_32_SIZE = 68
@@ -686,6 +738,13 @@ private const val SECTION_64_SIZE = 80
 private const val NLIST_32_SIZE = 12
 private const val NLIST_64_SIZE = 16
 private const val RELOCATION_INFO_SIZE = 8
+
+/**
+ * Largest string table copied into an array. Above it — the string table of a large debug build
+ * can run to gigabytes — names are read from the file in place, which costs a bounds-checked read
+ * per byte but no heap.
+ */
+private const val MAX_COPIED_STRING_TABLE = 64L * 1024 * 1024
 
 private const val MH_MAGIC: UInt = 0xFEEDFACEu
 private const val MH_CIGAM: UInt = 0xCEFAEDFEu
@@ -713,34 +772,29 @@ private fun optionalCommandDiagnostic(code: String, message: String): NativePars
         severity = NativeParserSeverity.Warning,
     )
 
-private fun fileRange(bytes: CommonByteBuffer, offset: ULong, size: ULong): NativeByteRange? {
-    val boundedOffset = offset.toBoundedInt() ?: return null
-    val boundedSize = size.toBoundedInt() ?: return null
-    if (boundedSize == 0) return NativeByteRange(boundedOffset.coerceAtMost(bytes.size), 0)
+/** The 64-bit range `[offset, offset + size)` when it lies inside [bytes]; an empty one is clamped to the end. */
+private fun fileRange(bytes: LargeBytes, offset: ULong, size: ULong): NativeByteRange? {
+    val boundedOffset = offset.toBoundedLong() ?: return null
+    val boundedSize = size.toBoundedLong() ?: return null
+    if (boundedSize == 0L) return NativeByteRange(boundedOffset.coerceAtMost(bytes.size), 0L)
     if (!bytes.containsRange(boundedOffset, boundedSize)) return null
     return NativeByteRange(boundedOffset, boundedSize)
 }
 
 private fun NativeByteRange.overlaps(other: NativeByteRange): Boolean =
-    offset < other.endExclusive && other.offset < endExclusive
+    start < other.end && other.start < end
 
-private fun CommonByteBuffer.fixedString(offset: Int, size: Int): String {
-    if (!containsRange(offset, size)) return ""
-    val bytes = ByteArray(size)
-    for (index in 0 until size) {
-        bytes[index] = get(offset + index)
-    }
+private fun LargeBytes.fixedString(offset: Long, size: Int): String {
+    if (!containsRange(offset, size.toLong())) return ""
+    val bytes = readBytes(offset, size)
     val end = bytes.indexOf(0).takeIf { it >= 0 } ?: size
     return bytes.decodeToString(0, end)
 }
 
-private fun CommonByteBuffer.containsRange(offset: Int, size: Int): Boolean =
-    offset >= 0 && size >= 0 && offset <= this.size && size <= this.size - offset
-
-private fun CommonByteBuffer.byteOrNull(offset: Int): Int? =
+private fun LargeBytes.byteOrNull(offset: Long): Int? =
     if (offset in 0 until size) get(offset).toInt() and 0xFF else null
 
-private fun CommonByteBuffer.u16OrNull(offset: Int, endian: NativeBinaryEndian): Int? {
+private fun LargeBytes.u16OrNull(offset: Long, endian: NativeBinaryEndian): Int? {
     val b0 = byteOrNull(offset) ?: return null
     val b1 = byteOrNull(offset + 1) ?: return null
     return when (endian) {
@@ -750,7 +804,7 @@ private fun CommonByteBuffer.u16OrNull(offset: Int, endian: NativeBinaryEndian):
     }
 }
 
-private fun CommonByteBuffer.u32OrNull(offset: Int, endian: NativeBinaryEndian): UInt? {
+private fun LargeBytes.u32OrNull(offset: Long, endian: NativeBinaryEndian): UInt? {
     val b0 = byteOrNull(offset) ?: return null
     val b1 = byteOrNull(offset + 1) ?: return null
     val b2 = byteOrNull(offset + 2) ?: return null
@@ -762,10 +816,10 @@ private fun CommonByteBuffer.u32OrNull(offset: Int, endian: NativeBinaryEndian):
     }
 }
 
-private fun CommonByteBuffer.i32OrNull(offset: Int, endian: NativeBinaryEndian): Int? =
+private fun LargeBytes.i32OrNull(offset: Long, endian: NativeBinaryEndian): Int? =
     u32OrNull(offset, endian)?.toInt()
 
-private fun CommonByteBuffer.u64OrNull(offset: Int, endian: NativeBinaryEndian): ULong? {
+private fun LargeBytes.u64OrNull(offset: Long, endian: NativeBinaryEndian): ULong? {
     val low: UInt
     val high: UInt
     when (endian) {
@@ -785,30 +839,41 @@ private fun CommonByteBuffer.u64OrNull(offset: Int, endian: NativeBinaryEndian):
 private fun UInt.toBoundedInt(): Int? =
     if (this <= Int.MAX_VALUE.toUInt()) toInt() else null
 
-private fun ULong.toBoundedInt(): Int? =
-    if (this <= Int.MAX_VALUE.toULong()) toInt() else null
+/** A 64-bit file offset or size, or `null` past what a [Long] (and so any file) can hold. */
+private fun ULong.toBoundedLong(): Long? =
+    if (this <= Long.MAX_VALUE.toULong()) toLong() else null
 
-private fun checkedMultiply(left: Int, right: Int): Int? {
+/** The byte size of [left] records of [right] bytes; a table can exceed 2 GiB. */
+private fun checkedMultiply(left: Int, right: Int): Long? {
     if (left < 0 || right < 0) return null
-    if (left != 0 && right > Int.MAX_VALUE / left) return null
-    return left * right
+    return left.toLong() * right
 }
 
-private fun readStringTableEntry(
-    bytes: CommonByteBuffer,
-    stringTableOffset: Int,
-    stringTableSize: Int,
-    nameOffset: UInt,
-): String {
-    val relativeOffset = nameOffset.toBoundedInt() ?: return ""
-    if (relativeOffset !in 0 until stringTableSize) return ""
-    val start = stringTableOffset + relativeOffset
-    val endLimit = stringTableOffset + stringTableSize
-    val end = findNullTerminator(bytes, start, endLimit) ?: endLimit
-    return bytes.stringRange(start, end)
+/**
+ * A symbol string table. Copied into one array when that is cheap ([MAX_COPIED_STRING_TABLE]),
+ * so names decode without a bounds-checked read per byte; otherwise read from the file in place.
+ * The caller has checked that the table lies inside [bytes].
+ */
+private class MachOStringTable(private val bytes: LargeBytes, private val start: Long, private val size: Long) {
+    private val copy: ByteArray? = if (size <= MAX_COPIED_STRING_TABLE) bytes.readBytes(start, size.toInt()) else null
+
+    fun entry(nameOffset: UInt): String {
+        val relative = nameOffset.toLong()
+        if (relative !in 0 until size) return ""
+        val table = copy
+        if (table != null) {
+            val from = relative.toInt()
+            var end = from
+            while (end < table.size && table[end] != 0.toByte()) end++
+            return table.decodeToString(from, end)
+        }
+        val from = start + relative
+        val limit = start + size
+        return bytes.stringRange(from, findNullTerminator(bytes, from, limit) ?: limit)
+    }
 }
 
-private fun findNullTerminator(bytes: CommonByteBuffer, start: Int, endLimit: Int): Int? {
+private fun findNullTerminator(bytes: LargeBytes, start: Long, endLimit: Long): Long? {
     if (start !in 0..endLimit || endLimit > bytes.size) return null
     var index = start
     while (index < endLimit) {
@@ -818,11 +883,7 @@ private fun findNullTerminator(bytes: CommonByteBuffer, start: Int, endLimit: In
     return null
 }
 
-private fun CommonByteBuffer.stringRange(start: Int, end: Int): String {
-    if (start < 0 || end < start || end > size) return ""
-    val bytes = ByteArray(end - start)
-    for (index in bytes.indices) {
-        bytes[index] = get(start + index)
-    }
-    return bytes.decodeToString()
+private fun LargeBytes.stringRange(start: Long, end: Long): String {
+    if (start < 0 || end < start || end > size || end - start > Int.MAX_VALUE) return ""
+    return readBytes(start, (end - start).toInt()).decodeToString()
 }

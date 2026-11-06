@@ -11,7 +11,6 @@ import org.jetbrains.hexana.providers.PdbBinaryProvider
 import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.providers.PeDebugSymbols
 import org.jetbrains.hexana.providers.NativeDebugInfoSummary
-import org.jetbrains.hexana.providers.macho.MachOParser
 
 /**
  * Pre-resolved data for the debug tabs that requires filesystem access.
@@ -373,11 +372,9 @@ private fun machOUniversalTab(provider: FatMachOBinaryProvider): TableTabDescrip
     // Precompute each slice's endianness once by peeking the slice's Mach-O
     // header. A universal binary can in principle mix endianness across
     // slices, so we record it per row instead of inheriting from the fat
-    // header.
+    // header. Read from the whole file: a slice can lie past 2 GiB.
     val sliceEndians: List<NativeBinaryEndian> = architectures.map { arch ->
-        val range = arch.sliceRange ?: return@map NativeBinaryEndian.Unknown
-        val slice = provider.bytes.slice(range.offset, range.size)
-        MachOParser.parseHeader(slice)?.endian ?: NativeBinaryEndian.Unknown
+        provider.sliceHeader(arch)?.endian ?: NativeBinaryEndian.Unknown
     }
     return TableTabDescriptor(
         name = "Universal",

@@ -2,6 +2,8 @@ package org.jetbrains.hexana.providers
 
 import org.jetbrains.hexana.parsing.common.NativeByteRange
 import org.jetbrains.hexana.providers.elf.debugSectionSpan
+import org.jetbrains.hexana.providers.macho.machODebugSectionSpan
+import org.jetbrains.hexana.io.readBytes
 import org.jetbrains.hexana.io.asLargeBytes
 import org.jetbrains.hexana.io.LargeBytes
 import org.jetbrains.hexana.io.CommonByteBuffer
@@ -377,11 +379,17 @@ sealed class NativeBinaryProvider(
 }
 
 /**
- * The whole file this native provider describes: for ELF, the 64-bit source it was parsed from
- * (larger than [BinaryProvider.bytes] for a file past 2 GiB); for the other formats, their bytes.
+ * The whole file this native provider describes: for ELF and (universal) Mach-O, the 64-bit source
+ * it was parsed from (larger than [BinaryProvider.bytes] for a file past 2 GiB); for the other
+ * formats, their bytes.
  */
 val NativeBinaryProvider.wholeFile: LargeBytes
-    get() = (this as? ElfBinaryProvider)?.source ?: bytes.asLargeBytes()
+    get() = when (this) {
+        is ElfBinaryProvider -> source
+        is MachOBinaryProvider -> source
+        is FatMachOBinaryProvider -> source
+        else -> bytes.asLargeBytes()
+    }
 
 class ElfBinaryProvider(
     sharedBytes: CommonByteBuffer,
@@ -524,57 +532,65 @@ class MachOBinaryProvider(
     sharedBytes: CommonByteBuffer,
     override val nativeFormat: NativeBinaryFormat.MachO,
     sourcePath: String? = null,
+    /**
+     * The whole file. Larger than [sharedBytes] for a file past 2 GiB, whose head is all a
+     * `CommonByteBuffer` holds; the Mach-O tables are parsed from this, so segments, sections,
+     * symbols and relocations anywhere in the file are found.
+     */
+    val source: LargeBytes = sharedBytes.asLargeBytes(),
 ) : NativeBinaryProvider(sharedBytes, sourcePath) {
 
-    val header: MachOHeader? by lazy { MachOParser.parseHeader(bytes) }
+    override val fileSize: Long get() = source.size
 
-    override val parseDiagnostics: List<NativeParserDiagnostic> by lazy { MachOParser.parse(bytes).diagnostics }
+    val header: MachOHeader? by lazy { MachOParser.parseHeader(source) }
+
+    override val parseDiagnostics: List<NativeParserDiagnostic> by lazy { MachOParser.parse(source).diagnostics }
 
     val loadCommands: List<MachOLoadCommand>? by lazy {
-        header?.let { MachOParser.parseLoadCommands(bytes, it) }
+        header?.let { MachOParser.parseLoadCommands(source, it) }
     }
 
     val segments: List<MachOSegment>? by lazy {
         val h = header ?: return@lazy null
         val c = loadCommands ?: return@lazy null
-        MachOParser.parseSegments(bytes, h, c)
+        MachOParser.parseSegments(source, h, c)
     }
 
     val sections: List<MachOSection>? by lazy { segments?.flatMap { it.sections } }
 
     val uuid: MachOUuid? by lazy {
         val c = loadCommands ?: return@lazy null
-        MachOParser.parseUuid(bytes, c)
+        MachOParser.parseUuid(source, c)
     }
 
     val symtab: MachOSymtabCommand? by lazy {
         val h = header ?: return@lazy null
         val c = loadCommands ?: return@lazy null
-        MachOParser.parseSymtab(bytes, h, c)
+        MachOParser.parseSymtab(source, h, c)
     }
 
     val dysymtab: MachODysymtabCommand? by lazy {
         val h = header ?: return@lazy null
         val c = loadCommands ?: return@lazy null
-        MachOParser.parseDysymtab(bytes, h, c)
+        MachOParser.parseDysymtab(source, h, c)
     }
 
     val symbols: List<MachOSymbol>? by lazy {
         val h = header ?: return@lazy null
         val s = symtab ?: return@lazy emptyList()
-        MachOParser.parseSymbols(bytes, h, s)
+        MachOParser.parseSymbols(source, h, s)
     }
 
     val dylibs: List<MachODylibCommand>? by lazy {
         val h = header ?: return@lazy null
         val c = loadCommands ?: return@lazy null
-        MachOParser.parseDylibs(bytes, h, c)
+        MachOParser.parseDylibs(source, h, c)
     }
 
     val relocations: List<MachORelocation>? by lazy {
         val h = header ?: return@lazy null
         val sec = sections ?: return@lazy null
-        MachOParser.parseRelocations(bytes, h, sec, symbols.orEmpty())
+        MachOParser.parseRelocations(source, h, sec, symbols.orEmpty())
     }
 
     override val nativeFunctions: List<NativeFunctionRecord>? by lazy {
@@ -586,20 +602,31 @@ class MachOBinaryProvider(
     override val nativeSourceLocationProvider: NativeSourceLocationProvider? by lazy {
         val sec = sections ?: return@lazy null
         if (sec.none { it.name == "__debug_line" } || sec.none { it.name == "__debug_info" }) return@lazy null
-        NativeDwarfSourceLocationProvider(bytes, MachODwarfAccessor(sec))
+        val span = machODebugSectionSpan(sec) ?: return@lazy null
+        if (span.last < bytes.size) {
+            NativeDwarfSourceLocationProvider(bytes, MachODwarfAccessor(sec))
+        } else {
+            // The debug sections of a file past 2 GiB: one window over them, since the DWARF
+            // decoder is Int-addressed. Debug info larger than a window is not resolved.
+            val length = span.last - span.first + 1
+            if (length > Int.MAX_VALUE) return@lazy null
+            NativeDwarfSourceLocationProvider(source.window(span.first, length.toInt()), MachODwarfAccessor(sec, base = span.first))
+        }
     }
 
     // Section-scoped string scan: the VM identity properties live in __DATA,__data (not near
     // the start of the file), so a full-file scan with maxStrings=5_000 silently misses them
     // on large binaries. Scanning only the sections that conventionally hold string data avoids
-    // the cap entirely and keeps the scan bounded.
+    // the cap entirely and keeps the scan bounded. String records carry Int offsets, so only
+    // sections inside [bytes] are scanned; one past 2 GiB is skipped.
     override val strings: List<BinaryStringRecord> by lazy {
         val sec = sections ?: return@lazy NativeStringScanner.scanAscii(bytes)
-        val stringDataSections = sec.filter { it.name in STRING_DATA_SECTIONS && it.contentRange != null }
-        if (stringDataSections.isEmpty()) return@lazy NativeStringScanner.scanAscii(bytes)
+        val stringDataRanges = sec.filter { it.name in STRING_DATA_SECTIONS }
+            .mapNotNull { it.contentRange?.takeIf { range -> range.end <= bytes.size } }
+        if (stringDataRanges.isEmpty()) return@lazy NativeStringScanner.scanAscii(bytes)
         NativeStringScanner.scanSections(
             bytes = bytes,
-            sections = stringDataSections.map { it.fileOffset.toInt() to it.size.toInt() },
+            sections = stringDataRanges.map { it.offset to it.size },
         )
     }
 
@@ -610,6 +637,8 @@ class MachOBinaryProvider(
     }
 
     override val sizeAnalysis: BinarySizeNode? by lazy {
+        // Size nodes are Int-sized; a file past 2 GiB has no size tree rather than a wrong one.
+        if (source.size > Int.MAX_VALUE) return@lazy null
         val segs = segments?.takeIf { it.isNotEmpty() } ?: return@lazy null
         val totalSize = bytes.size
         val children = segs.map { seg ->
@@ -653,17 +682,57 @@ class FatMachOBinaryProvider(
     sharedBytes: CommonByteBuffer,
     override val nativeFormat: NativeBinaryFormat.FatMachO,
     sourcePath: String? = null,
+    /**
+     * The whole file. Larger than [sharedBytes] for a universal binary past 2 GiB; the slice
+     * table is checked against it, so a slice placed past 2 GiB by a `fat_arch_64` is listed.
+     */
+    val source: LargeBytes = sharedBytes.asLargeBytes(),
 ) : NativeBinaryProvider(sharedBytes, sourcePath) {
 
-    val fatHeader: MachOFatHeader? by lazy { MachOParser.parseFatHeader(bytes) }
+    override val fileSize: Long get() = source.size
 
-    override val parseDiagnostics: List<NativeParserDiagnostic> by lazy { MachOParser.parse(bytes).diagnostics }
+    val fatHeader: MachOFatHeader? by lazy { MachOParser.parseFatHeader(source) }
+
+    override val parseDiagnostics: List<NativeParserDiagnostic> by lazy { MachOParser.parse(source).diagnostics }
 
     val architectures: List<MachOFatArch>? by lazy {
-        fatHeader?.let { MachOParser.parseFatArchitectures(bytes, it) }
+        fatHeader?.let { MachOParser.parseFatArchitectures(source, it) }
+    }
+
+    /**
+     * [arch]'s slice as a buffer, read from the whole file, for opening it on its own; `null`
+     * for a slice without a valid range or one larger than a buffer holds.
+     */
+    fun sliceBytes(arch: MachOFatArch): CommonByteBuffer? {
+        val range = arch.sliceRange ?: return null
+        if (range.length > Int.MAX_VALUE) return null
+        return source.window(range.start, range.length.toInt())
+    }
+
+    /**
+     * The Mach-O header at the start of [arch]'s slice. Only the header and its load commands are
+     * read, so this works for a slice anywhere in the file and of any size.
+     */
+    fun sliceHeader(arch: MachOFatArch): MachOHeader? {
+        val range = arch.sliceRange ?: return null
+        val prefixLength = minOf(range.length, MACH_HEADER_64_BYTES).toInt()
+        if (prefixLength < MACH_HEADER_SIZEOFCMDS_OFFSET + 4) return null
+        val prefix = source.readBytes(range.start, prefixLength)
+        // sizeofcmds (u32 at +20) says how much follows the header; a big-endian magic starts 0xFE.
+        val bigEndian = (prefix[0].toInt() and 0xFF) == 0xFE
+        var commandsSize = 0L
+        for (i in 0 until 4) {
+            val b = prefix[MACH_HEADER_SIZEOFCMDS_OFFSET + if (bigEndian) i else 3 - i].toLong() and 0xFF
+            commandsSize = (commandsSize shl 8) or b
+        }
+        val needed = minOf(range.length, MACH_HEADER_64_BYTES + commandsSize)
+        if (needed > Int.MAX_VALUE) return null
+        return MachOParser.parseHeader(source.window(range.start, needed.toInt()))
     }
 
     override val sizeAnalysis: BinarySizeNode? by lazy {
+        // Size nodes are Int-sized; a file past 2 GiB has no size tree rather than a wrong one.
+        if (source.size > Int.MAX_VALUE) return@lazy null
         val archs = architectures?.takeIf { it.isNotEmpty() } ?: return@lazy null
         val totalSize = bytes.size
         val children = archs.map { arch ->
@@ -685,6 +754,14 @@ class FatMachOBinaryProvider(
                 label = "Slice ${arch.index}",
             )
         }
+    }
+
+    private companion object {
+        /** Size of `mach_header_64`, the larger header; a 32-bit one is 4 bytes shorter. */
+        const val MACH_HEADER_64_BYTES = 32L
+
+        /** Offset of `sizeofcmds` in both headers. */
+        const val MACH_HEADER_SIZEOFCMDS_OFFSET = 20
     }
 }
 
@@ -1028,7 +1105,7 @@ fun nativeOrGenericBinaryProvider(
     fileSize: Long? = null,
     /**
      * The whole file when [sharedBytes] is only its head and the host can read all of it; the
-     * formats migrated to 64-bit offsets (ELF) parse from it. Implies [fileSize].
+     * formats migrated to 64-bit offsets (ELF, Mach-O, ZIP, tar) parse from it. Implies [fileSize].
      */
     source: LargeBytes? = null,
 ): BinaryProvider {
@@ -1051,8 +1128,8 @@ fun nativeOrGenericBinaryProvider(
         else -> {
             when (val fmt = NativeBinaryFormatDetector.detect(sharedBytes)) {
                 is NativeBinaryFormat.Elf -> ElfBinaryProvider(sharedBytes, fmt, sourcePath, source ?: sharedBytes.asLargeBytes())
-                is NativeBinaryFormat.MachO -> MachOBinaryProvider(sharedBytes, fmt, sourcePath)
-                is NativeBinaryFormat.FatMachO -> FatMachOBinaryProvider(sharedBytes, fmt, sourcePath)
+                is NativeBinaryFormat.MachO -> MachOBinaryProvider(sharedBytes, fmt, sourcePath, source ?: sharedBytes.asLargeBytes())
+                is NativeBinaryFormat.FatMachO -> FatMachOBinaryProvider(sharedBytes, fmt, sourcePath, source ?: sharedBytes.asLargeBytes())
                 is NativeBinaryFormat.Pe -> PeBinaryProvider(sharedBytes, fmt, sourcePath)
                 is NativeBinaryFormat.Coff -> CoffBinaryProvider(sharedBytes, fmt, sourcePath)
                 NativeBinaryFormat.Archive -> ArchiveBinaryProvider(sharedBytes, sourcePath)

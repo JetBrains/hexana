@@ -789,7 +789,8 @@ private fun enrichFatMachOUniversalTab(
         rowClickAction = { rowIndex ->
             val arch = architectures.getOrNull(rowIndex) ?: return@TableTabDescriptor
             val range = arch.sliceRange ?: return@TableTabDescriptor
-            val buffer = provider.bytes.slice(range.offset, range.size)
+            // From the whole file, so a slice past 2 GiB opens too; one larger than a buffer does not.
+            val buffer = provider.sliceBytes(arch) ?: return@TableTabDescriptor
             val endian = MachOParser.parseHeader(buffer)?.endian ?: NativeBinaryEndian.Unknown
             val archName = machOCpuArchName(arch.cpuType, arch.cpuSubtype)
             val endianTag = endianLabel(endian)

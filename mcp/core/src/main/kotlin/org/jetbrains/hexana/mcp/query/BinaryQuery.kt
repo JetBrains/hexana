@@ -373,7 +373,7 @@ private fun NativeFunctionRecord.toRecord(detail: String): BinaryRecordResult =
             if (demangledName != null && demangledName != name) addAttr("mangledName", name)
         },
         evidence = if (detail == "evidence") {
-            listOf("symbolIndex=$symbolIndex", "recordOffset=${recordRange.offset}", "recordSize=${recordRange.size}")
+            listOf("symbolIndex=$symbolIndex", "recordOffset=${recordRange.start}", "recordSize=${recordRange.length}")
         } else {
             emptyList()
         },
@@ -430,9 +430,9 @@ private fun PeImportLibrary.toRecords(detail: String): List<BinaryRecordResult> 
             summary = "PE import `${this.name}!${name ?: "<unnamed>"}`",
             location = BinaryRecordLocationResult(
                 index = entry.index,
-                fileOffset = entry.thunkRange.offset.toLong(),
+                fileOffset = entry.thunkRange.start,
                 virtualAddress = entry.thunkRva.toLong(),
-                size = entry.thunkRange.size.toLong(),
+                size = entry.thunkRange.length,
             ),
             attributes = buildList {
                 addAttr("library", this@toRecords.name)
@@ -440,7 +440,7 @@ private fun PeImportLibrary.toRecords(detail: String): List<BinaryRecordResult> 
                 entry.ordinal?.let { addAttr("ordinal", it) }
             },
             evidence = if (detail == "evidence") {
-                listOf("descriptorOffset=${descriptorRange.offset}", "thunkOffset=${entry.thunkRange.offset}")
+                listOf("descriptorOffset=${descriptorRange.start}", "thunkOffset=${entry.thunkRange.start}")
             } else {
                 emptyList()
             },
@@ -460,9 +460,9 @@ private fun MachOBinaryProvider.dylibImportRecords(
             kind = "import",
             name = it.name,
             summary = "Mach-O ${it.kind.name.lowercase()} dylib `${it.name}`",
-            location = BinaryRecordLocationResult(index = it.index, fileOffset = it.commandRange.offset.toLong(), size = it.commandRange.size.toLong()),
+            location = BinaryRecordLocationResult(index = it.index, fileOffset = it.commandRange.start, size = it.commandRange.length),
             attributes = listOf(attr("kind", it.kind.name), attr("type", hex(it.type))),
-            evidence = if (detail == "evidence") listOf("commandOffset=${it.commandRange.offset}") else emptyList(),
+            evidence = if (detail == "evidence") listOf("commandOffset=${it.commandRange.start}") else emptyList(),
         )
     }
 }
@@ -512,15 +512,15 @@ private fun PeBinaryProvider.peExportRecords(
             summary = "PE export ${entry.name?.let { "`$it` " }.orEmpty()}ordinal ${entry.ordinal}",
             location = BinaryRecordLocationResult(
                 index = entry.index,
-                fileOffset = entry.addressTableRange.offset.toLong(),
+                fileOffset = entry.addressTableRange.start,
                 virtualAddress = entry.rva.toLong(),
-                size = entry.addressTableRange.size.toLong(),
+                size = entry.addressTableRange.length,
             ),
             attributes = buildList {
                 addAttr("ordinal", entry.ordinal)
                 entry.forwarder?.let { addAttr("forwarder", it) }
             },
-            evidence = if (detail == "evidence") listOf("directoryOffset=${exportDirectory.directoryRange.offset}") else emptyList(),
+            evidence = if (detail == "evidence") listOf("directoryOffset=${exportDirectory.directoryRange.start}") else emptyList(),
         )
     }.also {
         if (it.isEmpty()) warnings += BinaryWarningResult("no_records", "PE export directory has no export entries.")
@@ -558,7 +558,7 @@ private fun ElfSectionHeader.toRecord(detail: String): BinaryRecordResult =
         summary = "ELF section[$index] `${name.ifBlank { "<unnamed>" }}`",
         location = BinaryRecordLocationResult(index = index, fileOffset = fileOffset.toLongOrNull(), virtualAddress = address.toLongOrNull(), size = size.toLongOrNull(), section = name),
         attributes = listOf(attr("type", hex(type)), attr("flags", hex(flags)), attr("alignment", addressAlignment)),
-        evidence = if (detail == "evidence") listOf("headerOffset=${headerRange.offset}", "headerSize=${headerRange.size}") else emptyList(),
+        evidence = if (detail == "evidence") listOf("headerOffset=${headerRange.start}", "headerSize=${headerRange.length}") else emptyList(),
     )
 
 private fun MachOSection.toRecord(detail: String): BinaryRecordResult =
@@ -568,7 +568,7 @@ private fun MachOSection.toRecord(detail: String): BinaryRecordResult =
         summary = "Mach-O section[$index] `${qualifiedName()}`",
         location = BinaryRecordLocationResult(index = index, fileOffset = fileOffset.toLongOrNull(), virtualAddress = address.toLongOrNull(), size = size.toLongOrNull(), section = qualifiedName()),
         attributes = listOf(attr("segment", segmentName), attr("flags", hex(flags)), attr("relocationCount", relocationCount)),
-        evidence = if (detail == "evidence") listOf("headerOffset=${headerRange.offset}", "headerSize=${headerRange.size}") else emptyList(),
+        evidence = if (detail == "evidence") listOf("headerOffset=${headerRange.start}", "headerSize=${headerRange.length}") else emptyList(),
     )
 
 private fun PeSection.toRecord(detail: String): BinaryRecordResult =
@@ -578,7 +578,7 @@ private fun PeSection.toRecord(detail: String): BinaryRecordResult =
         summary = "PE/COFF section[$index] `${name.ifBlank { "<unnamed>" }}`",
         location = BinaryRecordLocationResult(index = index, fileOffset = rawDataPointer.toLong(), virtualAddress = virtualAddress.toLong(), size = rawDataSize.toLong(), section = name),
         attributes = listOf(attr("virtualSize", virtualSize), attr("characteristics", hex(characteristics)), attr("relocationCount", relocationCount)),
-        evidence = if (detail == "evidence") listOf("headerOffset=${headerRange.offset}", "headerSize=${headerRange.size}") else emptyList(),
+        evidence = if (detail == "evidence") listOf("headerOffset=${headerRange.start}", "headerSize=${headerRange.length}") else emptyList(),
     )
 
 private fun org.jetbrains.hexana.providers.BinaryProvider.symbolRecords(
@@ -617,7 +617,7 @@ private fun ArchiveBinaryProvider.archiveNestedSymbolRecords(
                     addAll(record.attributes)
                 },
                 evidence = if (detail == "evidence") {
-                    listOf("archiveMember=${member.name}", "memberContentOffset=${member.contentRange.offset}") + record.evidence
+                    listOf("archiveMember=${member.name}", "memberContentOffset=${member.contentRange.start}") + record.evidence
                 } else {
                     record.evidence
                 },
@@ -631,9 +631,9 @@ private fun ElfSymbol.toRecord(detail: String): BinaryRecordResult =
         kind = "symbol",
         name = name,
         summary = "ELF symbol[$index] `${name.ifBlank { "<unnamed>" }}`",
-        location = BinaryRecordLocationResult(index = index, fileOffset = recordRange.offset.toLong(), virtualAddress = value.toLongOrNull(), size = size.toLongOrNull()),
+        location = BinaryRecordLocationResult(index = index, fileOffset = recordRange.start, virtualAddress = value.toLongOrNull(), size = size.toLongOrNull()),
         attributes = listOf(attr("binding", binding), attr("type", type), attr("sectionIndex", sectionIndex)),
-        evidence = if (detail == "evidence") listOf("recordOffset=${recordRange.offset}", "recordSize=${recordRange.size}") else emptyList(),
+        evidence = if (detail == "evidence") listOf("recordOffset=${recordRange.start}", "recordSize=${recordRange.length}") else emptyList(),
     )
 
 private fun MachOSymbol.toRecord(detail: String): BinaryRecordResult =
@@ -641,9 +641,9 @@ private fun MachOSymbol.toRecord(detail: String): BinaryRecordResult =
         kind = "symbol",
         name = name,
         summary = "Mach-O symbol[$index] `${name.ifBlank { "<unnamed>" }}`",
-        location = BinaryRecordLocationResult(index = index, fileOffset = recordRange.offset.toLong(), virtualAddress = value.toLongOrNull(), size = recordRange.size.toLong()),
+        location = BinaryRecordLocationResult(index = index, fileOffset = recordRange.start, virtualAddress = value.toLongOrNull(), size = recordRange.length),
         attributes = listOf(attr("type", type), attr("sectionIndex", sectionIndex), attr("description", description)),
-        evidence = if (detail == "evidence") listOf("recordOffset=${recordRange.offset}", "recordSize=${recordRange.size}") else emptyList(),
+        evidence = if (detail == "evidence") listOf("recordOffset=${recordRange.start}", "recordSize=${recordRange.length}") else emptyList(),
     )
 
 private fun PeCoffSymbol.toRecord(detail: String): BinaryRecordResult =
@@ -651,9 +651,9 @@ private fun PeCoffSymbol.toRecord(detail: String): BinaryRecordResult =
         kind = "symbol",
         name = name,
         summary = "COFF symbol[$index] `${name.ifBlank { "<unnamed>" }}`",
-        location = BinaryRecordLocationResult(index = index, fileOffset = recordRange.offset.toLong(), virtualAddress = value.toLong(), size = recordRange.size.toLong()),
+        location = BinaryRecordLocationResult(index = index, fileOffset = recordRange.start, virtualAddress = value.toLong(), size = recordRange.length),
         attributes = listOf(attr("sectionNumber", sectionNumber), attr("type", type), attr("storageClass", storageClass)),
-        evidence = if (detail == "evidence") listOf("recordOffset=${recordRange.offset}", "recordSize=${recordRange.size}") else emptyList(),
+        evidence = if (detail == "evidence") listOf("recordOffset=${recordRange.start}", "recordSize=${recordRange.length}") else emptyList(),
     )
 
 private fun org.jetbrains.hexana.providers.BinaryProvider.stringRecords(): List<BinaryRecordResult> =
@@ -677,7 +677,7 @@ private fun org.jetbrains.hexana.providers.BinaryProvider.segmentRecords(
                 summary = "ELF program header[$index] type=${hex(header.type)}",
                 location = BinaryRecordLocationResult(index = index, fileOffset = header.fileOffset.toLongOrNull(), virtualAddress = header.virtualAddress.toLongOrNull(), size = header.fileSize.toLongOrNull()),
                 attributes = listOf(attr("flags", hex(header.flags)), attr("memorySize", header.memorySize), attr("alignment", header.alignment)),
-                evidence = if (detail == "evidence") listOf("headerOffset=${header.headerRange.offset}") else emptyList(),
+                evidence = if (detail == "evidence") listOf("headerOffset=${header.headerRange.start}") else emptyList(),
             )
         } ?: warnMissing(warnings, "Could not parse ELF program headers.")
         is MachOBinaryProvider -> segments?.map {
@@ -687,7 +687,7 @@ private fun org.jetbrains.hexana.providers.BinaryProvider.segmentRecords(
                 summary = "Mach-O segment[${it.index}] `${it.name.ifBlank { "<unnamed>" }}`",
                 location = BinaryRecordLocationResult(index = it.index, fileOffset = it.fileOffset.toLongOrNull(), virtualAddress = it.virtualAddress.toLongOrNull(), size = it.fileSize.toLongOrNull()),
                 attributes = listOf(attr("virtualSize", it.virtualSize), attr("sectionCount", it.sectionCount), attr("flags", hex(it.flags))),
-                evidence = if (detail == "evidence") listOf("commandOffset=${it.commandRange.offset}") else emptyList(),
+                evidence = if (detail == "evidence") listOf("commandOffset=${it.commandRange.start}") else emptyList(),
             )
         } ?: warnMissing(warnings, "Could not parse Mach-O segments.")
         is FatMachOBinaryProvider -> architectures?.map { it.toRecord(detail) }
@@ -702,7 +702,7 @@ private fun MachOFatArch.toRecord(detail: String): BinaryRecordResult =
         summary = "Mach-O universal slice[$index] cpu=$cpuType",
         location = BinaryRecordLocationResult(index = index, fileOffset = offset.toLongOrNull(), size = size.toLongOrNull()),
         attributes = listOf(attr("cpuType", cpuType), attr("cpuSubtype", cpuSubtype), attr("alignment", alignment)),
-        evidence = if (detail == "evidence") listOf("archOffset=${archRange.offset}", "archSize=${archRange.size}") else emptyList(),
+        evidence = if (detail == "evidence") listOf("archOffset=${archRange.start}", "archSize=${archRange.length}") else emptyList(),
     )
 
 private fun org.jetbrains.hexana.providers.BinaryProvider.relocationRecords(
@@ -714,7 +714,7 @@ private fun org.jetbrains.hexana.providers.BinaryProvider.relocationRecords(
                 kind = "relocation",
                 name = relocation.symbol?.name,
                 summary = "ELF relocation[$index] offset=${hex(relocation.offset)}",
-                location = BinaryRecordLocationResult(index = index, fileOffset = relocation.recordRange.offset.toLong(), virtualAddress = relocation.offset.toLongOrNull(), size = relocation.recordRange.size.toLong()),
+                location = BinaryRecordLocationResult(index = index, fileOffset = relocation.recordRange.start, virtualAddress = relocation.offset.toLongOrNull(), size = relocation.recordRange.length),
                 attributes = listOf(
                     attr("type", relocation.type),
                     attr("relocationSectionIndex", relocation.relocationSectionIndex),
@@ -728,7 +728,7 @@ private fun org.jetbrains.hexana.providers.BinaryProvider.relocationRecords(
                 kind = "relocation",
                 name = relocation.symbol?.name,
                 summary = "Mach-O relocation[${relocation.index}] `${relocation.sectionName}` address=${hex(relocation.address)}",
-                location = BinaryRecordLocationResult(index = relocation.index, fileOffset = relocation.recordRange.offset.toLong(), virtualAddress = relocation.address.toLong(), size = relocation.recordRange.size.toLong(), section = relocation.sectionName),
+                location = BinaryRecordLocationResult(index = relocation.index, fileOffset = relocation.recordRange.start, virtualAddress = relocation.address.toLong(), size = relocation.recordRange.length, section = relocation.sectionName),
                 attributes = listOf(attr("type", relocation.type), attr("external", relocation.external), attr("pcrel", relocation.pcrel)),
             )
         } ?: warnMissing(warnings, "Could not parse Mach-O relocations.")
@@ -736,7 +736,7 @@ private fun org.jetbrains.hexana.providers.BinaryProvider.relocationRecords(
             BinaryRecordResult(
                 kind = "relocation",
                 summary = "PE base relocation block[${relocation.blockIndex}] entry[${relocation.entryIndex}] targetRva=${hex(relocation.targetRva)}",
-                location = BinaryRecordLocationResult(index = relocation.entryIndex, fileOffset = relocation.recordRange.offset.toLong(), virtualAddress = relocation.targetRva.toLong(), size = relocation.recordRange.size.toLong()),
+                location = BinaryRecordLocationResult(index = relocation.entryIndex, fileOffset = relocation.recordRange.start, virtualAddress = relocation.targetRva.toLong(), size = relocation.recordRange.length),
                 attributes = listOf(attr("blockIndex", relocation.blockIndex), attr("type", relocation.type), attr("pageRva", hex(relocation.pageRva))),
             )
         } ?: warnMissing(warnings, "Could not parse PE base relocations.")
@@ -778,13 +778,13 @@ private fun org.jetbrains.hexana.providers.BinaryProvider.archiveMemberRecords(
                     kind = "archive_member",
                     name = member.name,
                     summary = "archive member[${member.index}] `${member.name}` ${classification.displayName}",
-                    location = BinaryRecordLocationResult(index = member.index, fileOffset = member.contentRange.offset.toLong(), size = member.contentRange.size.toLong()),
+                    location = BinaryRecordLocationResult(index = member.index, fileOffset = member.contentRange.start, size = member.contentRange.length),
                     attributes = listOf(
                         attr("kind", classification.kind.name.lowercase()),
                         attr("openable", classification.openable),
                         attr("mode", member.mode),
                     ),
-                    evidence = if (detail == "evidence") listOf("headerOffset=${member.headerRange.offset}") else emptyList(),
+                    evidence = if (detail == "evidence") listOf("headerOffset=${member.headerRange.start}") else emptyList(),
                 )
             }
         }
@@ -811,10 +811,10 @@ private fun org.jetbrains.hexana.providers.BinaryProvider.debugRecords(
                         kind = "debug",
                         name = "uuid",
                         summary = "Mach-O UUID ${uuid.value}",
-                        location = BinaryRecordLocationResult(fileOffset = uuid.uuidRange.offset.toLong(), size = uuid.uuidRange.size.toLong()),
+                        location = BinaryRecordLocationResult(fileOffset = uuid.uuidRange.start, size = uuid.uuidRange.length),
                         attributes = listOf(attr("uuid", uuid.value), attr("source", "LC_UUID")),
                         evidence = if (detail == "evidence") {
-                            listOf("commandOffset=${uuid.commandRange.offset}", "uuidOffset=${uuid.uuidRange.offset}")
+                            listOf("commandOffset=${uuid.commandRange.start}", "uuidOffset=${uuid.uuidRange.start}")
                         } else {
                             emptyList()
                         },
@@ -848,7 +848,7 @@ private fun ElfSectionHeader.toDebugRecord(detail: String): BinaryRecordResult =
         summary = "ELF debug section[$index] `${name.ifBlank { "<unnamed>" }}`",
         location = BinaryRecordLocationResult(index = index, fileOffset = fileOffset.toLongOrNull(), virtualAddress = address.toLongOrNull(), size = size.toLongOrNull(), section = name),
         attributes = listOf(attr("type", hex(type)), attr("flags", hex(flags))),
-        evidence = if (detail == "evidence") listOf("headerOffset=${headerRange.offset}", "headerSize=${headerRange.size}") else emptyList(),
+        evidence = if (detail == "evidence") listOf("headerOffset=${headerRange.start}", "headerSize=${headerRange.length}") else emptyList(),
     )
 
 private fun MachOSection.toDebugRecord(detail: String): BinaryRecordResult =
@@ -858,7 +858,7 @@ private fun MachOSection.toDebugRecord(detail: String): BinaryRecordResult =
         summary = "Mach-O debug section[${index}] `${qualifiedName()}`",
         location = BinaryRecordLocationResult(index = index, fileOffset = fileOffset.toLongOrNull(), virtualAddress = address.toLongOrNull(), size = size.toLongOrNull(), section = qualifiedName()),
         attributes = listOf(attr("segment", segmentName), attr("flags", hex(flags))),
-        evidence = if (detail == "evidence") listOf("headerOffset=${headerRange.offset}", "headerSize=${headerRange.size}") else emptyList(),
+        evidence = if (detail == "evidence") listOf("headerOffset=${headerRange.start}", "headerSize=${headerRange.length}") else emptyList(),
     )
 
 private fun PeBinaryProvider.peDebugRecords(
@@ -880,7 +880,7 @@ private fun PeDebugEntry.toRecord(detail: String): BinaryRecordResult =
             append("PE debug entry[$index] type=${hex(type)}")
             codeView?.pdbPath?.let { append(" pdb=`").append(it).append('`') }
         },
-        location = BinaryRecordLocationResult(index = index, fileOffset = recordRange.offset.toLong(), virtualAddress = addressOfRawData.toLong(), size = recordRange.size.toLong()),
+        location = BinaryRecordLocationResult(index = index, fileOffset = recordRange.start, virtualAddress = addressOfRawData.toLong(), size = recordRange.length),
         attributes = buildList {
             addAttr("type", hex(type))
             addAttr("timeDateStamp", hex(timeDateStamp))
@@ -894,7 +894,7 @@ private fun PeDebugEntry.toRecord(detail: String): BinaryRecordResult =
         },
         evidence = if (detail == "evidence") {
             listOfNotNull(
-                "recordOffset=${recordRange.offset}",
+                "recordOffset=${recordRange.start}",
                 dataRange?.let { "dataOffset=${it.offset} dataSize=${it.size}" },
             )
         } else {
