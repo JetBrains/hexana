@@ -19,6 +19,9 @@ import org.jetbrains.hexana.flatbuffers.FlatBufferTable
 import org.jetbrains.hexana.flatbuffers.FlatBufferVector
 import org.jetbrains.hexana.flatbuffers.FlatBuffers
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.u32LeOrNull
+import org.jetbrains.hexana.io.readBytes
+import org.jetbrains.hexana.io.LargeBytes
 import org.jetbrains.hexana.io.crossSectionOperation
 
 // ---------------------------------------------------------------------------
@@ -459,6 +462,22 @@ fun readArrowStream(buf: CommonByteBuffer): ArrowStreamContents {
  * File format:
  *   [ARROW1 (6B)][padding (2B)][messages...][EOS][Footer FlatBuffers][footer_len i32 LE][ARROW1 (6B)]
  */
+/**
+ * [readArrowFileFooter] for a file of any size: the footer sits at the end, so an Arrow file past
+ * 2 GiB is read from its whole [LargeBytes]; the footer FlatBuffer itself is decoded from a window.
+ */
+fun readArrowFileFooter(file: LargeBytes): ArrowFooter {
+    require(file.size >= 12) { "Arrow file too small: ${file.size}" }
+    require(file.readBytes(0, 6).decodeToString() == MAGIC) { "Arrow file missing leading ARROW1 magic" }
+    require(file.readBytes(file.size - 6, 6).decodeToString() == MAGIC) { "Arrow file missing trailing ARROW1 magic" }
+    val footerLenPos = file.size - 10
+    val footerLen = file.u32LeOrNull(footerLenPos)!!.toInt()
+    val footerStart = footerLenPos - footerLen
+    require(footerStart >= 8) { "Arrow file footer start is before message area: $footerStart" }
+    require(footerLen > 0) { "Arrow file footer length is 0" }
+    return ArrowFooter(FlatBuffers.root(file.window(footerStart, footerLen)))
+}
+
 fun readArrowFileFooter(buf: CommonByteBuffer): ArrowFooter {
     require(buf.size >= 12) { "Arrow file too small: ${buf.size}" }
     // Verify leading magic

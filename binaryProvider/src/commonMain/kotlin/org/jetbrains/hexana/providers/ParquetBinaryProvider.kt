@@ -3,6 +3,10 @@ package org.jetbrains.hexana.providers
 import org.jetbrains.hexana.io.ByteProvenance
 import org.jetbrains.hexana.io.ByteProvenanceKind
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.parquet.ColumnValues
+import org.jetbrains.hexana.parquet.ColumnMetaData
+import org.jetbrains.hexana.io.asLargeBytes
+import org.jetbrains.hexana.io.LargeBytes
 import org.jetbrains.hexana.io.DecodedCell
 import org.jetbrains.hexana.parquet.FileMetaData
 import org.jetbrains.hexana.parquet.SchemaElement
@@ -22,11 +26,18 @@ fun isParquetMagic(buf: CommonByteBuffer): Boolean {
 class ParquetBinaryProvider(
     private val sharedBytes: CommonByteBuffer,
     val sourcePath: String? = null,
+    /**
+     * The whole file. Larger than [sharedBytes] for a file past 2 GiB, whose footer — and so its
+     * schema and row groups — sits at the end; the metadata and column chunks are read from this.
+     */
+    val source: LargeBytes = sharedBytes.asLargeBytes(),
 ) : BinaryProvider {
     override val bytes: CommonByteBuffer get() = sharedBytes.duplicate()
 
+    override val fileSize: Long get() = source.size
+
     val metadata: FileMetaData? by lazy {
-        try { readParquetFileMetaData(bytes) } catch (_: Throwable) { null }
+        try { readParquetFileMetaData(source) } catch (_: Throwable) { null }
     }
 
     /** Flat leaf elements only (type != null). */
@@ -47,7 +58,7 @@ class ParquetBinaryProvider(
      */
     override val structureRanges: List<StructureRange> by lazy {
         val rowGroups = metadata?.rowGroups ?: return@lazy emptyList()
-        val total = bytes.size
+        val total = source.size
         buildList {
             // Regions begin after the leading magic, which belongs to no row group.
             var lastEnd = PAR1.size.toLong()
@@ -90,6 +101,32 @@ class ParquetBinaryProvider(
         try { buildDecodedTable() } catch (_: Throwable) { null }
     }
 
+    /**
+     * Decodes one column chunk. The decoder is Int-addressed, so a chunk past the buffer's reach is
+     * handed a window over just itself, with its page offsets rebased onto the window.
+     */
+    private fun decodeChunk(chunk: ColumnMetaData, leaf: SchemaNode, rowLimit: Int): ColumnValues {
+        val start = chunk.dictionaryPageOffset ?: chunk.dataPageOffset
+        val end = start + chunk.totalCompressedSize
+        if (end <= bytes.size) return decodeColumnChunk(bytes, chunk, leaf, rowLimit)
+        if (start < 0 || chunk.totalCompressedSize !in 0..Int.MAX_VALUE.toLong() || end > source.size) {
+            return ColumnValues(chunk.pathInSchema, chunk.type, emptyList(), false, "column chunk lies outside the file or is too large to decode")
+        }
+        val rebased = chunk.copy(
+            dataPageOffset = chunk.dataPageOffset - start,
+            dictionaryPageOffset = chunk.dictionaryPageOffset?.minus(start),
+            indexPageOffset = chunk.indexPageOffset?.minus(start)?.takeIf { it >= 0 },
+        )
+        val decoded = decodeColumnChunk(source.window(start, chunk.totalCompressedSize.toInt()), rebased, leaf, rowLimit)
+        // The decoder located values within the window; move them back to where they are in the file.
+        val cells = decoded.cells.map { cell ->
+            val at = cell.provenance
+            if (at.kind == ByteProvenanceKind.NONE) cell
+            else DecodedCell(cell.value, cell.isNull, ByteProvenance(at.offset + start, at.size, at.kind))
+        }
+        return ColumnValues(decoded.leafPath, decoded.type, cells, decoded.fullyDecoded, decoded.undecodedReason)
+    }
+
     private fun buildDecodedTable(): DecodedTable? {
         val meta = metadata ?: return null
         if (meta.rowGroups.isEmpty()) return null
@@ -113,11 +150,10 @@ class ParquetBinaryProvider(
         val columnDecoded = mutableListOf<Boolean>()
         val undecodedReasons = mutableListOf<String?>()
 
-        val file = bytes
         val noneProvenance = ByteProvenance(0L, 0, ByteProvenanceKind.NONE)
         for ((leafIdx, leafNode) in leaves.withIndex()) {
             val chunkMeta = rowGroup.columns.getOrNull(leafIdx)?.metaData ?: continue
-            val result = decodeColumnChunk(file, chunkMeta, leafNode, rowLimit)
+            val result = decodeChunk(chunkMeta, leafNode, rowLimit)
             columnNames += result.leafPath.lastOrNull() ?: leafNode.element.name
             columnTypes += result.type.name
             columnDecoded += result.fullyDecoded

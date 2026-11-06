@@ -12,6 +12,8 @@ import org.jetbrains.hexana.flatbuffers.FlatBufferVector
 import org.jetbrains.hexana.io.ByteProvenance
 import org.jetbrains.hexana.io.ByteProvenanceKind
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.asLargeBytes
+import org.jetbrains.hexana.io.LargeBytes
 import org.jetbrains.hexana.io.DecodedCell
 
 private val ARROW1 = byteArrayOf(0x41, 0x52, 0x52, 0x4F, 0x57, 0x31)
@@ -35,8 +37,15 @@ class ArrowBinaryProvider(
     private val sharedBytes: CommonByteBuffer,
     val format: ArrowFormat,
     val sourcePath: String? = null,
+    /**
+     * The whole file. Larger than [sharedBytes] for an IPC file past 2 GiB, whose footer and block
+     * index sit at the end; the file format is read from this. A stream is read from its start.
+     */
+    val source: LargeBytes = sharedBytes.asLargeBytes(),
 ) : BinaryProvider {
     override val bytes: CommonByteBuffer get() = sharedBytes.duplicate()
+
+    override val fileSize: Long get() = source.size
 
     val streamContents: ArrowStreamContents? by lazy {
         if (format != ArrowFormat.STREAM) return@lazy null
@@ -45,7 +54,7 @@ class ArrowBinaryProvider(
 
     val fileFooter: ArrowFooter? by lazy {
         if (format != ArrowFormat.FILE) return@lazy null
-        try { readArrowFileFooter(bytes) } catch (_: Throwable) { null }
+        try { readArrowFileFooter(source) } catch (_: Throwable) { null }
     }
 
     val schema: ArrowSchema? get() = when (format) {
@@ -72,7 +81,7 @@ class ArrowBinaryProvider(
 
     private fun fileStructureRanges(): List<StructureRange> {
         val footer = fileFooter ?: return emptyList()
-        val total = bytes.size
+        val total = source.size
         val ranges = mutableListOf<StructureRange>()
         var lastEnd = 0L
         val blockVectors = listOf(
@@ -138,7 +147,9 @@ class ArrowBinaryProvider(
 
         val rowLimit = DEFAULT_ROW_LIMIT
         val noneProvenance = ByteProvenance(0L, 0, ByteProvenanceKind.NONE)
-        val file = bytes
+        var file = bytes
+        // File offset of [file]'s first byte: non-zero when the first batch is read through a window.
+        var base = 0L
 
         // Find the first RecordBatch message.
         val firstBatch = when (format) {
@@ -150,9 +161,16 @@ class ArrowBinaryProvider(
                 val footer = fileFooter ?: return null
                 val vec = footer.recordBatchesVector ?: return null
                 if (footer.recordBatchBlockCount == 0) return null
-                // Read the first record-batch block's encapsulated message.
-                val blockOff = footer.blockOffset(vec, 0).toInt()
-                try { readEncapsulatedMessage(file, blockOff) } catch (_: Throwable) { null }
+                // Read the first record-batch block's encapsulated message. The decoders are
+                // Int-addressed, so a block past the buffer's reach is read through a window over it.
+                val blockOff = footer.blockOffset(vec, 0)
+                val blockLength = footer.blockMetaDataLength(vec, 0).toLong() + footer.blockBodyLength(vec, 0)
+                if (blockOff + blockLength > file.size) {
+                    if (blockOff < 0 || blockLength !in 0..Int.MAX_VALUE.toLong() || blockOff + blockLength > source.size) return null
+                    file = source.window(blockOff, blockLength.toInt())
+                    base = blockOff
+                }
+                try { readEncapsulatedMessage(file, (blockOff - base).toInt()) } catch (_: Throwable) { null }
             }
         } ?: return null
 
@@ -180,7 +198,12 @@ class ArrowBinaryProvider(
             columnTypes += col.typeName
             columnDecoded += col.fullyDecoded
             undecodedReasons += col.undecodedReason
-            val cells = col.cells
+            // Values decoded from a window are located within it; move them to their file offsets.
+            val cells = if (base == 0L) col.cells else col.cells.map { cell ->
+                val at = cell.provenance
+                if (at.kind == ByteProvenanceKind.NONE) cell
+                else DecodedCell(cell.value, cell.isNull, ByteProvenance(at.offset + base, at.size, at.kind))
+            }
             columnCells += when {
                 cells.size >= cappedRows -> cells.subList(0, cappedRows)
                 col.fullyDecoded -> cells + List(cappedRows - cells.size) {

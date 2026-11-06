@@ -2,6 +2,7 @@ package org.jetbrains.hexana.providers
 
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.LargeBytes
+import org.jetbrains.hexana.io.asLargeBytes
 
 /**
  * The format a binary's bytes and name resolve to, as decided by
@@ -137,8 +138,8 @@ fun createBinaryProvider(
     val shared = bytes.duplicate().position(0)
     return when (kind) {
         BinaryProviderKind.ProtobufMessage -> ProtobufMessageBinaryProvider(shared)
-        BinaryProviderKind.Parquet -> ParquetBinaryProvider(shared, sourcePath)
-        is BinaryProviderKind.Arrow -> ArrowBinaryProvider(shared, kind.format, sourcePath)
+        BinaryProviderKind.Parquet -> ParquetBinaryProvider(shared, sourcePath, source ?: shared.asLargeBytes())
+        is BinaryProviderKind.Arrow -> ArrowBinaryProvider(shared, kind.format, sourcePath, source ?: shared.asLargeBytes())
         BinaryProviderKind.Wasm -> WasmBinaryProvider(shared)
         BinaryProviderKind.WasmComponent -> WasmComponentBinaryProvider(shared)
         BinaryProviderKind.NativeOrGeneric -> nativeOrGenericBinaryProvider(shared, sourcePath, fileSize, source)

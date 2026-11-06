@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.pdb
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.LargeBytes
+import org.jetbrains.hexana.io.asLargeBytes
 import org.jetbrains.hexana.parsing.common.NativeByteRange
 import org.jetbrains.hexana.parsing.common.NativeParserDiagnostic
 import org.jetbrains.hexana.parsing.common.NativeParserSeverity
@@ -15,18 +17,23 @@ import org.jetbrains.hexana.parsing.common.NativeParserSeverity
  */
 object PdbParser {
     /** True for an MSF 7.00 file, i.e. any PDB written by a toolchain of the last two decades. */
-    fun isPdb(bytes: CommonByteBuffer): Boolean = bytes.startsWith(MSF7_MAGIC)
+    fun isPdb(bytes: CommonByteBuffer): Boolean = isPdb(bytes.asLargeBytes())
+
+    fun isPdb(bytes: LargeBytes): Boolean = bytes.startsWith(MSF7_MAGIC)
 
     /** True for the pre-2002 MSF 2.00 format, which [parse] recognizes but does not decode. */
-    fun isLegacyPdb(bytes: CommonByteBuffer): Boolean = bytes.startsWith(MSF2_MAGIC)
+    fun isLegacyPdb(bytes: CommonByteBuffer): Boolean = bytes.asLargeBytes().startsWith(MSF2_MAGIC)
 
     /** Returns null when [bytes] is not MSF 7.00 or its superblock is unusable. */
-    fun parse(bytes: CommonByteBuffer): PdbFile? {
+    fun parse(bytes: CommonByteBuffer): PdbFile? = parse(bytes.asLargeBytes())
+
+    /** [parse] for a PDB of any size: its blocks are read wherever they are in the file. */
+    fun parse(bytes: LargeBytes): PdbFile? {
         if (!isPdb(bytes)) return null
         return Decoder(bytes).decode()
     }
 
-    private class Decoder(private val bytes: CommonByteBuffer) {
+    private class Decoder(private val bytes: LargeBytes) {
         private val diagnostics = mutableListOf<NativeParserDiagnostic>()
 
         private fun warn(code: String, message: String, range: NativeByteRange? = null) {
@@ -89,8 +96,8 @@ object PdbParser {
                 warn("pdb.invalid_directory", "The MSF stream directory is missing or malformed.", superBlock.range)
                 return null to emptyList()
             }
-            val blockMapRange = NativeByteRange(blockMapOffset.toInt(), directoryBlockCount * 4)
-            val directoryBlocks = IntArray(directoryBlockCount) { index -> bytes.u32(blockMapRange.offset + index * 4)!!.toInt() }
+            val blockMapRange = NativeByteRange(blockMapOffset, directoryBlockCount * 4L)
+            val directoryBlocks = IntArray(directoryBlockCount) { index -> bytes.u32(blockMapRange.start + index * 4)!!.toInt() }
             val directory = MsfStream(-1, directorySize.toInt(), false, directoryBlocks, blockSize, bytes)
             if (!directory.isFullyReadable()) {
                 warn("pdb.invalid_directory", "The MSF stream directory refers to blocks past the end of the file.", blockMapRange)
@@ -389,10 +396,12 @@ private fun streamIndex(raw: Int): Int? = raw.takeIf { it != NIL_STREAM_INDEX }
 
 private fun align4(value: Int): Int = (value + 3) and 3.inv()
 
-private fun CommonByteBuffer.startsWith(magic: ByteArray): Boolean =
-    size >= magic.size && magic.indices.all { this[it] == magic[it] }
+private fun LargeBytes.startsWith(magic: ByteArray): Boolean =
+    size >= magic.size && magic.indices.all { this[it.toLong()] == magic[it] }
 
-private fun CommonByteBuffer.u32(offset: Int): UInt? {
+private fun LargeBytes.u32(offset: Int): UInt? = u32(offset.toLong())
+
+private fun LargeBytes.u32(offset: Long): UInt? {
     if (offset < 0 || offset > size - 4) return null
     return (this[offset].toUInt() and 0xFFu) or
         ((this[offset + 1].toUInt() and 0xFFu) shl 8) or

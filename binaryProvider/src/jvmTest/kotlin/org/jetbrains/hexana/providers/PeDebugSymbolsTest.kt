@@ -51,7 +51,7 @@ class PeDebugSymbolsTest {
         // A rebuilt PDB keeps the GUID of an incremental link but bumps the DBI age (stream 3, offset 8).
         val pdb = assertIs<PdbBinaryProvider>(provider("sample.pdb"))
         val dbiAgeOffset = assertNotNull(pdb.parsedPdb?.stream(3)?.fileOffset(8))
-        val rebuilt = bytes("sample.pdb").also { it[dbiAgeOffset] = 2 }
+        val rebuilt = bytes("sample.pdb").also { it[dbiAgeOffset.toInt()] = 2 }
         assertEquals(PdbMatch.AgeMismatch, exe.attachDebugSymbols(assertIs<PdbBinaryProvider>(provider("sample.pdb", rebuilt)), null))
         assertNull(exe.debugSymbols)
 

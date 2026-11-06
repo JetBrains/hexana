@@ -1043,7 +1043,7 @@ fun nativeOrGenericBinaryProvider(
         GgufBinaryProvider.isGgufFile(sharedBytes) -> GgufBinaryProvider(sharedBytes.duplicate().position(0), totalSize)
         SafetensorsBinaryProvider.isSafetensorsFile(sharedBytes, totalSize) ->
             SafetensorsBinaryProvider(sharedBytes.duplicate().position(0), totalSize)
-        PdbBinaryProvider.isPdbFile(sharedBytes) -> PdbBinaryProvider(sharedBytes.duplicate().position(0))
+        PdbBinaryProvider.isPdbFile(sharedBytes) -> PdbBinaryProvider(sharedBytes.duplicate().position(0), source ?: sharedBytes.asLargeBytes())
         PortablePdbBinaryProvider.isPortablePdbFile(sharedBytes) -> PortablePdbBinaryProvider(sharedBytes.duplicate().position(0))
         PcapBinaryProvider.isPcapFile(sharedBytes) ->
             PcapBinaryProvider(sharedBytes.duplicate().position(0), sourcePath)

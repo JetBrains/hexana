@@ -116,7 +116,7 @@ class ArrowTableTabsProvider : TableTabsProvider {
             },
             rowCount = table.rowCount,
             rowSelectionProvider = { row ->
-                table.rowRanges(row).firstOrNull()?.let { RowSelectionData(it.offset.toInt(), it.size) }
+                table.rowRanges(row).firstOrNull()?.let { RowSelectionData(it.offset, it.size.toLong()) }
             },
             rowHighlightRangesProvider = { row ->
                 table.rowRanges(row).map { HexRange(it.offset, it.size) }

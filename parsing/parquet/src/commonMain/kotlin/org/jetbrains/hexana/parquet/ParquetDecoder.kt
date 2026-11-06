@@ -7,6 +7,9 @@
 package org.jetbrains.hexana.parquet
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.u32LeOrNull
+import org.jetbrains.hexana.io.asLargeBytes
+import org.jetbrains.hexana.io.LargeBytes
 import org.jetbrains.hexana.io.crossSectionOperation
 import org.jetbrains.hexana.thrift.ThriftCompactReader
 import org.jetbrains.hexana.thrift.ThriftField
@@ -32,6 +35,7 @@ private val PAR1_MAGIC = byteArrayOf(0x50, 0x41, 0x52, 0x31)  // "PAR1"
  *   - First 4 bytes: "PAR1" magic (verified).
  */
 fun readParquetFileMetaData(buf: CommonByteBuffer): FileMetaData {
+    if (buf.size >= 12) return readParquetFileMetaData(buf.asLargeBytes())
     val size = buf.size
     require(size >= 12) { "Parquet file too small: $size bytes" }
 
@@ -60,6 +64,25 @@ fun readParquetFileMetaData(buf: CommonByteBuffer): FileMetaData {
     val footerSlice = buf.slice(footerStart, footerLen)
     val reader = ThriftCompactReader(footerSlice)
     return decodeFileMetaData(reader)
+}
+
+/**
+ * [readParquetFileMetaData] for a file of any size. The footer sits at the end of the file, so a
+ * Parquet file past 2 GiB is read from its whole [LargeBytes]; the Thrift footer itself is decoded
+ * from a window, as it is far smaller than 2 GiB.
+ */
+fun readParquetFileMetaData(file: LargeBytes): FileMetaData {
+    val size = file.size
+    require(size >= 12) { "Parquet file too small: $size bytes" }
+    for (i in 0 until 4) {
+        require(file[i.toLong()] == PAR1_MAGIC[i]) { "Parquet file missing leading PAR1 magic at byte $i" }
+        require(file[size - 4 + i] == PAR1_MAGIC[i]) { "Parquet file missing trailing PAR1 magic at byte ${size - 4 + i}" }
+    }
+    val footerLen = file.u32LeOrNull(size - 8)!!.toInt()
+    require(footerLen > 0) { "Parquet footer length is 0" }
+    val footerStart = size - 8 - footerLen
+    require(footerStart >= 4) { "Parquet footer extends past the leading magic: footerStart=$footerStart" }
+    return decodeFileMetaData(ThriftCompactReader(file.window(footerStart, footerLen)))
 }
 
 // ---------------------------------------------------------------------------

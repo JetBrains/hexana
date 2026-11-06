@@ -36,7 +36,7 @@ class PdbTableTabsProvider : TableTabsProvider {
     override fun singleTab(name: String, provider: BinaryProvider, context: TableTabsContext): TableTabDescriptor? = when (provider) {
         is PdbBinaryProvider -> provider.parsedPdb?.let { pdb ->
             when (name) {
-                PDB_SUMMARY_TAB -> pdbSummaryTab(pdb, provider.bytes.size)
+                PDB_SUMMARY_TAB -> pdbSummaryTab(pdb, provider.fileSize)
                 PDB_STREAMS_TAB -> pdbStreamsTab(pdb)
                 MODULES_TAB -> pdb.dbi?.let(::pdbModulesTab)
                 SOURCE_FILES_TAB -> pdb.dbi?.let(::pdbSourceFilesTab)
@@ -71,7 +71,7 @@ private fun emptyTab(name: String, message: String) =
 
 // region Windows PDB
 
-private fun pdbSummaryTab(pdb: PdbFile, fileSize: Int): TableTabDescriptor {
+private fun pdbSummaryTab(pdb: PdbFile, fileSize: Long): TableTabDescriptor {
     val superBlock = pdb.superBlock.range
     val infoRange = pdb.stream(1)?.fileRange(0, pdb.stream(1)!!.size)
     val dbiRange = pdb.stream(3)?.fileRange(0, 64)

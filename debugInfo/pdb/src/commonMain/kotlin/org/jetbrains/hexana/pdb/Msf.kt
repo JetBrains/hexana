@@ -1,6 +1,6 @@
 package org.jetbrains.hexana.pdb
 
-import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.LargeBytes
 import org.jetbrains.hexana.parsing.common.NativeByteRange
 
 /**
@@ -19,6 +19,9 @@ data class MsfSuperBlock(
 /**
  * One logical MSF stream. Reads are bounds-checked against [size] and return null past it;
  * a stream whose block list points outside the file reads as null from that block on.
+ *
+ * Streams are Int-sized (the directory stores u32 sizes), but their blocks can lie anywhere in a
+ * PDB past 2 GiB — large-page PDBs reach tens of gigabytes — so file offsets are [Long].
  */
 class MsfStream internal constructor(
     val index: Int,
@@ -28,23 +31,23 @@ class MsfStream internal constructor(
     /** Block numbers in stream order. */
     val blocks: IntArray,
     private val blockSize: Int,
-    private val bytes: CommonByteBuffer,
+    private val bytes: LargeBytes,
 ) {
     /** True when every block of the stream lies inside the file, so in-range reads never fail. */
     fun isFullyReadable(): Boolean {
         for (index in blocks.indices) {
             val length = if (index == blocks.lastIndex) size - index * blockSize else blockSize
-            if (blocks[index] < 0 || blocks[index].toLong() * blockSize + length > bytes.size) return false
+            if (blocks[index].toUInt().toLong() * blockSize + length > bytes.size) return false
         }
         return true
     }
 
     /** File offset of stream byte [position], or null past the stream or the file. */
-    fun fileOffset(position: Int): Int? {
+    fun fileOffset(position: Int): Long? {
         if (position !in 0 until size) return null
         val block = blocks.getOrNull(position / blockSize) ?: return null
-        val offset = block.toLong() * blockSize + position % blockSize
-        return if (offset in 0 until bytes.size) offset.toInt() else null
+        val offset = block.toUInt().toLong() * blockSize + position % blockSize
+        return if (offset in 0 until bytes.size) offset else null
     }
 
     fun u8(position: Int): Int? = fileOffset(position)?.let { bytes[it].toInt() and 0xFF }
@@ -115,7 +118,7 @@ class MsfStream internal constructor(
             if (next != start + contiguous) break
             contiguous += minOf(blockSize, wanted - contiguous)
         }
-        return NativeByteRange(start, contiguous.coerceAtMost(bytes.size - start))
+        return NativeByteRange(start, contiguous.toLong().coerceAtMost(bytes.size - start))
     }
 
     /** File ranges of every block of the stream, adjacent blocks merged. */
@@ -124,19 +127,19 @@ class MsfStream internal constructor(
         var runEnd = -1L
         var remaining = this@MsfStream.size.toLong()
         for (block in blocks) {
-            val start = block.toLong() * blockSize
+            val start = block.toUInt().toLong() * blockSize
             val length = minOf(blockSize.toLong(), remaining)
             remaining -= length
             if (start + length > bytes.size) continue
             if (start == runEnd) {
                 runEnd += length
             } else {
-                if (runStart >= 0) add(NativeByteRange(runStart.toInt(), (runEnd - runStart).toInt()))
+                if (runStart >= 0) add(NativeByteRange(runStart, runEnd - runStart))
                 runStart = start
                 runEnd = start + length
             }
         }
-        if (runStart >= 0) add(NativeByteRange(runStart.toInt(), (runEnd - runStart).toInt()))
+        if (runStart >= 0) add(NativeByteRange(runStart, runEnd - runStart))
     }
 }
 

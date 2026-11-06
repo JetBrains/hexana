@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.providers
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.LargeBytes
+import org.jetbrains.hexana.io.asLargeBytes
 import org.jetbrains.hexana.pdb.PdbFile
 import org.jetbrains.hexana.pdb.PdbParser
 import org.jetbrains.hexana.providers.pe.clr.ClrMetadata
@@ -23,25 +25,31 @@ sealed class PdbSymbolsBinaryProvider(sharedBytes: CommonByteBuffer) : GenericBi
 }
 
 /** Windows PDB (MSF 7.00). */
-class PdbBinaryProvider(sharedBytes: CommonByteBuffer) : PdbSymbolsBinaryProvider(sharedBytes) {
+class PdbBinaryProvider(
+    sharedBytes: CommonByteBuffer,
+    /** The whole file; larger than [sharedBytes] for a PDB past 2 GiB, whose blocks are read from this. */
+    val source: LargeBytes = sharedBytes.asLargeBytes(),
+) : PdbSymbolsBinaryProvider(sharedBytes) {
+
+    override val fileSize: Long get() = source.size
 
     /** The decoded PDB, or null when the MSF superblock is unusable. */
-    val parsedPdb: PdbFile? by lazy { PdbParser.parse(bytes) }
+    val parsedPdb: PdbFile? by lazy { PdbParser.parse(source) }
 
     override val pdbGuid: String? get() = parsedPdb?.identity?.guid
 
     override val structureRanges: List<StructureRange> by lazy {
         val pdb = parsedPdb ?: return@lazy emptyList()
-        val total = bytes.size
+        val total = source.size
         buildList {
-            structureRangeOrNull(0, pdb.superBlock.range.size.toLong(), "MSF superblock", total, tabName = PDB_SUMMARY_TAB)?.let(::add)
-            pdb.blockMapRange?.let { structureRangeOrNull(it.offset.toLong(), it.size.toLong(), "Stream directory block map", total, tabName = PDB_STREAMS_TAB) }?.let(::add)
+            structureRangeOrNull(0, pdb.superBlock.range.length, "MSF superblock", total, tabName = PDB_SUMMARY_TAB)?.let(::add)
+            pdb.blockMapRange?.let { structureRangeOrNull(it.start, it.length, "Stream directory block map", total, tabName = PDB_STREAMS_TAB) }?.let(::add)
             // Streams are scattered over blocks; a large PDB has far too many runs to list them all.
             for (stream in pdb.streams) {
                 if (size >= MAX_STRUCTURE_RANGES) break
                 val label = pdb.streamRoles[stream.index]?.let { "Stream ${stream.index}: $it" } ?: "Stream ${stream.index}"
                 for (range in stream.blockRanges()) {
-                    structureRangeOrNull(range.offset.toLong(), range.size.toLong(), label, total, tabName = PDB_STREAMS_TAB)?.let(::add)
+                    structureRangeOrNull(range.start, range.length, label, total, tabName = PDB_STREAMS_TAB)?.let(::add)
                 }
             }
         }

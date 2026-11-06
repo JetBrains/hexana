@@ -140,12 +140,12 @@ fun createBinaryProvider(
             BinaryParser.DOTNET_RESOURCES -> ClrResourcesBinaryProvider(shared)
             BinaryParser.GGUF -> GgufBinaryProvider(shared, totalSize)
             BinaryParser.SAFETENSORS -> SafetensorsBinaryProvider(shared, totalSize)
-            BinaryParser.PDB -> PdbBinaryProvider(shared)
+            BinaryParser.PDB -> PdbBinaryProvider(shared, source ?: shared.asLargeBytes())
             BinaryParser.PORTABLE_PDB -> PortablePdbBinaryProvider(shared)
             BinaryParser.PCAP -> PcapBinaryProvider(shared, sourcePath)
             BinaryParser.PROTOBUF_DESCRIPTOR_SET -> ProtobufBinaryProvider(shared)
             BinaryParser.PROTOBUF_MESSAGE -> ProtobufMessageBinaryProvider(shared)
-            BinaryParser.PARQUET -> ParquetBinaryProvider(shared, sourcePath)
+            BinaryParser.PARQUET -> ParquetBinaryProvider(shared, sourcePath, source ?: shared.asLargeBytes())
             // Same rule the automatic path applies once a name has said Arrow: the
             // stream marker is only believed when something else already narrowed the
             // format down, and here the user has.
@@ -153,6 +153,7 @@ fun createBinaryProvider(
                 shared,
                 if (isArrowStreamMagic(shared.duplicate().position(0))) ArrowFormat.STREAM else ArrowFormat.FILE,
                 sourcePath,
+                source ?: shared.asLargeBytes(),
             )
         }
     } catch (_: Exception) {
