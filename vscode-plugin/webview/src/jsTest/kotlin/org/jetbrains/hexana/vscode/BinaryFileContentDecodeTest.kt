@@ -35,6 +35,30 @@ class BinaryFileContentDecodeTest {
         )
     }
 
+    /** A large file's payload is viewed in place: copying it byte by byte doubled its memory. */
+    @Test
+    fun viewsATypedArrayPayloadWithoutCopying() {
+        val buffer = Uint8Array(8)
+        val window = Uint8Array(buffer.buffer, 2, 4)
+        window.asDynamic()[0] = 0x47
+        val bytes = messageBytesOrNull(window)!!
+        assertEquals(4, bytes.size)
+        assertEquals(0x47, bytes[0].toInt())
+        buffer.asDynamic()[3] = 0x55
+        assertEquals(0x55, bytes[1].toInt(), "a view of the posted bytes, not a copy")
+    }
+
+    @Test
+    fun loadMessageCarriesThePartialFileSize() {
+        val partial = jsObject()
+        partial.data = bytesPayload(1, 2)
+        partial.fileSize = 3.0 * 1024 * 1024 * 1024
+        assertEquals(3L * 1024 * 1024 * 1024, decodeVscodeMessage("load-wasm", partial).fileSize)
+        val whole = jsObject()
+        whole.data = bytesPayload(1, 2)
+        assertNull(decodeVscodeMessage("load-wasm", whole).fileSize)
+    }
+
     @Test
     fun decodesAPlainArrayPayload() {
         assertContentEquals(byteArrayOf(1, 2, 3), messageBytesOrNull(js("[1, 2, 3]")))

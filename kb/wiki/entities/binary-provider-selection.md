@@ -147,3 +147,9 @@ gates that independently:
 
 These VS Code lists and the IntelliJ ones have to be extended together with the factory —
 teaching the factory a format it can never be handed changes nothing.
+
+## Partial views (2026-11-06)
+
+Every `createBinaryProvider` overload and `nativeOrGenericBinaryProvider` take `fileSize: Long?`: the
+size on disk when the bytes are only the head of a file over the load limit. Only the model providers
+use it; hosts track whether a view is partial. See [[entities/partial-views]].

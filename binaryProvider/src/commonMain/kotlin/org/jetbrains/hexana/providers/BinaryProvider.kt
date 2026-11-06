@@ -125,6 +125,14 @@ sealed interface BinaryProvider {
      * structure to expose.
      */
     val structureRanges: List<StructureRange> get() = emptyList()
+
+    /**
+     * Size of the whole file the provider describes. Larger than [bytes] when the host could
+     * load only the head of the file (see [MAX_BINARY_WINDOW_BYTES]); only providers whose
+     * format is fully described by its head (GGUF, safetensors) are told the real size and
+     * use it to place structures beyond the loaded bytes. Everything else describes [bytes].
+     */
+    val fileSize: Long get() = bytes.size.toLong()
 }
 
 /**
@@ -941,10 +949,17 @@ fun classifyArchiveMember(
     }
 }
 
+/**
+ * Resolves what magic bytes alone can identify. [fileSize] is the size of the whole file when
+ * [sharedBytes] is only its head (a file too large to load); the model providers, whose
+ * structure all sits in the head, use it to place tensors past the loaded bytes.
+ */
 fun nativeOrGenericBinaryProvider(
     sharedBytes: CommonByteBuffer,
     sourcePath: String? = null,
+    fileSize: Long? = null,
 ): BinaryProvider {
+    val totalSize = fileSize ?: sharedBytes.size.toLong()
     return when {
         ZipBinaryProvider.isZip(sharedBytes) -> ZipBinaryProvider(sharedBytes)
         TarBinaryProvider.isTar(sharedBytes) -> TarBinaryProvider(sharedBytes)
@@ -952,8 +967,9 @@ fun nativeOrGenericBinaryProvider(
         DexBinaryProvider.isDexFile(sharedBytes) -> DexBinaryProvider(sharedBytes.duplicate().position(0))
         ArscBinaryProvider.isArscFile(sharedBytes) -> ArscBinaryProvider(sharedBytes.duplicate().position(0))
         ClrResourcesBinaryProvider.isResourcesFile(sharedBytes) -> ClrResourcesBinaryProvider(sharedBytes.duplicate().position(0))
-        GgufBinaryProvider.isGgufFile(sharedBytes) -> GgufBinaryProvider(sharedBytes.duplicate().position(0))
-        SafetensorsBinaryProvider.isSafetensorsFile(sharedBytes) -> SafetensorsBinaryProvider(sharedBytes.duplicate().position(0))
+        GgufBinaryProvider.isGgufFile(sharedBytes) -> GgufBinaryProvider(sharedBytes.duplicate().position(0), totalSize)
+        SafetensorsBinaryProvider.isSafetensorsFile(sharedBytes, totalSize) ->
+            SafetensorsBinaryProvider(sharedBytes.duplicate().position(0), totalSize)
         PdbBinaryProvider.isPdbFile(sharedBytes) -> PdbBinaryProvider(sharedBytes.duplicate().position(0))
         PortablePdbBinaryProvider.isPortablePdbFile(sharedBytes) -> PortablePdbBinaryProvider(sharedBytes.duplicate().position(0))
         PcapBinaryProvider.isPcapFile(sharedBytes) ->

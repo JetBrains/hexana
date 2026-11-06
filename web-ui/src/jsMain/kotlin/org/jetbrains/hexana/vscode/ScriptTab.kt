@@ -187,6 +187,8 @@ private fun wrapBinaryProvider(obj: dynamic, p: BinaryProvider) {
     defineLazyProp(obj, "bytes") { p.bytes }
     defineLazyProp(obj, "sizeAnalysis") { p.sizeAnalysis }
     defineLazyProp(obj, "strings") { p.strings }
+    // A JS number, not a Kotlin Long, which scripts could not do arithmetic with.
+    defineLazyProp(obj, "fileSize") { p.fileSize.toDouble() }
 }
 
 private fun wrapGenericBinaryProvider(obj: dynamic, p: GenericBinaryProvider) {

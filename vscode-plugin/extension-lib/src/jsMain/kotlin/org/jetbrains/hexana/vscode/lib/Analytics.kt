@@ -87,14 +87,21 @@ fun initAnalytics(
  * does not run the deeper native introspection the IDE does.
  */
 @JsExport
-fun captureBinaryOpened(fileName: String, bytes: ByteArray) {
+fun captureBinaryOpened(fileName: String, bytes: ByteArray) = captureBinaryOpenedOfSize(fileName, bytes, bytes.size.toDouble())
+
+/**
+ * [captureBinaryOpened] for a file the host loaded only the head of: [bytes] is that head and
+ * [fileSize] the size on disk, which is what `file_size_bytes` reports.
+ */
+@JsExport
+fun captureBinaryOpenedOfSize(fileName: String, bytes: ByteArray, fileSize: Double) {
     val format = resolveBinaryFormat(fileName, bytes)
     val isGeneric = format == HexanaEvent.BinaryFormat.GENERIC
     val genericHeader = if (isGeneric && bytes.size >= 8) HexanaEvent.GenericHeader.of(bytes) else null
     HexanaAnalytics.client.capture(
         HexanaEvent.BinaryOpened(
             format = format,
-            fileSizeBytes = bytes.size.toLong(),
+            fileSizeBytes = fileSize.safeToLong(),
             surface = HexanaEvent.Surface.VSCODE_EXTENSION,
             genericExt = if (isGeneric) HexanaEvent.GenericExt.fromExtension(extensionOf(fileName)) else null,
             detectedFormat = if (isGeneric) HexanaEvent.DetectedFormat.fromMagic(bytes) else null,

@@ -116,6 +116,11 @@ internal fun BinaryEditorView(
      * `binary.path`.
      */
     filePath: String? = null,
+    /**
+     * Size of the file on disk when only its head is loaded (a file over
+     * `MAX_BINARY_WINDOW_BYTES`), else `null`. Such a view is read-only.
+     */
+    partialFileSize: Long? = null,
     /** Turns the format badge into a parser picker; see [ParserChoice]. */
     parserChoice: ParserChoice? = null,
     /** Tabs `hexana.defineTab` attached to this file, shown after the built-in ones. */
@@ -172,6 +177,9 @@ internal fun BinaryEditorView(
         }
         editableBinaryDocumentOf(bytes = binaryProvider.bytes.duplicate(), persister = persister)
     }
+    // What edits go through: nothing, for the head of a file too large to load. Overwriting
+    // the file with the edited head would cut it off at the window's end.
+    val hexEditDoc: EditableBinaryDocument? = editableDoc.takeIf { partialFileSize == null }
     // Sidecar restore runs off-EDT. While `loadSidecarIfPresent` is in
     // flight the editor renders a centred spinner so the user never sees
     // the original bytes briefly before they're replaced by the restored
@@ -187,7 +195,8 @@ internal fun BinaryEditorView(
     LaunchedEffect(sidecarRestored) { if (sidecarRestored) restoredOnce = true }
     LaunchedEffect(binaryProvider, editableDoc) {
         val sourceFile = (binaryProvider as? BinaryVirtualFileProvider)?.file
-        if (sourceFile == null) {
+        // A partial view never edits, so there is no journal to restore into it.
+        if (sourceFile == null || partialFileSize != null) {
             sidecarRestored = true
             return@LaunchedEffect
         }
@@ -474,7 +483,7 @@ internal fun BinaryEditorView(
                 val hardcoded = binaryProvider.resolveHardcodedPanels(
                     state = state,
                     pathsNav = pathsNav,
-                    editableDoc = editableDoc,
+                    editableDoc = hexEditDoc,
                     watVirtualizedListState = watVirtualizedListState,
                     watVirtualizedFolded = watVirtualizedFolded,
                     liveProviderProvider = { liveProvider },
@@ -753,8 +762,9 @@ internal fun BinaryEditorView(
                             }
                         }
                     } else null,
-                    editableDoc = editableDoc,
+                    editableDoc = hexEditDoc,
                     originalBinaryProvider = binaryProvider,
+                    fileSize = partialFileSize,
                     overwriteShadowRanges = overwriteShadowRanges,
                     onOverwriteShadowRangesChanged = { overwriteShadowRanges = it },
                     onReparseAfterOverwrite = {
@@ -788,7 +798,7 @@ internal fun BinaryEditorView(
                             binaryProvider = liveProvider,
                             state = state,
                             focusRequester = hexFocusRequester,
-                            editableDoc = editableDoc,
+                            editableDoc = hexEditDoc,
                             onHexCommit = { hexEditedSinceOpen = true },
                             suppressEditHighlight = overwriteShadowRanges != null,
                             onSectionLabelClick = { tabName ->

@@ -57,13 +57,12 @@ Ids: `BinaryParser` `gguf` / `safetensors`; `binary.format` `gguf` / `safetensor
 - Shapes are shown as stored: GGUF in ggml order (innermost first — `64 × 5` for a 5×64 matrix),
   safetensors row-major.
 
-## Large files (not done)
+## Large files
 
-Hexana cannot open files over 2 GB on any surface (`CommonByteBuffer.size: Int`, whole-file mmap in
-IntelliJ, whole-file read in VS Code), and most GGUF models are larger. Both parsers already take a
-`fileSize: Long` separate from the buffer and only read the head, so a follow-up "header-only" mode
-can map the first N MB of a large file and pass the real size; tensor `dataRange`s then point past
-the buffer and the tabs' `toSelection()` returns `null` for them. Decision 2026-11-05: ship ≤2 GB first.
+Files over the load limit open as a partial view — see [[entities/partial-views]]. The parsers take
+`fileSize` separately from the buffer and read only the head, so a GGUF/safetensors model of any size
+still lists every tensor with its true offset; selections fall back to the info record / JSON header
+for data past the loaded bytes, and the size tree is omitted.
 
 ## Not done yet
 

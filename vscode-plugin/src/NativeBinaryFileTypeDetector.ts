@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { readPrefix } from "./largeFiles";
 
 /**
  * Magic-byte detector that identifies extensionless (or ambiguously-named) binary
@@ -315,10 +316,9 @@ export function registerNativeBinaryDetector(
 
                 // Read a small prefix to check magic bytes.
                 try {
-                    const fileBytes = await vscode.workspace.fs.readFile(uri);
-                    const prefixLen = Math.min(fileBytes.length, DESIRED_PREFIX_LENGTH);
-                    if (prefixLen < 4) continue;
-                    const prefix = fileBytes.subarray(0, prefixLen);
+                    // A prefix, not the file: reading a multi-gigabyte file whole fails outright.
+                    const prefix = await readPrefix(uri, DESIRED_PREFIX_LENGTH);
+                    if (prefix.length < 4) continue;
 
                     if (isNativeBinary(prefix)) {
                         reopenedUris.add(key);

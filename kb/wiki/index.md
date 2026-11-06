@@ -24,6 +24,8 @@ consult-first / write-back rules.
   `BinaryParser` ids, the format-badge picker in both editors, settings pages, live reload.
 - [[entities/binary-opened-format-analytics]] — how `binary_opened.format` is derived, the
   `generic_ext` / `detected_format` / `generic_header` breakdown, and supported formats misreported as `generic`.
+- [[entities/partial-views]] — files over the load limit (2 GiB in IntelliJ, `hexana.maxLoadedFileSizeMB`
+  in VS Code) open as a read-only head: `fileSize` through the factory, why editing is off, host details.
 - [[entities/ml-model-formats]] — GGUF and safetensors: `parsing/mlmodel` parsers, content detection
   and host routing, reference-writer fixtures, why `GgufValue` is flat, and the >2 GB limitation.
 

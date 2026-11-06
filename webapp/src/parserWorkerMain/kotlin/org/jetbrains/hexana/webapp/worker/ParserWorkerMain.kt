@@ -306,6 +306,7 @@ private fun scriptValue(value: Any?): dynamic {
             defineScriptValue(objectValue, "bytes") { value.bytes }
             defineScriptValue(objectValue, "sizeAnalysis") { value.sizeAnalysis }
             defineScriptValue(objectValue, "strings") { value.strings }
+            defineScriptValue(objectValue, "fileSize") { value.fileSize.toDouble() }
         }
     }
     if (value is WasmBinaryProvider) {

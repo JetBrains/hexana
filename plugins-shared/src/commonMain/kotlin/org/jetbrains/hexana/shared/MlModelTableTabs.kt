@@ -26,7 +26,8 @@ class GgufTableTabsProvider : TableTabsProvider {
     override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> {
         if (provider !is GgufBinaryProvider) return emptyList()
         val file = provider.parsedGguf ?: return emptyList()
-        return listOf(ggufHeaderTab(file), ggufMetadataTab(file), ggufTensorsTab(file))
+        val loaded = provider.bytes.size
+        return listOf(ggufHeaderTab(file, loaded), ggufMetadataTab(file, loaded), ggufTensorsTab(file, loaded))
     }
 
     override fun availableTabNames(provider: BinaryProvider, context: TableTabsContext): Pair<List<String>, List<String>>? =
@@ -36,9 +37,9 @@ class GgufTableTabsProvider : TableTabsProvider {
         if (provider !is GgufBinaryProvider) return null
         val file = provider.parsedGguf ?: return null
         return when (name) {
-            GGUF_HEADER_TAB -> ggufHeaderTab(file)
-            GGUF_METADATA_TAB -> ggufMetadataTab(file)
-            MODEL_TENSORS_TAB -> ggufTensorsTab(file)
+            GGUF_HEADER_TAB -> ggufHeaderTab(file, provider.bytes.size)
+            GGUF_METADATA_TAB -> ggufMetadataTab(file, provider.bytes.size)
+            MODEL_TENSORS_TAB -> ggufTensorsTab(file, provider.bytes.size)
             else -> null
         }
     }
@@ -50,7 +51,8 @@ class SafetensorsTableTabsProvider : TableTabsProvider {
     override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> {
         if (provider !is SafetensorsBinaryProvider) return emptyList()
         val file = provider.parsedSafetensors ?: return emptyList()
-        return listOf(safetensorsHeaderTab(file), safetensorsTensorsTab(file))
+        val loaded = provider.bytes.size
+        return listOf(safetensorsHeaderTab(file, loaded), safetensorsTensorsTab(file, loaded))
     }
 
     override fun availableTabNames(provider: BinaryProvider, context: TableTabsContext): Pair<List<String>, List<String>>? =
@@ -60,8 +62,8 @@ class SafetensorsTableTabsProvider : TableTabsProvider {
         if (provider !is SafetensorsBinaryProvider) return null
         val file = provider.parsedSafetensors ?: return null
         return when (name) {
-            SAFETENSORS_HEADER_TAB -> safetensorsHeaderTab(file)
-            MODEL_TENSORS_TAB -> safetensorsTensorsTab(file)
+            SAFETENSORS_HEADER_TAB -> safetensorsHeaderTab(file, provider.bytes.size)
+            MODEL_TENSORS_TAB -> safetensorsTensorsTab(file, provider.bytes.size)
             else -> null
         }
     }
@@ -69,36 +71,37 @@ class SafetensorsTableTabsProvider : TableTabsProvider {
 
 // --- GGUF ---
 
-private fun ggufHeaderTab(file: GgufFile): TableTabDescriptor {
-    val header = file.headerRange.toNative()
+private fun ggufHeaderTab(file: GgufFile, loaded: Int): TableTabDescriptor {
+    val header = file.headerRange.toNative(loaded)
     val rows = buildList {
         add(HeaderRow("Format", "GGUF v${file.version}", header))
         add(HeaderRow("Byte Order", if (file.bigEndian) "big-endian" else "little-endian", header))
-        file.architecture?.let { add(HeaderRow("Architecture", it, file.entryRange("general.architecture"))) }
-        file.name?.let { add(HeaderRow("Name", it, file.entryRange("general.name"))) }
+        file.architecture?.let { add(HeaderRow("Architecture", it, file.entryRange("general.architecture", loaded))) }
+        file.name?.let { add(HeaderRow("Name", it, file.entryRange("general.name", loaded))) }
         file.metadataInteger("general.file_type")?.let { type ->
-            add(HeaderRow("File Type", file.fileTypeLabel?.let { "$it ($type)" } ?: type.toString(), file.entryRange("general.file_type")))
+            add(HeaderRow("File Type", file.fileTypeLabel?.let { "$it ($type)" } ?: type.toString(), file.entryRange("general.file_type", loaded)))
         }
         file.metadataInteger("general.quantization_version")?.let {
-            add(HeaderRow("Quantization Version", it.toString(), file.entryRange("general.quantization_version")))
+            add(HeaderRow("Quantization Version", it.toString(), file.entryRange("general.quantization_version", loaded)))
         }
-        file.parameterCount?.let { add(HeaderRow("Parameters", formatParameterCount(it), file.tensorInfoRange?.toNative())) }
-        add(HeaderRow("Tensors", countLabel(file.tensors.size, file.declaredTensorCount), file.tensorInfoRange?.toNative() ?: header))
-        add(HeaderRow("Metadata Entries", countLabel(file.metadata.size, file.declaredMetadataCount), file.metadataRange?.toNative() ?: header))
-        add(HeaderRow("Alignment", file.alignment.toString(), file.entryRange("general.alignment")))
+        file.parameterCount?.let { add(HeaderRow("Parameters", formatParameterCount(it), file.tensorInfoRange?.toNative(loaded))) }
+        add(HeaderRow("Tensors", countLabel(file.tensors.size, file.declaredTensorCount), file.tensorInfoRange?.toNative(loaded) ?: header))
+        add(HeaderRow("Metadata Entries", countLabel(file.metadata.size, file.declaredMetadataCount), file.metadataRange?.toNative(loaded) ?: header))
+        add(HeaderRow("Alignment", file.alignment.toString(), file.entryRange("general.alignment", loaded)))
         file.tensorDataOffset?.let { add(HeaderRow("Tensor Data Offset", hex(it), null)) }
         file.tensorDataSize?.let { add(HeaderRow("Tensor Data Size", sizeLabel(it), null)) }
         file.tensors.groupBy { it.typeLabel }.entries
             .sortedByDescending { (_, tensors) -> tensors.sumOf { it.dataSize ?: 0L } }
             .forEach { (type, tensors) -> add(HeaderRow("Type $type", typeTotalLabel(tensors.size, tensors.map { it.dataSize }), null)) }
-        addDiagnostics(file.diagnostics)
+        addDiagnostics(file.diagnostics, loaded)
     }
     return keyValueTab(GGUF_HEADER_TAB, rows, labelWidth = ColumnWidth.Fill(0.3f))
 }
 
-private fun GgufFile.entryRange(key: String): NativeByteRange? = metadata.firstOrNull { it.key == key }?.range?.toNative()
+private fun GgufFile.entryRange(key: String, loaded: Int): NativeByteRange? =
+    metadata.firstOrNull { it.key == key }?.range?.toNative(loaded)
 
-private fun ggufMetadataTab(file: GgufFile): TableTabDescriptor {
+private fun ggufMetadataTab(file: GgufFile, loaded: Int): TableTabDescriptor {
     val entries = file.metadata
     if (entries.isEmpty()) {
         return TableTabDescriptor(name = GGUF_METADATA_TAB, columns = emptyList(), rowCount = 0, emptyMessage = "(no metadata)")
@@ -114,7 +117,7 @@ private fun ggufMetadataTab(file: GgufFile): TableTabDescriptor {
             },
         ),
         rowCount = entries.size,
-        rowSelectionProvider = { entries.getOrNull(it)?.range?.toSelection() },
+        rowSelectionProvider = { entries.getOrNull(it)?.range?.toSelection(loaded) },
         childrenProvider = { index -> entries.getOrNull(index)?.value?.takeIf { it.elements != null }?.let(::arrayChildRows) },
         alwaysShowSearch = true,
         searchPlaceholder = "Search metadata",
@@ -140,7 +143,7 @@ private fun arrayChildRows(array: GgufValue): TableTabChildRows? {
 
 private const val MAX_ARRAY_CHILD_ROWS = 10_000
 
-private fun ggufTensorsTab(file: GgufFile): TableTabDescriptor {
+private fun ggufTensorsTab(file: GgufFile, loaded: Int): TableTabDescriptor {
     val tensors = file.tensors
     if (tensors.isEmpty()) {
         return TableTabDescriptor(name = MODEL_TENSORS_TAB, columns = emptyList(), rowCount = 0, emptyMessage = "(no tensors)")
@@ -156,22 +159,26 @@ private fun ggufTensorsTab(file: GgufFile): TableTabDescriptor {
             col("Offset") { index -> tensors[index].dataRange.let { CellValue(it?.offset ?: -1L, it?.offset?.let(::hex) ?: "?") } },
         ),
         rowCount = tensors.size,
-        rowSelectionProvider = { tensors.getOrNull(it)?.selection() },
+        rowSelectionProvider = { tensors.getOrNull(it)?.selection(loaded) },
         alwaysShowSearch = true,
         searchPlaceholder = "Search tensors",
         showIdColumn = false,
     )
 }
 
-/** The tensor's data when it is in the file, else its info record. */
-private fun GgufTensorInfo.selection(): RowSelectionData? = (dataRange ?: infoRange).toSelection()
+/**
+ * The tensor's data when it is in the loaded bytes, else its info record. A partial view of a
+ * large file loads only the head, so most tensors' data lies past what the hex view can show.
+ */
+private fun GgufTensorInfo.selection(loaded: Int): RowSelectionData? =
+    dataRange?.toSelection(loaded) ?: infoRange.toSelection(loaded)
 
 // --- safetensors ---
 
-private fun safetensorsHeaderTab(file: SafetensorsFile): TableTabDescriptor {
-    val header = file.headerRange.toNative()
+private fun safetensorsHeaderTab(file: SafetensorsFile, loaded: Int): TableTabDescriptor {
+    val header = file.headerRange.toNative(loaded)
     val rows = buildList {
-        add(HeaderRow("Header Size", "${file.headerSize} bytes", file.lengthRange.toNative()))
+        add(HeaderRow("Header Size", "${file.headerSize} bytes", file.lengthRange.toNative(loaded)))
         file.formatTag?.let { add(HeaderRow("Format", it, header)) }
         file.parameterCount?.let { add(HeaderRow("Parameters", formatParameterCount(it), header)) }
         add(HeaderRow("Tensors", file.tensors.size.toString(), header))
@@ -181,12 +188,12 @@ private fun safetensorsHeaderTab(file: SafetensorsFile): TableTabDescriptor {
             .sortedByDescending { (_, tensors) -> tensors.sumOf { it.dataSize } }
             .forEach { (dtype, tensors) -> add(HeaderRow("Type $dtype", typeTotalLabel(tensors.size, tensors.map { it.dataSize }), null)) }
         file.metadata.forEach { add(HeaderRow("Metadata: ${it.key}", it.value, header)) }
-        addDiagnostics(file.diagnostics)
+        addDiagnostics(file.diagnostics, loaded)
     }
     return keyValueTab(SAFETENSORS_HEADER_TAB, rows, labelWidth = ColumnWidth.Fill(0.3f))
 }
 
-private fun safetensorsTensorsTab(file: SafetensorsFile): TableTabDescriptor {
+private fun safetensorsTensorsTab(file: SafetensorsFile, loaded: Int): TableTabDescriptor {
     val tensors = file.tensors
     if (tensors.isEmpty()) {
         return TableTabDescriptor(name = MODEL_TENSORS_TAB, columns = emptyList(), rowCount = 0, emptyMessage = "(no tensors)")
@@ -202,27 +209,28 @@ private fun safetensorsTensorsTab(file: SafetensorsFile): TableTabDescriptor {
             col("Offset") { index -> tensors[index].dataRange.let { CellValue(it?.offset ?: -1L, it?.offset?.let(::hex) ?: "?") } },
         ),
         rowCount = tensors.size,
-        rowSelectionProvider = { tensors.getOrNull(it)?.selection(file) },
+        rowSelectionProvider = { tensors.getOrNull(it)?.selection(file, loaded) },
         alwaysShowSearch = true,
         searchPlaceholder = "Search tensors",
         showIdColumn = false,
     )
 }
 
-/** The tensor's data when it is in the file, else the JSON header that declares it. */
-private fun SafetensorsTensor.selection(file: SafetensorsFile): RowSelectionData? = (dataRange ?: file.headerRange).toSelection()
+/** The tensor's data when it is in the loaded bytes, else the JSON header that declares it. */
+private fun SafetensorsTensor.selection(file: SafetensorsFile, loaded: Int): RowSelectionData? =
+    dataRange?.toSelection(loaded) ?: file.headerRange.toSelection(loaded)
 
 // --- shared formatting ---
 
-private fun MutableList<HeaderRow>.addDiagnostics(diagnostics: List<ModelDiagnostic>) {
-    diagnostics.forEach { add(HeaderRow("Warning", it.message, it.range?.toNative())) }
+private fun MutableList<HeaderRow>.addDiagnostics(diagnostics: List<ModelDiagnostic>, loaded: Int) {
+    diagnostics.forEach { add(HeaderRow("Warning", it.message, it.range?.toNative(loaded))) }
 }
 
-/** The range as an `Int` hex-view range, or `null` when it lies past what an `Int` can address. */
-private fun ModelByteRange.toNative(): NativeByteRange? =
-    if (offset <= Int.MAX_VALUE && size <= Int.MAX_VALUE - offset) NativeByteRange(offset.toInt(), size.toInt()) else null
+/** The range as a hex-view range, or `null` when any of it lies past the [loaded] bytes. */
+private fun ModelByteRange.toNative(loaded: Int): NativeByteRange? =
+    if (offset <= loaded && size <= loaded - offset) NativeByteRange(offset.toInt(), size.toInt()) else null
 
-private fun ModelByteRange.toSelection(): RowSelectionData? = toNative()?.let(::selection)
+private fun ModelByteRange.toSelection(loaded: Int): RowSelectionData? = toNative(loaded)?.let(::selection)
 
 /** Dimensions joined with `×`; a scalar (no dimensions) is `scalar`. */
 internal fun shapeLabel(dims: List<Long>): String = if (dims.isEmpty()) "scalar" else dims.joinToString(" × ")

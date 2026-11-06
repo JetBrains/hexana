@@ -101,12 +101,16 @@ fun resolveBinaryProviderKind(
  * the extension is read from, and defaults to [sourcePath] because usually they are
  * the same string. Pass them separately when the two disagree: a host that inflated
  * `foo.pb.gz` holds bytes named `foo.pb` while the path on disk still ends `.gz`.
+ *
+ * [fileSize] is the size of the whole file when [bytes] is only its head, because the file is
+ * larger than a host can load ([MAX_BINARY_WINDOW_BYTES]); `null` means [bytes] is the file.
  */
 fun createBinaryProvider(
     bytes: CommonByteBuffer,
     sourcePath: String? = null,
     fileName: String? = sourcePath,
-): BinaryProvider = createBinaryProvider(resolveBinaryProviderKind(bytes, fileName), bytes, sourcePath)
+    fileSize: Long? = null,
+): BinaryProvider = createBinaryProvider(resolveBinaryProviderKind(bytes, fileName), bytes, sourcePath, fileSize)
 
 /**
  * Builds the provider for an already-decided [kind].
@@ -119,6 +123,7 @@ fun createBinaryProvider(
     kind: BinaryProviderKind,
     bytes: CommonByteBuffer,
     sourcePath: String? = null,
+    fileSize: Long? = null,
 ): BinaryProvider {
     // Every provider below reads through `sharedBytes.duplicate()`, and a duplicate
     // inherits the source cursor — so a buffer handed over mid-read would have each
@@ -131,7 +136,7 @@ fun createBinaryProvider(
         is BinaryProviderKind.Arrow -> ArrowBinaryProvider(shared, kind.format, sourcePath)
         BinaryProviderKind.Wasm -> WasmBinaryProvider(shared)
         BinaryProviderKind.WasmComponent -> WasmComponentBinaryProvider(shared)
-        BinaryProviderKind.NativeOrGeneric -> nativeOrGenericBinaryProvider(shared, sourcePath)
+        BinaryProviderKind.NativeOrGeneric -> nativeOrGenericBinaryProvider(shared, sourcePath, fileSize)
     }
 }
 

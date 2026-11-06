@@ -67,6 +67,7 @@ import org.jetbrains.hexana.run.WasmRunMode
 import org.jetbrains.hexana.run.runWasmConfiguration
 import org.jetbrains.hexana.run.runWasmFile
 import org.jetbrains.hexana.shared.formatSize
+import org.jetbrains.hexana.shared.formatSizeLong
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
 import org.jetbrains.hexana.shared.fileTypeDescription
 import org.jetbrains.hexana.ui.panel.ProgramArgsDialog
@@ -126,6 +127,8 @@ internal fun FileDescriptionBar(
     sslKeyLogGeneration: Int = 0,
     /** Makes the format badge a parser picker; `null` for files that cannot carry a choice. */
     parserChoice: ParserChoice? = null,
+    /** Size of the whole file when [binaryProvider] holds only its head; shown instead of the loaded size. */
+    fileSize: Long? = null,
 ) {
     val size = binaryProvider.bytes.limit()
 
@@ -161,7 +164,7 @@ internal fun FileDescriptionBar(
             ),
         )
 
-        SizeLabel(size = size, binaryProvider = binaryProvider, onSizeClick = onSizeClick)
+        SizeLabel(size = size, binaryProvider = binaryProvider, onSizeClick = onSizeClick, fileSize = fileSize)
 
         if (editModeContent != null) {
             val editBg = if (JewelTheme.isDark) Color(0xFF3D3223) else Color(0xFFFFF3E0)
@@ -220,6 +223,7 @@ private fun SizeLabel(
     size: Int,
     binaryProvider: BinaryProvider,
     onSizeClick: (() -> Unit)?,
+    fileSize: Long? = null,
 ) {
     val sizeTooltip = remember(binaryProvider) {
         try {
@@ -229,7 +233,8 @@ private fun SizeLabel(
         }
     }
 
-    val sizeText = formatSize(size)
+    // A partial view shows the file's real size, marked so it does not read as what is loaded.
+    val sizeText = if (fileSize != null) "${formatSizeLong(fileSize)} (first ${formatSize(size)} loaded)" else formatSize(size)
     val sizeModifier = if (onSizeClick != null) {
         Modifier
             .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))

@@ -327,6 +327,13 @@
           "default": true,
           "description": "Show semantic highlighting in the hex viewer, coloring bytes by their structural section with labels and navigation arrows."
         },
+        "hexana.maxLoadedFileSizeMB": {
+          "type": "number",
+          "default": 512,
+          "minimum": 1,
+          "maximum": 2047,
+          "markdownDescription": "How much of a file the Hexana editor loads, in megabytes. A larger file opens as a read-only view of its first part: its size is shown, structures stored after that point are missing (GGUF and safetensors tensor tables are still complete), and editing is off. Raising the limit costs memory in both the extension host and the editor."
+        },
         "hexana.mcp.enabled": {
           "type": "boolean",
           "default": true,

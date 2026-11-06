@@ -103,9 +103,11 @@ fun createBinaryProvider(
     parser: BinaryParser,
     bytes: CommonByteBuffer,
     sourcePath: String? = null,
+    fileSize: Long? = null,
 ): BinaryProvider? {
     // Rewound once for every provider, for the reason [createBinaryProvider] gives.
     val shared = bytes.duplicate().position(0)
+    val totalSize = fileSize ?: shared.size.toLong()
     return try {
         when (parser) {
             BinaryParser.GENERIC -> GenericBinaryProvider(shared)
@@ -133,8 +135,8 @@ fun createBinaryProvider(
             BinaryParser.DEX -> DexBinaryProvider(shared)
             BinaryParser.ARSC -> ArscBinaryProvider(shared)
             BinaryParser.DOTNET_RESOURCES -> ClrResourcesBinaryProvider(shared)
-            BinaryParser.GGUF -> GgufBinaryProvider(shared)
-            BinaryParser.SAFETENSORS -> SafetensorsBinaryProvider(shared)
+            BinaryParser.GGUF -> GgufBinaryProvider(shared, totalSize)
+            BinaryParser.SAFETENSORS -> SafetensorsBinaryProvider(shared, totalSize)
             BinaryParser.PDB -> PdbBinaryProvider(shared)
             BinaryParser.PORTABLE_PDB -> PortablePdbBinaryProvider(shared)
             BinaryParser.PCAP -> PcapBinaryProvider(shared, sourcePath)

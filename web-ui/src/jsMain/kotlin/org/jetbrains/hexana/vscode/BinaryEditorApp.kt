@@ -1,12 +1,15 @@
 package org.jetbrains.hexana.vscode
 
 import org.jetbrains.hexana.shared.PROBLEMS_TAB_NAME
+import org.jetbrains.hexana.shared.isPartialView
+import org.jetbrains.hexana.shared.partialViewNotice
 import org.jetbrains.hexana.shared.inspections.BinaryProblem
 import org.jetbrains.hexana.shared.inspections.InspectionContext
 import org.jetbrains.hexana.shared.inspections.inspectBinary
 import androidx.compose.runtime.*
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
+import org.jetbrains.compose.web.dom.Text
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.dex.DexFileParser
 import org.jetbrains.hexana.javabytecode.JavaClassFileParser
@@ -166,6 +169,11 @@ fun BinaryEditorContent(
     workerSizeTooltip: List<Pair<String, String>>? = null,
     scriptExecution: ScriptExecution? = null,
     isDecompressed: Boolean = false,
+    /**
+     * Size on disk when the host loaded only the head of the file (it was larger than the host
+     * can hold), else `null`. Such a view is read-only and says so above the hex view.
+     */
+    partialFileSize: Long? = null,
     /** Text of a key log the host just picked, or blank. */
     sslKeyLogContent: String = "",
     onSslKeyLogConsumed: () -> Unit = {},
@@ -275,9 +283,11 @@ fun BinaryEditorContent(
         provider is WasmBinaryProvider || provider is WasmComponentBinaryProvider || extraTabs.any { it.label == "Top" }
     }
 
-    // Edit state: tracks in-memory byte modifications.
-    val editState = remember(provider) {
-        HexEditState(buffer.toByteArray())
+    // Edit state: tracks in-memory byte modifications. None for a partial view: overwriting the
+    // file with its edited head would truncate it, and the state copies every loaded byte.
+    val isPartial = isPartialView(buffer.size, partialFileSize)
+    val editState: HexEditState? = remember(provider, isPartial) {
+        if (isPartial) null else HexEditState(buffer.toByteArray())
     }
     var overwriteShadow by remember { mutableStateOf<OverwriteShadow?>(null) }
 
@@ -312,7 +322,7 @@ fun BinaryEditorContent(
     val liveProvider = remember(provider, reparseCounter) {
         if (reparseCounter == 0) provider
         else {
-            val liveBuffer = editState.toBuffer()
+            val liveBuffer = editState?.toBuffer() ?: return@remember provider
             try {
                 when (provider) {
                     is WasmBinaryProvider -> WasmBinaryProvider(liveBuffer)
@@ -362,13 +372,15 @@ fun BinaryEditorContent(
             fileName = fileName,
             parentFileName = parentFileName,
             size = buffer.size,
+            fileSize = partialFileSize?.takeIf { isPartial },
             provider = provider,
             onSizeClick = if (hasTopTab) {{ activeTab = "Top" }} else null,
             editState = editState,
             overwriteShadow = overwriteShadow,
             onOverwriteShadowChanged = { overwriteShadow = it },
             onReparseAfterOverwrite = {
-                onLegacyReparseRequested?.invoke(editState.getEditedBytes()) ?: run { reparseCounter++ }
+                val edited = editState?.getEditedBytes()
+                if (edited != null && onLegacyReparseRequested != null) onLegacyReparseRequested(edited) else reparseCounter++
             },
             onOpenSbomTab = { activeTab = "SBOM" },
             runtimeCompatibility = runtimeCompatibility,
@@ -391,6 +403,17 @@ fun BinaryEditorContent(
             sslKeyLogSessionCount = sslKeyLogSessionCount,
             parserChoice = parserChoice,
         )
+        if (isPartial && partialFileSize != null) {
+            Div({
+                classes("hexana-partial-view-notice")
+                style {
+                    property("padding", "4px 8px")
+                    property("font-size", "12px")
+                    property("background", "var(--vscode-inputValidation-warningBackground, #5A4A2A)")
+                    property("color", "var(--vscode-editorWarning-foreground, #E0C070)")
+                }
+            }) { Text(partialViewNotice(buffer.size, partialFileSize)) }
+        }
         Div({
             style {
                 display(DisplayStyle.Flex)

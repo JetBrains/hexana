@@ -30,6 +30,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.hexana.BinaryFileType
+import org.jetbrains.hexana.FileTooLargeToMapException
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.HexanaDiffVirtualFile
 import org.jetbrains.hexana.HexanaFileEditor
@@ -296,8 +297,20 @@ private class HexanaStructuralDiffViewer(
         scope.launch {
             // Reading the inputs maps both files, reads any `.symbols` sidecar and sniffs each
             // header (a remote file is even downloaded), so it stays off the EDT.
-            val input = withContext(Dispatchers.IO) { CompareFilesAction.diffInput(left, right) }
-            val rejection = if (input == null) "Could not read one of the files." else BinaryDiffProviderRegistry.rejectionReason(input)
+            var tooLarge: FileTooLargeToMapException? = null
+            val input = withContext(Dispatchers.IO) {
+                try {
+                    CompareFilesAction.diffInput(left, right)
+                } catch (e: FileTooLargeToMapException) {
+                    tooLarge = e
+                    null
+                }
+            }
+            val rejection = when {
+                tooLarge != null -> tooLarge?.message
+                input == null -> "Could not read one of the files."
+                else -> BinaryDiffProviderRegistry.rejectionReason(input)
+            }
             withContext(Dispatchers.EDT) {
                 if (disposed) return@withContext
                 if (input == null || rejection != null) {

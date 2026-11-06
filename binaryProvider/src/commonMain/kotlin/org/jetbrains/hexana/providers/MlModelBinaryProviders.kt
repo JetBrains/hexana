@@ -15,10 +15,12 @@ import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
  */
 class GgufBinaryProvider(
     sharedBytes: CommonByteBuffer,
+    /** Size of the whole file; larger than [sharedBytes] when only its head was loaded. */
+    override val fileSize: Long = sharedBytes.size.toLong(),
 ) : GenericBinaryProvider(sharedBytes) {
 
     /** The parsed file, or `null` when the header is not GGUF. */
-    val parsedGguf: GgufFile? by lazy { GgufParser.parse(bytes) }
+    val parsedGguf: GgufFile? by lazy { GgufParser.parse(bytes, fileSize) }
 
     override val structureRanges: List<StructureRange> by lazy {
         val file = parsedGguf ?: return@lazy emptyList()
@@ -33,6 +35,8 @@ class GgufBinaryProvider(
     }
 
     override val sizeAnalysis: BinarySizeNode? by lazy {
+        // Int-sized nodes cannot describe the whole of a file larger than the loaded head.
+        if (fileSize > bytes.size) return@lazy null
         val file = parsedGguf ?: return@lazy null
         val headerEnd = file.tensorDataOffset ?: return@lazy null
         modelSizeTree(
@@ -58,10 +62,12 @@ class GgufBinaryProvider(
  */
 class SafetensorsBinaryProvider(
     sharedBytes: CommonByteBuffer,
+    /** Size of the whole file; larger than [sharedBytes] when only its head was loaded. */
+    override val fileSize: Long = sharedBytes.size.toLong(),
 ) : GenericBinaryProvider(sharedBytes) {
 
     /** The parsed header, or `null` when the file does not start like safetensors. */
-    val parsedSafetensors: SafetensorsFile? by lazy { SafetensorsParser.parse(bytes) }
+    val parsedSafetensors: SafetensorsFile? by lazy { SafetensorsParser.parse(bytes, fileSize) }
 
     override val structureRanges: List<StructureRange> by lazy {
         val file = parsedSafetensors ?: return@lazy emptyList()
@@ -75,6 +81,7 @@ class SafetensorsBinaryProvider(
     }
 
     override val sizeAnalysis: BinarySizeNode? by lazy {
+        if (fileSize > bytes.size) return@lazy null
         val file = parsedSafetensors ?: return@lazy null
         modelSizeTree(
             totalSize = bytes.size,
@@ -86,7 +93,8 @@ class SafetensorsBinaryProvider(
 
     companion object {
         /** A plausible `u64` header length followed by a JSON object; see [SafetensorsParser.isSafetensors]. */
-        fun isSafetensorsFile(buffer: CommonByteBuffer): Boolean = SafetensorsParser.isSafetensors(buffer)
+        fun isSafetensorsFile(buffer: CommonByteBuffer, fileSize: Long = buffer.size.toLong()): Boolean =
+            SafetensorsParser.isSafetensors(buffer, fileSize)
     }
 }
 

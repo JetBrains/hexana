@@ -9,6 +9,8 @@ import io.ktor.http.*
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.providers.MAX_BINARY_WINDOW_BYTES
+import org.jetbrains.hexana.shared.formatSizeLong
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.MappedByteBuffer
@@ -113,9 +115,45 @@ fun find(
 fun VirtualFile.toMappedBuffer(): MappedByteBuffer? {
     val filePath = toNioPath()
     val fileSize = filePath.fileSize()
+    if (fileSize > Int.MAX_VALUE) throw FileTooLargeToMapException(name, fileSize)
     return FileChannel.open(filePath, StandardOpenOption.READ).use { fileChannel ->
         fileChannel.map(FileChannel.MapMode.READ_ONLY, 0, fileSize)
     }
+}
+
+/**
+ * Thrown where a whole file has to be in memory (running a module, comparing two files) but is
+ * larger than a JVM buffer can address. The editor does not hit it: it opens such a file through
+ * [toBinaryWindow].
+ */
+class FileTooLargeToMapException(val fileName: String, val fileSize: Long) :
+    IllegalArgumentException(
+        "$fileName is ${formatSizeLong(fileSize)}; Hexana can load at most ${formatSizeLong(Int.MAX_VALUE.toLong())} of a file for this.",
+    )
+
+/**
+ * The bytes the Hexana editor shows for a file: all of it, or — for a file larger than
+ * [MAX_BINARY_WINDOW_BYTES] — its head, with [fileSize] still the size of the whole file.
+ */
+class BinaryWindow(val buffer: CommonByteBuffer, val fileSize: Long) {
+    val isPartial: Boolean get() = fileSize > buffer.size
+}
+
+/**
+ * Like [toCommonByteBuffer], but never fails on size: a local file larger than [maxBytes] is
+ * memory-mapped only up to [maxBytes]. Read-only mapping, so this costs address space, not heap.
+ */
+fun VirtualFile.toBinaryWindow(maxBytes: Int = MAX_BINARY_WINDOW_BYTES): BinaryWindow? {
+    val length = length
+    if (length <= maxBytes || getUserData(HexanaBinaryVirtualFile.BUFFER_KEY) != null || !isInLocalFileSystem) {
+        val buffer = toCommonByteBuffer() ?: return null
+        return BinaryWindow(buffer, buffer.size.toLong())
+    }
+    val path = toNioPath()
+    val mapped = FileChannel.open(path, StandardOpenOption.READ).use { channel ->
+        channel.map(FileChannel.MapMode.READ_ONLY, 0, minOf(channel.size(), maxBytes.toLong()))
+    }
+    return BinaryWindow(mapped.toCommonByteBuffer(), path.fileSize())
 }
 
 /**
@@ -126,6 +164,7 @@ fun VirtualFile.toMappedBuffer(): MappedByteBuffer? {
 fun File.toCommonByteBuffer(): CommonByteBuffer? {
     if (!isFile) return null
     return FileChannel.open(toPath(), StandardOpenOption.READ).use { channel ->
+        if (channel.size() > Int.MAX_VALUE) throw FileTooLargeToMapException(name, channel.size())
         channel.map(FileChannel.MapMode.READ_ONLY, 0, channel.size())
     }.toCommonByteBuffer()
 }

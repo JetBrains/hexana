@@ -22,6 +22,7 @@ interface BinaryProvider {
     lastIndex: number;
     size: number;
   };
+  fileSize: number;
   sizeAnalysis?: {
     children: BinarySizeNode[];
     name: string;
@@ -1284,6 +1285,7 @@ interface PeBinaryProvider extends NativeBinaryProvider {
           lastIndex: number;
           size: number;
         };
+        fileSize: number;
         nativeFormat?: {
           displayName: string;
         };
@@ -4319,6 +4321,7 @@ interface ClrResourcesBinaryProvider extends GenericBinaryProvider {
 }
 
 interface GgufBinaryProvider extends GenericBinaryProvider {
+  fileSize: number;
   parsedGguf?: {
     alignment: number;
     architecture?: string;
@@ -4413,6 +4416,7 @@ interface GgufBinaryProvider extends GenericBinaryProvider {
 }
 
 interface SafetensorsBinaryProvider extends GenericBinaryProvider {
+  fileSize: number;
   parsedSafetensors?: {
     dataOffset: number;
     diagnostics: {
@@ -6589,6 +6593,7 @@ interface Attachment {
         lastIndex: number;
         size: number;
       };
+      fileSize: number;
       nativeFormat?: {
         displayName: string;
       };
@@ -11124,6 +11129,7 @@ interface File {
       lastIndex: number;
       size: number;
     };
+    fileSize: number;
     nativeFormat?: {
       displayName: string;
     };
@@ -11161,6 +11167,7 @@ interface File {
       lastIndex: number;
       size: number;
     };
+    fileSize: number;
     nativeFormat?: {
       displayName: string;
     };
@@ -11199,6 +11206,7 @@ interface File {
         lastIndex: number;
         size: number;
       };
+      fileSize: number;
       nativeFormat?: {
         displayName: string;
       };

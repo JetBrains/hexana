@@ -19,6 +19,7 @@ import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.fileTypeDescription
 import org.jetbrains.hexana.shared.formatSize
+import org.jetbrains.hexana.shared.formatSizeLong
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.jetbrains.hexana.shared.features.ProposalCompatibility
@@ -62,6 +63,8 @@ fun EditorToolbar(
     size: Int,
     provider: BinaryProvider,
     onSizeClick: (() -> Unit)? = null,
+    /** Size on disk when only [size] bytes of the file are loaded; shown in place of [size]. */
+    fileSize: Long? = null,
     editState: HexEditState? = null,
     overwriteShadow: OverwriteShadow? = null,
     onOverwriteShadowChanged: ((OverwriteShadow?) -> Unit)? = null,
@@ -196,7 +199,7 @@ fun EditorToolbar(
             if (onSizeClick != null) onClick { onSizeClick() }
         }) {
             Span({ style { property("opacity", "0.7") } }) {
-                Text(formatSize(size))
+                Text(if (fileSize != null) "${formatSizeLong(fileSize)} (first ${formatSize(size)} loaded)" else formatSize(size))
             }
             if (sizeTooltip != null && sizeHovered) {
                 Div({

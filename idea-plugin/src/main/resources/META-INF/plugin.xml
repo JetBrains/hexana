@@ -287,6 +287,7 @@
         <editorTabTitleProvider implementation="org.jetbrains.hexana.ArchiveMemberTabTitleProvider"/>
         <editorNotificationProvider implementation="org.jetbrains.hexana.wat.MissingWasmToolsNotification"/>
         <editorNotificationProvider implementation="org.jetbrains.hexana.ui.ElfMemoryBudgetNotification"/>
+        <editorNotificationProvider implementation="org.jetbrains.hexana.ui.PartialViewNotification"/>
         <fileTypeOverrider implementation="org.jetbrains.hexana.actions.HexFileTypeOverrider"/>
         <fileTypeDetector implementation="org.jetbrains.hexana.NativeBinaryFileTypeDetector"/>
         <fileTypeDetector implementation="org.jetbrains.hexana.ColumnarBinaryFileTypeDetector"/>

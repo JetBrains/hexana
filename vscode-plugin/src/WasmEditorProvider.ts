@@ -4,6 +4,7 @@ import * as vscode from "vscode";
 import { getWebviewContent } from "./webviewContent";
 import { extensionLib, getSelectedRuntime, runExport } from "./WasmRunConfigurations";
 import { isNativeBinary } from "./NativeBinaryFileTypeDetector";
+import { FileTooLargeError, formatSize, isPartial, maxLoadedBytes, readHead, readPrefix } from "./largeFiles";
 import { detectAndroidSdk, runApkOnEmulator } from "./apkRunner";
 import { DIFF_LABEL_SEPARATOR, pairSidesForLabel } from "./diffTabPairing";
 import { WasmFeatureCatalogProvider } from "./wasmFeatureCatalog";
@@ -754,8 +755,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 await vscode.workspace.fs.stat(uri);
                 return true;
             }
-            const bytes = await vscode.workspace.fs.readFile(uri);
-            return isNativeBinary(bytes.subarray(0, 64));
+            return isNativeBinary(await readPrefix(uri, 64));
         } catch {
             // Not on a file system VS Code can read (e.g. a `git:` text provider).
             return false;
@@ -763,6 +763,19 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
     }
 
     private static async openDiff(left: vscode.Uri, right: vscode.Uri, mode: DiffMode): Promise<void> {
+        // A comparison needs both files whole; one over the load limit is refused with the
+        // reason instead of failing inside `readFile` (which rejects anything over 2 GiB).
+        const limit = maxLoadedBytes();
+        for (const side of [left, right]) {
+            const size = (await vscode.workspace.fs.stat(side)).size;
+            if (size > limit) {
+                vscode.window.showErrorMessage(
+                    `${path.basename(side.fsPath)} is ${formatSize(size)}; Hexana can compare files of at most ` +
+                    `${formatSize(limit)} (hexana.maxLoadedFileSizeMB).`,
+                );
+                return;
+            }
+        }
         const leftData = await vscode.workspace.fs.readFile(left);
         const rightData = await vscode.workspace.fs.readFile(right);
         const leftName = path.basename(left.fsPath);
@@ -1009,16 +1022,29 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             return new WasmDocument(uri, d, entryName);
         }
 
-        const raw = await vscode.workspace.fs.readFile(uri);
-        const inflated = inflateIfGzipped(path.basename(uri.fsPath), raw);
+        // Only the head of a file larger than `hexana.maxLoadedFileSizeMB` is read; the
+        // webview then shows a read-only partial view and says so.
+        let head;
+        try {
+            head = await readHead(uri, maxLoadedBytes());
+        } catch (err) {
+            if (err instanceof FileTooLargeError) {
+                return new WasmDocument(uri, new Uint8Array(0), undefined, undefined, err.message);
+            }
+            throw err;
+        }
+        const partial = isPartial(head.data.byteLength, head.fileSize);
+        // The head of a gzip stream cannot be inflated; a partial `.gz` is shown as it is.
+        const inflated = partial ? { data: head.data, displayName: undefined } : inflateIfGzipped(path.basename(uri.fsPath), head.data);
         const data = inflated.data;
         const displayName = inflated.displayName;
 
-        extensionLib?.captureBinaryOpened(
+        extensionLib?.captureBinaryOpenedOfSize(
             displayName ?? path.basename(uri.fsPath),
             new Int8Array(data.buffer, data.byteOffset, data.byteLength),
+            partial ? head.fileSize : data.byteLength,
         );
-        return new WasmDocument(uri, data, displayName);
+        return new WasmDocument(uri, data, displayName, partial ? head.fileSize : undefined);
     }
 
     async resolveCustomEditor(
@@ -1045,6 +1071,10 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
 
         // Once the webview signals it is ready, send the binary payload.
         webviewPanel.webview.onDidReceiveMessage(async (message) => {
+            if (message.type === "ready" && document.loadError) {
+                webviewPanel.webview.postMessage({ type: "load-expired", message: document.loadError });
+                return;
+            }
             if (message.type === "ready") {
                 // Check if this is a diff view.
                 const diffKey = document.uri.toString();
@@ -1146,6 +1176,8 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     fileName: document.displayName ?? document.uri.fsPath,
                     filePath: document.uri.fsPath,
                     data: payload,
+                    // Set only for a partial view: the size on disk, larger than `data`.
+                    fileSize: document.partialFileSize,
                     wasmRuntime: getSelectedRuntime(),
                     showSemanticHighlighting: vscode.workspace.getConfiguration("hexana").get<boolean>("showSemanticHighlighting", true),
                     featureCatalogJson: this.featureCatalog.get(),
@@ -1719,6 +1751,14 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             vscode.window.showWarningMessage("Cannot overwrite a virtual or in-memory document.");
             return;
         }
+        // The webview hides editing for a partial view; refused here too, because writing the
+        // loaded head back would cut the file off at its end.
+        if (document.partialFileSize !== undefined) {
+            vscode.window.showWarningMessage(
+                `Hexana loaded only the first ${formatSize(document.data.byteLength)} of this file and cannot overwrite it.`,
+            );
+            return;
+        }
         try {
             const bytes = new Uint8Array(message.data);
             await vscode.workspace.fs.writeFile(document.uri, bytes);
@@ -1736,6 +1776,10 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
     ): Promise<void> {
         if (document.uri.scheme !== "file") {
             vscode.window.showWarningMessage("Cannot save a copy for a virtual document.");
+            return;
+        }
+        if (document.partialFileSize !== undefined) {
+            vscode.window.showWarningMessage("Hexana loaded only part of this file and cannot save a copy of it.");
             return;
         }
         try {
@@ -2605,6 +2649,13 @@ class WasmDocument implements vscode.CustomDocument {
         public readonly uri: vscode.Uri,
         public readonly data: Uint8Array,
         displayName?: string,
+        /**
+         * Size on disk when [data] is only the head of the file (larger than
+         * `hexana.maxLoadedFileSizeMB`); `undefined` when [data] is the whole file.
+         */
+        public readonly partialFileSize?: number,
+        /** Why the file could not be loaded at all; shown in place of the editor. */
+        public readonly loadError?: string,
     ) {
         this.displayName = displayName;
     }

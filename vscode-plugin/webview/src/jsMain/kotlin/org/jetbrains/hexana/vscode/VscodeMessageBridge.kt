@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.vscode
 
+import org.khronos.webgl.Int8Array
+import org.khronos.webgl.Uint8Array
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import kotlinx.browser.window
@@ -41,6 +43,8 @@ data class VscodeMessage(
     val settingValue: Boolean = false,
     val parentFileName: String? = null,
     val decompressed: Boolean = false,
+    /** `load-wasm`: size on disk when [data] is only the head of a file too large to load, else `null`. */
+    val fileSize: Long? = null,
     /** The host found an Android SDK with the emulator, and the file is an on-disk APK. */
     val canRunApk: Boolean = false,
     val keyLogPath: String = "",
@@ -508,6 +512,15 @@ fun postOpenTextFileToHost(fileName: String, content: String) {
  */
 internal fun messageBytesOrNull(payload: dynamic): ByteArray? {
     if (payload == null) return null
+    // The host posts a Uint8Array, which arrives as this webview's own copy: viewed in place
+    // as the Int8Array a Kotlin/JS ByteArray is, rather than copied byte by byte — the copy
+    // doubled the memory of a large file and took seconds over hundreds of megabytes.
+    // Tested on an expression, not on `payload`: a smart cast would re-type the dynamic payload
+    // for the array-like path below and break its dynamic `length` access.
+    if (payload.unsafeCast<Any>() is Uint8Array) {
+        val view = payload.unsafeCast<Uint8Array>()
+        return Int8Array(view.buffer, view.byteOffset, view.byteLength).unsafeCast<ByteArray>()
+    }
     val length = (payload.length as? Number)?.toInt() ?: return null
     if (length < 0) return null
     val bytes = ByteArray(length)
@@ -816,6 +829,7 @@ internal fun decodeVscodeMessage(type: String, data: dynamic): VscodeMessage =
                 showSemanticHighlighting = (data.showSemanticHighlighting as? Boolean),
                 parentFileName = (data.parentFileName as? String),
                 decompressed = (data.decompressed as? Boolean) ?: false,
+                fileSize = (data.fileSize as? Number)?.toDouble()?.toLong(),
                 canRunApk = (data.canRunApk as? Boolean) ?: false,
                 featureCatalogJson = (data.featureCatalogJson as? String) ?: "",
                 runtimeTargetsJson = (data.runtimeTargetsJson as? String) ?: "",

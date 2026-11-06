@@ -2,6 +2,7 @@ package org.jetbrains.hexana.providers
 
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.vfs.VirtualFile
+import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.toCommonByteBuffer
 
 interface BinaryVirtualFileProvider {
@@ -26,7 +27,9 @@ internal abstract class WasmComponentBinaryVirtualFileProvider(override val file
  */
 internal class GenericBinaryVirtualFileProvider(
     override val file: VirtualFile,
-) : GenericBinaryProvider(file.toCommonByteBuffer()!!), BinaryVirtualFileProvider {
+    /** The bytes shown for [file]: all of it, or the head of a file too large to load. */
+    buffer: CommonByteBuffer = file.toCommonByteBuffer()!!,
+) : GenericBinaryProvider(buffer), BinaryVirtualFileProvider {
     override suspend fun createTextEditor(file: VirtualFile): TextEditor {
         throw UnsupportedOperationException("GenericBinaryVirtualFileProvider does not support text editors")
     }

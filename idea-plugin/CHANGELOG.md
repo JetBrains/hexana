@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Added
-- **GGUF and safetensors models.** llama.cpp GGUF files (recognized by content, so a GGUF named `.bin` opens too) get "Header" (architecture, name, quantization, parameter count, bytes per tensor type), "Metadata" (every key and value; arrays such as the tokenizer vocabulary expand into their elements) and "Tensors" (type, shape, size and offset; selecting a tensor selects its data). Hugging Face `.safetensors` files get "Header" (including `__metadata__`) and "Tensors". Both get a "Top" tab breaking the bytes down by layer and warn about layout problems such as tensors that run past the end of the file. Files over 2 GB still cannot be opened.
+- **GGUF and safetensors models.** llama.cpp GGUF files (recognized by content, so a GGUF named `.bin` opens too) get "Header" (architecture, name, quantization, parameter count, bytes per tensor type), "Metadata" (every key and value; arrays such as the tokenizer vocabulary expand into their elements) and "Tensors" (type, shape, size and offset; selecting a tensor selects its data). Hugging Face `.safetensors` files get "Header" (including `__metadata__`) and "Tensors". Both get a "Top" tab breaking the bytes down by layer and warn about layout problems such as tensors that run past the end of the file.
 - **Binary providers and tabs from JavaScript.** Scripts in `.hexana/providers/` can define named providers with `hexana.defineProvider` — a label, an optional built-in parser to build on, and a `parse(binary)` that reports regions for the hex view and the Structure view — and tabs with `hexana.defineTab` that attach to every file whose format or provider is listed in `appliesTo`. Providers appear under **Scripts** in the format badge's menu and can be assigned in `.hexana/file_associations.json` by their `user:` id. Scripts are reloaded when they change and only run in a trusted project. See the demo project in `examples/providers/`: open that folder and open `firmware-image.bin`. **Create New Provider Script…** in the same menu writes a runnable stub into `.hexana/providers/`, with the scripting type definitions beside it for completion, and assigns it to the open file.
 - **Choose the parser for a file.** Click the format badge at the top of the editor to open a file with any of Hexana's parsers instead of the detected one, or as a generic binary with no parsing. The choice is saved per file in `.hexana/file_associations.json` (with a JSON schema next to it for hand-editing), shared with the VS Code extension, listed under **Settings | Tools | Hexana | File Parser Associations**, and followed live: editing the file or checking out a different version reopens the affected editors. A parser that cannot read the file falls back to detection, and the badge says so.
 
@@ -14,6 +14,7 @@
 ### Removed
 
 ### Fixed
+- **Files over 2 GB open instead of failing.** Hexana loads the first 2 GB, shows the file's real size in the editor header with a notice above it, and makes the view read-only, since overwriting the file from it would truncate it. GGUF and safetensors models still list every tensor with its true offset and size; other formats show what lies in the loaded part. Comparing a file over 2 GB says why it cannot be compared instead of staying on "Comparing…".
 
 ### Security
 

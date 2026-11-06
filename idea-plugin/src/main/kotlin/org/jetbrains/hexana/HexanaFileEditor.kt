@@ -324,6 +324,14 @@ class HexanaFileEditor(
 
     var binaryProvider: BinaryProvider? = null
 
+    /**
+     * Size of the file on disk when it is larger than the editor could load
+     * ([MAX_BINARY_WINDOW_BYTES]) and only its head is shown; `null` when the whole file is loaded.
+     * A partial view is read-only: writing the buffer back would truncate the file.
+     */
+    var partialFileSize: Long? = null
+        private set
+
     fun initPanel() {
         // A diff compares two binaries; it has no single-file hex/edit surface, so it
         // short-circuits the normal binary-editor wiring.
@@ -338,7 +346,10 @@ class HexanaFileEditor(
             stateHolder.displayBaseOffset = myFile.getUserData(HexanaBinaryVirtualFile.BASE_OFFSET_KEY) ?: 0
             inMemoryBuffer
         } else {
-            file.toCommonByteBuffer() ?: return
+            // A file over the window limit opens as its head; see [partialFileSize].
+            val window = file.toBinaryWindow() ?: return
+            if (window.isPartial) partialFileSize = window.fileSize
+            window.buffer
         }
 
         val ext = myFile.extension?.lowercase()
@@ -524,6 +535,7 @@ class HexanaFileEditor(
                     currentProvider, stateHolder, hexFocusRequester,
                     fileName = myFile.name,
                     filePath = binarySourcePath,
+                    partialFileSize = partialFileSize,
                     parserChoice = parserChoiceState.value,
                     scriptTabs = scriptBindingsState.value.tabs,
                     scriptStructureRanges = scriptBindingsState.value.overlay?.ranges.orEmpty(),
@@ -942,7 +954,7 @@ class HexanaFileEditor(
         val override = overrideParser()
         val overrideKind = override?.providerKindOrNull()
         if (override != null && overrideKind == null) {
-            val forced = createBinaryProvider(override, commonBuffer, sourcePath)
+            val forced = createBinaryProvider(override, commonBuffer, sourcePath, fileSizeFor(inMemoryBuffer))
             if (forced != null) return withVirtualFile(forced, inMemoryBuffer)
             val scripted = scriptedProvider
             parserOverrideFailure = if (scripted != null) {
@@ -953,6 +965,14 @@ class HexanaFileEditor(
         }
 
         val kind = overrideKind ?: resolveIdeBinaryProviderKind(commonBuffer, fileName, myFile.fileType)
+
+        // The VirtualFile-backed Wasm providers below map the whole file again, which a file
+        // too large to load cannot be; a partial view gets the plain providers over its head.
+        if (partialFileSize != null && inMemoryBuffer == null &&
+            (kind == BinaryProviderKind.Wasm || kind == BinaryProviderKind.WasmComponent)
+        ) {
+            return createBinaryProvider(kind, commonBuffer, sourcePath)
+        }
 
         return when (kind) {
             BinaryProviderKind.Wasm -> {
@@ -1030,7 +1050,7 @@ class HexanaFileEditor(
                 }.also { initSourceLocationProvider(ref, null) }
             }
 
-            else -> withVirtualFile(createBinaryProvider(kind, commonBuffer, sourcePath), inMemoryBuffer)
+            else -> withVirtualFile(createBinaryProvider(kind, commonBuffer, sourcePath, fileSizeFor(inMemoryBuffer)), inMemoryBuffer)
         }
     }
 
@@ -1043,10 +1063,17 @@ class HexanaFileEditor(
      */
     private fun withVirtualFile(provider: BinaryProvider, inMemoryBuffer: CommonByteBuffer?): BinaryProvider =
         if (inMemoryBuffer == null && provider.javaClass == GenericBinaryProvider::class.java) {
-            GenericBinaryVirtualFileProvider(myFile)
+            GenericBinaryVirtualFileProvider(myFile, provider.bytes)
         } else {
             provider
         }
+
+    /**
+     * The real file size to hand the factory: only for the bytes of the file itself, never for
+     * an inflated `.gz` payload or an in-memory entry, which are complete in their own right.
+     */
+    private fun fileSizeFor(inMemoryBuffer: CommonByteBuffer?): Long? =
+        if (inMemoryBuffer == null) partialFileSize else null
 
 
 

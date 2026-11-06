@@ -371,6 +371,8 @@ export function initAnalytics(storagePath: string, telemetryEnabled: boolean, ap
  * `new Int8Array(buf.buffer, buf.byteOffset, buf.byteLength)`).
  */
 export function captureBinaryOpened(fileName: string, bytes: Int8Array): void;
+/** `captureBinaryOpened` for a file loaded only up to `bytes`; `fileSize` is its size on disk. */
+export function captureBinaryOpenedOfSize(fileName: string, bytes: Int8Array, fileSize: number): void;
 
 /** Captures a `wasm_file_parsed` event. */
 export function captureWasmFileParsed(

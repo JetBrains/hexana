@@ -37,6 +37,8 @@ fun BinaryEditorApp() {
     var pickedKeyLogContent by remember { mutableStateOf("") }
     var showSemanticHighlighting by remember { mutableStateOf(true) }
     var isDecompressed by remember { mutableStateOf(false) }
+    // Size on disk when the host loaded only the head of the file; see `hexana.maxLoadedFileSizeMB`.
+    var partialFileSize by remember { mutableStateOf<Long?>(null) }
     var canRunApk by remember { mutableStateOf(false) }
     var featureCatalogJson by remember { mutableStateOf("") }
     var runtimeTargetsJson by remember { mutableStateOf("") }
@@ -71,6 +73,7 @@ fun BinaryEditorApp() {
                     parentFileName = message.parentFileName
                     configuredRuntimeId = message.wasmRuntime
                     isDecompressed = message.decompressed
+                    partialFileSize = message.fileSize
                     canRunApk = message.canRunApk
                     message.showSemanticHighlighting?.let { showSemanticHighlighting = it }
                     // Pushed with the payload so the badges have their verdicts on first paint.
@@ -255,10 +258,10 @@ fun BinaryEditorApp() {
                 null -> null
             }
             val forcedProvider = remember(bytes, filePath, overrideParser) {
-                overrideParser?.let { createBinaryProvider(it, buffer, sourcePath = filePath) }
+                overrideParser?.let { createBinaryProvider(it, buffer, sourcePath = filePath, fileSize = partialFileSize) }
             }
             val provider = remember(bytes, filePath, fileName, forcedProvider) {
-                forcedProvider ?: createBinaryProvider(buffer, sourcePath = filePath, fileName = fileName)
+                forcedProvider ?: createBinaryProvider(buffer, sourcePath = filePath, fileName = fileName, fileSize = partialFileSize)
             }
             val overrideFailure = when {
                 chosenParser is ParserRef.Scripted && scripted == null ->
@@ -353,6 +356,7 @@ fun BinaryEditorApp() {
                 parentFileName = parentFileName,
                 provider = shownProvider,
                 isDecompressed = isDecompressed,
+                partialFileSize = partialFileSize,
                 extraTabs = extraTabs,
                 capabilities = capabilities,
                 scriptTabs = scriptTabs,
