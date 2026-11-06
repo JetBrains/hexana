@@ -63,7 +63,8 @@ private fun ApkClassesTab(
         if (classes != null) return@LaunchedEffect
         classes = withContext(Dispatchers.IO) {
             try {
-                val archive = provider.bytes
+                // The whole archive: an APK's DEX entries are read where they are.
+                val archive = provider.source
                 Result.success(
                     collectApkDexClasses(
                         provider,

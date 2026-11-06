@@ -8,14 +8,15 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 class HexanaBinaryVirtualFile(
     name: String,
     val buffer: CommonByteBuffer,
-    val baseOffset: Int = 0,
+    /** Offset of this content within [parentFile]; 64-bit, as an archive entry can sit past 2 GiB. */
+    val baseOffset: Long = 0,
     val parentFile: VirtualFile? = null,
     entryPath: String? = null,
 ) : LightVirtualFile(name) {
 
     companion object {
         val BUFFER_KEY = Key.create<CommonByteBuffer>("hexana.in_memory_buffer")
-        val BASE_OFFSET_KEY = Key.create<Int>("hexana.base_offset")
+        val BASE_OFFSET_KEY = Key.create<Long>("hexana.base_offset")
         val PARENT_FILE_KEY = Key.create<VirtualFile>("hexana.parent_file")
 
         /**

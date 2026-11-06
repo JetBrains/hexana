@@ -811,7 +811,7 @@ private fun enrichFatMachOUniversalTab(
             val virtualFile = HexanaBinaryVirtualFile(
                 name = fileName,
                 buffer = buffer,
-                baseOffset = range.offset,
+                baseOffset = range.start,
                 parentFile = parentFile,
             )
             FileEditorManager.getInstance(project).openFile(virtualFile, true)

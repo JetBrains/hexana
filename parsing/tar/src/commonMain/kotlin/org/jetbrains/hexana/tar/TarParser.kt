@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.tar
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.LargeBytes
+import org.jetbrains.hexana.io.asLargeBytes
 
 /**
  * Parses TAR archives. Returns the entry list in archive order.
@@ -8,8 +10,8 @@ import org.jetbrains.hexana.io.CommonByteBuffer
  * Supports classic V7, POSIX ustar, and GNU tar extensions for long
  * file names (typeflag 'L') and long link names (typeflag 'K').
  *
- * The parser operates on a [CommonByteBuffer] which should contain the
- * uncompressed tar stream (for `.tar.gz` files, decompress with gzip first).
+ * The parser reads [LargeBytes] with 64-bit offsets, so an archive past 2 GiB is listed whole; it
+ * should contain the uncompressed tar stream (for `.tar.gz` files, decompress with gzip first).
  */
 object TarParser {
     private const val BLOCK_SIZE = 512
@@ -30,8 +32,13 @@ object TarParser {
     private const val PREFIX_OFFSET = 345
     private const val PREFIX_LENGTH = 155
 
-    fun parse(buffer: CommonByteBuffer): List<TarEntry> {
-        val totalSize = buffer.size.toLong()
+    /** Longest GNU long-name record read; real ones are a few hundred bytes. */
+    private const val MAX_LONG_NAME = 1L shl 20
+
+    fun parse(buffer: CommonByteBuffer): List<TarEntry> = parse(buffer.asLargeBytes())
+
+    fun parse(buffer: LargeBytes): List<TarEntry> {
+        val totalSize = buffer.size
         if (totalSize < BLOCK_SIZE) return emptyList()
 
         val entries = ArrayList<TarEntry>()
@@ -46,7 +53,7 @@ object TarParser {
             // Validate checksum.
             if (!verifyChecksum(buffer, pos)) break
 
-            val typeFlag = (buffer[(pos + TYPEFLAG_OFFSET).toInt()].toInt() and 0xFF).toChar()
+            val typeFlag = (buffer[pos + TYPEFLAG_OFFSET].toInt() and 0xFF).toChar()
             val rawSize = readOctal(buffer, pos + SIZE_OFFSET, SIZE_LENGTH)
             val dataOffset = pos + BLOCK_SIZE
             val dataBlocks = (rawSize + BLOCK_SIZE - 1) / BLOCK_SIZE
@@ -54,12 +61,14 @@ object TarParser {
             when (typeFlag) {
                 'L' -> {
                     // GNU long name: data contains the real file name.
+                    if (rawSize !in 0..MAX_LONG_NAME || dataOffset + rawSize > totalSize) break
                     pendingLongName = readString(buffer, dataOffset, rawSize.toInt()).trimEnd('\u0000')
                     pos = dataOffset + dataBlocks * BLOCK_SIZE
                     continue
                 }
                 'K' -> {
                     // GNU long link name: data contains the real link target.
+                    if (rawSize !in 0..MAX_LONG_NAME || dataOffset + rawSize > totalSize) break
                     pendingLongLink = readString(buffer, dataOffset, rawSize.toInt()).trimEnd('\u0000')
                     pos = dataOffset + dataBlocks * BLOCK_SIZE
                     continue
@@ -94,7 +103,9 @@ object TarParser {
      * Checks for "ustar" magic at offset 257 in the first header block.
      * Also accepts V7 tar files by verifying the checksum of the first block.
      */
-    fun isTar(buffer: CommonByteBuffer): Boolean {
+    fun isTar(buffer: CommonByteBuffer): Boolean = isTar(buffer.asLargeBytes())
+
+    fun isTar(buffer: LargeBytes): Boolean {
         if (buffer.size < BLOCK_SIZE) return false
         // Check ustar magic.
         if (hasUstarMagic(buffer, 0)) return true
@@ -102,31 +113,31 @@ object TarParser {
         return verifyChecksum(buffer, 0)
     }
 
-    private fun hasUstarMagic(buffer: CommonByteBuffer, blockOffset: Long): Boolean {
-        val m0 = buffer[(blockOffset + MAGIC_OFFSET).toInt()].toInt() and 0xFF
-        val m1 = buffer[(blockOffset + MAGIC_OFFSET + 1).toInt()].toInt() and 0xFF
-        val m2 = buffer[(blockOffset + MAGIC_OFFSET + 2).toInt()].toInt() and 0xFF
-        val m3 = buffer[(blockOffset + MAGIC_OFFSET + 3).toInt()].toInt() and 0xFF
-        val m4 = buffer[(blockOffset + MAGIC_OFFSET + 4).toInt()].toInt() and 0xFF
+    private fun hasUstarMagic(buffer: LargeBytes, blockOffset: Long): Boolean {
+        val m0 = buffer[blockOffset + MAGIC_OFFSET].toInt() and 0xFF
+        val m1 = buffer[blockOffset + MAGIC_OFFSET + 1].toInt() and 0xFF
+        val m2 = buffer[blockOffset + MAGIC_OFFSET + 2].toInt() and 0xFF
+        val m3 = buffer[blockOffset + MAGIC_OFFSET + 3].toInt() and 0xFF
+        val m4 = buffer[blockOffset + MAGIC_OFFSET + 4].toInt() and 0xFF
         return m0 == 'u'.code && m1 == 's'.code && m2 == 't'.code && m3 == 'a'.code && m4 == 'r'.code
     }
 
-    private fun isZeroBlock(buffer: CommonByteBuffer, offset: Long): Boolean {
-        val end = (offset + BLOCK_SIZE).coerceAtMost(buffer.size.toLong())
+    private fun isZeroBlock(buffer: LargeBytes, offset: Long): Boolean {
+        val end = (offset + BLOCK_SIZE).coerceAtMost(buffer.size)
         for (i in offset until end) {
-            if (buffer[i.toInt()] != 0.toByte()) return false
+            if (buffer[i] != 0.toByte()) return false
         }
         return true
     }
 
-    private fun verifyChecksum(buffer: CommonByteBuffer, blockOffset: Long): Boolean {
+    private fun verifyChecksum(buffer: LargeBytes, blockOffset: Long): Boolean {
         val stored = readOctal(buffer, blockOffset + CHECKSUM_OFFSET, CHECKSUM_LENGTH)
         var unsigned = 0L
         for (i in 0 until BLOCK_SIZE) {
             val b = if (i in CHECKSUM_OFFSET until CHECKSUM_OFFSET + CHECKSUM_LENGTH) {
                 ' '.code.toLong()
             } else {
-                buffer[(blockOffset + i).toInt()].toLong() and 0xFFL
+                buffer[blockOffset + i].toLong() and 0xFFL
             }
             unsigned += b
         }
@@ -136,7 +147,7 @@ object TarParser {
             val b = if (i in CHECKSUM_OFFSET until CHECKSUM_OFFSET + CHECKSUM_LENGTH) {
                 ' '.code.toLong()
             } else {
-                buffer[(blockOffset + i).toInt()].toLong() // signed
+                buffer[blockOffset + i].toLong() // signed
             }
             signed += b
         }
@@ -147,28 +158,28 @@ object TarParser {
      * Reads the entry name, combining the ustar prefix field with the name field
      * when the prefix is non-empty.
      */
-    private fun readEntryName(buffer: CommonByteBuffer, blockOffset: Long): String {
+    private fun readEntryName(buffer: LargeBytes, blockOffset: Long): String {
         val name = readNullTerminated(buffer, blockOffset + NAME_OFFSET, NAME_LENGTH)
         if (!hasUstarMagic(buffer, blockOffset)) return name
         val prefix = readNullTerminated(buffer, blockOffset + PREFIX_OFFSET, PREFIX_LENGTH)
         return if (prefix.isNotEmpty()) "$prefix/$name" else name
     }
 
-    private fun readNullTerminated(buffer: CommonByteBuffer, offset: Long, maxLen: Int): String {
+    private fun readNullTerminated(buffer: LargeBytes, offset: Long, maxLen: Int): String {
         val bytes = ByteArray(maxLen)
         var len = 0
         for (i in 0 until maxLen) {
-            val b = buffer[(offset + i).toInt()]
+            val b = buffer[offset + i]
             if (b == 0.toByte()) break
             bytes[len++] = b
         }
         return bytes.decodeToString(0, len)
     }
 
-    private fun readString(buffer: CommonByteBuffer, offset: Long, length: Int): String {
+    private fun readString(buffer: LargeBytes, offset: Long, length: Int): String {
         val bytes = ByteArray(length)
         for (i in 0 until length) {
-            bytes[i] = buffer[(offset + i).toInt()]
+            bytes[i] = buffer[offset + i]
         }
         return bytes.decodeToString()
     }
@@ -178,19 +189,19 @@ object TarParser {
      * and space-terminated fields. Also handles GNU binary size encoding
      * (high bit set in the first byte).
      */
-    private fun readOctal(buffer: CommonByteBuffer, offset: Long, length: Int): Long {
-        val firstByte = buffer[offset.toInt()].toInt() and 0xFF
+    private fun readOctal(buffer: LargeBytes, offset: Long, length: Int): Long {
+        val firstByte = buffer[offset].toInt() and 0xFF
         // GNU binary encoding: high bit set.
         if (firstByte and 0x80 != 0) {
             var value = 0L
             for (i in 1 until length) {
-                value = (value shl 8) or (buffer[(offset + i).toInt()].toLong() and 0xFFL)
+                value = (value shl 8) or (buffer[offset + i].toLong() and 0xFFL)
             }
             return value
         }
         var result = 0L
         for (i in 0 until length) {
-            val b = buffer[(offset + i).toInt()].toInt() and 0xFF
+            val b = buffer[offset + i].toInt() and 0xFF
             if (b == 0 || b == ' '.code) {
                 if (result > 0 || i > 0) break // stop at first null/space after digits
                 continue // skip leading spaces

@@ -175,8 +175,17 @@ internal fun structureRangeOrNull(
     label: String,
     fileSize: Int,
     tabName: String? = null,
+): StructureRange? = structureRangeOrNull(offset, size, label, fileSize.toLong(), tabName)
+
+/** [structureRangeOrNull] for a file of any size. */
+internal fun structureRangeOrNull(
+    offset: Long,
+    size: Long,
+    label: String,
+    fileSize: Long,
+    tabName: String? = null,
 ): StructureRange? {
-    if (size <= 0L || offset < 0L || offset > fileSize.toLong() - size) return null
+    if (size <= 0L || offset < 0L || offset > fileSize - size) return null
     return StructureRange(offset = offset, size = size, label = label, tabName = tabName)
 }
 
@@ -221,13 +230,22 @@ open class GenericBinaryProvider(private val sharedBytes: CommonByteBuffer) : Bi
  * Lazily parses the central directory once and caches the entry list so that
  * table-tab providers and enrichers can reuse it without re-parsing.
  */
-class ZipBinaryProvider(private val sharedBytes: CommonByteBuffer) : BinaryProvider {
+class ZipBinaryProvider(
+    private val sharedBytes: CommonByteBuffer,
+    /**
+     * The whole archive. Larger than [sharedBytes] for an archive past 2 GiB, whose central
+     * directory sits at its end; entries are listed from this and extracted from it.
+     */
+    val source: LargeBytes = sharedBytes.asLargeBytes(),
+) : BinaryProvider {
     override val bytes: CommonByteBuffer get() = sharedBytes.duplicate()
+
+    override val fileSize: Long get() = source.size
 
     /** All entries from the ZIP central directory, or empty on parse failure. */
     val zipEntries: List<ZipEntry> by lazy {
         try {
-            ZipParser.parse(sharedBytes.duplicate().position(0))
+            ZipParser.parse(source)
         } catch (_: Throwable) {
             emptyList()
         }
@@ -243,7 +261,7 @@ class ZipBinaryProvider(private val sharedBytes: CommonByteBuffer) : BinaryProvi
      * that follow it, so the record shows up in the hex view as a single region.
      */
     override val structureRanges: List<StructureRange> by lazy {
-        val total = bytes.size
+        val total = source.size
         zipEntries.mapNotNull { entry ->
             structureRangeOrNull(
                 offset = entry.localHeaderOffset,
@@ -273,13 +291,19 @@ class ZipBinaryProvider(private val sharedBytes: CommonByteBuffer) : BinaryProvi
  * Lazily parses the tar header chain once and caches the entry list so that
  * table-tab providers and enrichers can reuse it without re-parsing.
  */
-class TarBinaryProvider(private val sharedBytes: CommonByteBuffer) : BinaryProvider {
+class TarBinaryProvider(
+    private val sharedBytes: CommonByteBuffer,
+    /** The whole archive; larger than [sharedBytes] past 2 GiB. Entries are listed and extracted from it. */
+    val source: LargeBytes = sharedBytes.asLargeBytes(),
+) : BinaryProvider {
     override val bytes: CommonByteBuffer get() = sharedBytes.duplicate()
+
+    override val fileSize: Long get() = source.size
 
     /** All entries from the TAR archive, or empty on parse failure. */
     val tarEntries: List<TarEntry> by lazy {
         try {
-            TarParser.parse(sharedBytes.duplicate().position(0))
+            TarParser.parse(source)
         } catch (_: Throwable) {
             emptyList()
         }
@@ -298,7 +322,7 @@ class TarBinaryProvider(private val sharedBytes: CommonByteBuffer) : BinaryProvi
      * out; it belongs to no entry and is zero-filled.
      */
     override val structureRanges: List<StructureRange> by lazy {
-        val total = bytes.size
+        val total = source.size
         tarEntries.mapNotNull { entry ->
             structureRangeOrNull(
                 offset = entry.dataOffset - TAR_BLOCK_SIZE,
@@ -1010,8 +1034,8 @@ fun nativeOrGenericBinaryProvider(
 ): BinaryProvider {
     val totalSize = source?.size ?: fileSize ?: sharedBytes.size.toLong()
     return when {
-        ZipBinaryProvider.isZip(sharedBytes) -> ZipBinaryProvider(sharedBytes)
-        TarBinaryProvider.isTar(sharedBytes) -> TarBinaryProvider(sharedBytes)
+        ZipBinaryProvider.isZip(sharedBytes) -> ZipBinaryProvider(sharedBytes, source ?: sharedBytes.asLargeBytes())
+        TarBinaryProvider.isTar(sharedBytes) -> TarBinaryProvider(sharedBytes, source ?: sharedBytes.asLargeBytes())
         ClassFileBinaryProvider.isClassFile(sharedBytes) -> ClassFileBinaryProvider(sharedBytes.duplicate().position(0))
         DexBinaryProvider.isDexFile(sharedBytes) -> DexBinaryProvider(sharedBytes.duplicate().position(0))
         ArscBinaryProvider.isArscFile(sharedBytes) -> ArscBinaryProvider(sharedBytes.duplicate().position(0))

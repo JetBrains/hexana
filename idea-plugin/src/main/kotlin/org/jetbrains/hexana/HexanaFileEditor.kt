@@ -62,6 +62,9 @@ import org.jetbrains.hexana.ui.panel.GutterMarksModel
 import org.jetbrains.annotations.Nls
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.LargeBytes
+import org.jetbrains.hexana.io.readBytes
+import org.jetbrains.hexana.io.containsRange
+import org.jetbrains.hexana.io.asLargeBytes
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.sourcemap.parseSourceMap
@@ -351,7 +354,7 @@ class HexanaFileEditor(
 
         val inMemoryBuffer = myFile.getUserData(HexanaBinaryVirtualFile.BUFFER_KEY)
         val commonBuffer = if (inMemoryBuffer != null) {
-            stateHolder.displayBaseOffset = myFile.getUserData(HexanaBinaryVirtualFile.BASE_OFFSET_KEY)?.toLong() ?: 0L
+            stateHolder.displayBaseOffset = myFile.getUserData(HexanaBinaryVirtualFile.BASE_OFFSET_KEY) ?: 0L
             inMemoryBuffer
         } else {
             // A file over the window limit opens as its head; see [partialFileSize].
@@ -562,13 +565,13 @@ class HexanaFileEditor(
                     wasmTypeInfoNavFlow = wasmTypeInfoNavFlow,
                     wasmUiProbeSink = wasmUiProbeSink,
                     classFileNavTargetFlow = classFileNavTargetFlow,
-                    onOpenZipEntry = { entry -> openZipEntry(entry, commonBuffer) },
+                    onOpenZipEntry = { entry -> openZipEntry(entry, archiveBytes(commonBuffer)) },
                     onRevealApkDexClass = { entry, classDefIndex ->
-                        revealDexClassInZipEntry(entry, classDefIndex, commonBuffer)
+                        revealDexClassInZipEntry(entry, classDefIndex, archiveBytes(commonBuffer))
                     },
                     onOpenTarEntry = { entry ->
-                        val tarBuffer = (binaryProvider as? TarBinaryProvider)?.bytes ?: commonBuffer
-                        openTarEntry(entry, tarBuffer)
+                        val tarBytes = (binaryProvider as? TarBinaryProvider)?.source ?: archiveBytes(commonBuffer)
+                        openTarEntry(entry, tarBytes)
                     },
                     decompiledContentPanelFlow = decompPanelFlow,
                     gutterMarksModelFlow = editor.gutterMarksModelFlow,
@@ -1090,6 +1093,12 @@ class HexanaFileEditor(
     private fun fileSizeFor(inMemoryBuffer: CommonByteBuffer?): Long? =
         if (inMemoryBuffer == null) partialFileSize else null
 
+    /**
+     * The archive entries are read from: the whole mapped file for an archive past 2 GiB (its
+     * entries can lie beyond the head), else [buffer], which may be an inflated `.gz`.
+     */
+    private fun archiveBytes(buffer: CommonByteBuffer): LargeBytes = fileSource ?: buffer.asLargeBytes()
+
     /** The whole mapped file for the factory, on the same terms as [fileSizeFor]. */
     private fun sourceFor(inMemoryBuffer: CommonByteBuffer?): LargeBytes? =
         if (inMemoryBuffer == null) fileSource else null
@@ -1316,7 +1325,7 @@ class HexanaFileEditor(
     private fun revealDexClassInZipEntry(
         entry: org.jetbrains.hexana.zip.ZipEntry,
         classDefIndex: Int,
-        parentBuffer: CommonByteBuffer,
+        parentBuffer: LargeBytes,
     ) {
         openZipEntry(entry, parentBuffer) { editors ->
             editors.firstNotNullOfOrNull { it as? HexanaFileEditor }
@@ -1340,7 +1349,7 @@ class HexanaFileEditor(
      */
     private fun openZipEntry(
         entry: org.jetbrains.hexana.zip.ZipEntry,
-        parentBuffer: CommonByteBuffer,
+        parentBuffer: LargeBytes,
         onOpened: (List<FileEditor>) -> Unit = {},
     ) {
         val childName = entry.name.substringAfterLast('/').ifEmpty { entry.name }
@@ -1358,7 +1367,7 @@ class HexanaFileEditor(
                 val childFile = findOpenZipEntryFile(entry.name) ?: HexanaBinaryVirtualFile(
                     name = childName,
                     buffer = bytes.toCommonByteBuffer(),
-                    baseOffset = entry.dataOffset.toInt(),
+                    baseOffset = entry.dataOffset,
                     parentFile = myFile,
                     entryPath = entry.name,
                 )
@@ -1387,7 +1396,7 @@ class HexanaFileEditor(
     /** Inflates [entry] in the editor scope, off the EDT, then hands its bytes to [open] on the EDT. */
     private fun inflateZipEntryThenOnEdt(
         entry: org.jetbrains.hexana.zip.ZipEntry,
-        parentBuffer: CommonByteBuffer,
+        parentBuffer: LargeBytes,
         open: (ByteArray) -> Unit,
     ) {
         editorScope.launch {
@@ -1404,7 +1413,7 @@ class HexanaFileEditor(
 
     private fun openTarEntry(
         entry: org.jetbrains.hexana.tar.TarEntry,
-        parentBuffer: CommonByteBuffer,
+        parentBuffer: LargeBytes,
     ) {
         val childName = entry.name.substringAfterLast('/').ifEmpty { entry.name }
         val bytes = extractTarEntry(entry, parentBuffer) ?: return
@@ -1413,7 +1422,7 @@ class HexanaFileEditor(
             val childFile = HexanaBinaryVirtualFile(
                 name = childName,
                 buffer = bytes.toCommonByteBuffer(),
-                baseOffset = entry.dataOffset.toInt(),
+                baseOffset = entry.dataOffset,
                 parentFile = myFile,
             )
             FileEditorManager.getInstance(myProject).openFile(childFile, true)
@@ -1505,19 +1514,28 @@ private fun isUnsupportedByIntelliJ(fileName: String): Boolean {
 internal fun decompressZipEntry(
     entry: org.jetbrains.hexana.zip.ZipEntry,
     parentBuffer: CommonByteBuffer,
+): ByteArray? = decompressZipEntry(entry, parentBuffer.asLargeBytes())
+
+/**
+ * [decompressZipEntry] from the whole archive, which may be larger than 2 GiB. `null` as well
+ * for an entry whose data lies outside [parentBuffer] or does not fit an array.
+ */
+internal fun decompressZipEntry(
+    entry: org.jetbrains.hexana.zip.ZipEntry,
+    parentBuffer: LargeBytes,
 ): ByteArray? {
-    val dataStart = entry.dataOffset.toInt()
+    val dataStart = entry.dataOffset
+    if (entry.compressedSize > Int.MAX_VALUE || entry.uncompressedSize > Int.MAX_VALUE) return null
+    if (!parentBuffer.containsRange(dataStart, entry.compressedSize)) return null
     return when (entry.compressionMethod) {
         0 -> {
             // Stored: direct slice of the parent buffer.
-            val length = entry.uncompressedSize.toInt()
-            ByteArray(length).also { for (i in 0 until length) it[i] = parentBuffer[dataStart + i] }
+            if (!parentBuffer.containsRange(dataStart, entry.uncompressedSize)) return null
+            parentBuffer.readBytes(dataStart, entry.uncompressedSize.toInt())
         }
         8 -> {
             try {
-                val compressed = ByteArray(entry.compressedSize.toInt()).also {
-                    for (i in 0 until it.size) it[i] = parentBuffer[dataStart + i]
-                }
+                val compressed = parentBuffer.readBytes(dataStart, entry.compressedSize.toInt())
                 val inflater = java.util.zip.Inflater(/* nowrap = */ true)
                 inflater.setInput(compressed)
                 val out = ByteArray(entry.uncompressedSize.toInt())
@@ -1544,11 +1562,13 @@ internal fun decompressZipEntry(
  */
 private fun extractTarEntry(
     entry: org.jetbrains.hexana.tar.TarEntry,
-    parentBuffer: CommonByteBuffer,
+    parentBuffer: LargeBytes,
 ): ByteArray? = try {
-    val dataStart = entry.dataOffset.toInt()
-    val length = entry.size.toInt()
-    ByteArray(length).also { for (i in 0 until length) it[i] = parentBuffer[dataStart + i] }
+    if (entry.size > Int.MAX_VALUE || !parentBuffer.containsRange(entry.dataOffset, entry.size)) {
+        null
+    } else {
+        parentBuffer.readBytes(entry.dataOffset, entry.size.toInt())
+    }
 } catch (t: Throwable) {
     HexanaLog.LOG.warn("Failed to extract tar entry ${entry.name}", t)
     null

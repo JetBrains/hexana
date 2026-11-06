@@ -51,10 +51,12 @@ internal fun openNestedComponentBinary(
         )
         return
     }
-    val fileBase = file.getUserData(HexanaBinaryVirtualFile.BASE_OFFSET_KEY) ?: 0
+    val fileBase = file.getUserData(HexanaBinaryVirtualFile.BASE_OFFSET_KEY) ?: 0L
     val absoluteOffset = fileBase + contentOffset
     val infix = if (isComponent) "_component_" else "_"
-    val fileName = "${file.nameWithoutExtension}$infix$index@${absoluteOffset.toHexString()}.${file.extension}"
+    // Eight hex digits as before for offsets that fit an Int, so existing tab names stay stable.
+    val offsetText = if (absoluteOffset <= Int.MAX_VALUE) absoluteOffset.toInt().toHexString() else absoluteOffset.toHexString()
+    val fileName = "${file.nameWithoutExtension}$infix$index@$offsetText.${file.extension}"
     val virtualFile = HexanaBinaryVirtualFile(fileName, buffer, baseOffset = absoluteOffset, parentFile = file)
     FileEditorManager.getInstance(project).openFile(virtualFile, true)
 }

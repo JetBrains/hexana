@@ -132,8 +132,8 @@ fun createBinaryProvider(
             } else {
                 null
             }
-            BinaryParser.ZIP -> ZipBinaryProvider(shared)
-            BinaryParser.TAR -> TarBinaryProvider(shared)
+            BinaryParser.ZIP -> ZipBinaryProvider(shared, source ?: shared.asLargeBytes())
+            BinaryParser.TAR -> TarBinaryProvider(shared, source ?: shared.asLargeBytes())
             BinaryParser.JAVA_CLASS -> ClassFileBinaryProvider(shared)
             BinaryParser.DEX -> DexBinaryProvider(shared)
             BinaryParser.ARSC -> ArscBinaryProvider(shared)

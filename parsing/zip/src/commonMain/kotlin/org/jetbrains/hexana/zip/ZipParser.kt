@@ -1,6 +1,9 @@
 package org.jetbrains.hexana.zip
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.LargeBytes
+import org.jetbrains.hexana.io.asLargeBytes
+import org.jetbrains.hexana.io.readBytes
 
 /**
  * Parses ZIP central directories. Returns the entry list in directory order.
@@ -45,7 +48,13 @@ object ZipParser {
     private const val ZIP64_EOCD_LOCATOR_SIZE = 20
     private const val ZIP64_EOCD_FIXED_SIZE = 56 // minimum fixed part
 
-    fun parse(buffer: CommonByteBuffer): List<ZipEntry> {
+    fun parse(buffer: CommonByteBuffer): List<ZipEntry> = parse(buffer.asLargeBytes())
+
+    /**
+     * Parses the central directory of [buffer], which may be larger than 2 GiB: the directory of
+     * a ZIP64 archive sits at its end, and entry offsets are 64-bit.
+     */
+    fun parse(buffer: LargeBytes): List<ZipEntry> {
         val totalSize = buffer.size
         if (totalSize < EOCD_FIXED_SIZE) {
             error("ZIP too small ($totalSize bytes) to contain an End of Central Directory Record")
@@ -128,8 +137,8 @@ object ZipParser {
         return entries
     }
 
-    private fun findEocdOffset(buffer: CommonByteBuffer): Long? {
-        val size = buffer.size.toLong()
+    private fun findEocdOffset(buffer: LargeBytes): Long? {
+        val size = buffer.size
         val searchFrom = (size - EOCD_MAX_SEARCH_WINDOW).coerceAtLeast(0)
         var p = size - EOCD_FIXED_SIZE
         while (p >= searchFrom) {
@@ -150,7 +159,7 @@ object ZipParser {
         val cdOffset: Long,
     )
 
-    private fun findZip64Eocd(buffer: CommonByteBuffer, eocdOffset: Long): Zip64EocdInfo? {
+    private fun findZip64Eocd(buffer: LargeBytes, eocdOffset: Long): Zip64EocdInfo? {
         // The Zip64 EOCD Locator sits immediately before the classic EOCD.
         val locatorOffset = eocdOffset - ZIP64_EOCD_LOCATOR_SIZE
         if (locatorOffset < 0) return null
@@ -182,7 +191,7 @@ object ZipParser {
      * offset, disk start number.
      */
     private fun parseZip64ExtraField(
-        buffer: CommonByteBuffer,
+        buffer: LargeBytes,
         extraStart: Long,
         extraLen: Int,
         origUncompressed: Long,
@@ -215,7 +224,7 @@ object ZipParser {
         return null
     }
 
-    private fun computeLocalDataOffset(buffer: CommonByteBuffer, localHeaderOffset: Long): Long {
+    private fun computeLocalDataOffset(buffer: LargeBytes, localHeaderOffset: Long): Long {
         val signature = buffer.readU4LE(localHeaderOffset)
         require(signature.toInt() == LOCAL_HEADER_SIGNATURE) {
             "local file header at $localHeaderOffset has bad signature 0x${signature.toString(16)}"
@@ -227,41 +236,25 @@ object ZipParser {
 }
 
 // -----------------------------------------------------------------------------
-// Little-endian readers and bounded UTF-8 string reads on CommonByteBuffer
+// Little-endian readers and bounded UTF-8 string reads, at 64-bit offsets
 // -----------------------------------------------------------------------------
 
-private fun CommonByteBuffer.readU2LE(at: Long): Int {
-    val a = at.toInt()
-    return (this[a].toInt() and 0xFF) or ((this[a + 1].toInt() and 0xFF) shl 8)
+private fun LargeBytes.readU2LE(at: Long): Int =
+    (this[at].toInt() and 0xFF) or ((this[at + 1].toInt() and 0xFF) shl 8)
+
+private fun LargeBytes.readU4LE(at: Long): Long {
+    var value = 0L
+    for (i in 0 until 4) value = value or ((this[at + i].toLong() and 0xFFL) shl (8 * i))
+    return value
 }
 
-private fun CommonByteBuffer.readU4LE(at: Long): Long {
-    val a = at.toInt()
-    val b0 = this[a].toLong() and 0xFFL
-    val b1 = this[a + 1].toLong() and 0xFFL
-    val b2 = this[a + 2].toLong() and 0xFFL
-    val b3 = this[a + 3].toLong() and 0xFFL
-    return b0 or (b1 shl 8) or (b2 shl 16) or (b3 shl 24)
+private fun LargeBytes.readU8LE(at: Long): Long {
+    var value = 0L
+    for (i in 0 until 8) value = value or ((this[at + i].toLong() and 0xFFL) shl (8 * i))
+    return value
 }
 
-private fun CommonByteBuffer.readU8LE(at: Long): Long {
-    val a = at.toInt()
-    val b0 = this[a].toLong() and 0xFFL
-    val b1 = this[a + 1].toLong() and 0xFFL
-    val b2 = this[a + 2].toLong() and 0xFFL
-    val b3 = this[a + 3].toLong() and 0xFFL
-    val b4 = this[a + 4].toLong() and 0xFFL
-    val b5 = this[a + 5].toLong() and 0xFFL
-    val b6 = this[a + 6].toLong() and 0xFFL
-    val b7 = this[a + 7].toLong() and 0xFFL
-    return b0 or (b1 shl 8) or (b2 shl 16) or (b3 shl 24) or
-        (b4 shl 32) or (b5 shl 40) or (b6 shl 48) or (b7 shl 56)
-}
-
-private fun CommonByteBuffer.readUtf8(at: Long, offset: Int, length: Int): String {
+private fun LargeBytes.readUtf8(at: Long, offset: Int, length: Int): String {
     if (length <= 0) return ""
-    val start = at.toInt() + offset
-    val bytes = ByteArray(length)
-    for (i in 0 until length) bytes[i] = this[start + i]
-    return bytes.decodeToString()
+    return readBytes(at + offset, length).decodeToString()
 }
