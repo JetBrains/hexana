@@ -52,15 +52,10 @@ private fun SizeNodeTable(root: BinarySizeNode, selection: HexSelectionState) {
 
             PanelTableRow(
                 isHighlighted = selection.hasSelection &&
-                    selection.selectionStart == child.offset &&
-                    selection.selectionEnd == child.offset + child.size - 1,
+                    selection.selectionStart == child.offset.toLong() &&
+                    selection.selectionEnd == child.offset + child.size - 1L,
                 onClick = {
-                    if (child.size > 0) {
-                        selection.anchorIndex = child.offset
-                        selection.activeIndex = child.offset + child.size - 1
-                        selection.cursorIndex = child.offset
-                        scrollHexViewerTo(child.offset)
-                    }
+                    if (child.size > 0) selection.selectRange(child.offset, child.size)
                 },
             ) {
                 Td({ classes("cell-id") }) {

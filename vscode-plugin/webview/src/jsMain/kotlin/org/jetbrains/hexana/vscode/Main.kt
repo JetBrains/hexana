@@ -233,6 +233,9 @@ fun BinaryEditorApp() {
             // provider and drop everything installed on the old one.
             val buffer = remember(bytes) { bytes.toCommonByteBuffer() }
             buffer.position(0)
+            val pagedBytes = remember(buffer, partialFileSize) {
+                partialFileSize?.takeIf { it > buffer.size }?.let { size -> PagedHexBytes(buffer, size, ::readByteRangeFromHost) }
+            }
 
             // `fileName` rather than `filePath` drives the extension-based half of the
             // format decision: the host inflates a `.gz` before pushing it and reports
@@ -357,6 +360,10 @@ fun BinaryEditorApp() {
                 provider = shownProvider,
                 isDecompressed = isDecompressed,
                 partialFileSize = partialFileSize,
+                // The hex view covers the whole of a file the webview holds only the head of,
+                // fetching pages from the host as they scroll into view.
+                hexBytes = pagedBytes,
+                onSearchFile = if (pagedBytes != null) ::searchFileOnHost else null,
                 extraTabs = extraTabs,
                 capabilities = capabilities,
                 scriptTabs = scriptTabs,

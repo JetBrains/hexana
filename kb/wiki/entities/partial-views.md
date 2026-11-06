@@ -1,71 +1,108 @@
-# Partial views — opening files over the load limit
+# Large files — 64-bit addressing, partial parsing, paged hex views
 
-Since 2026-11-06 a file larger than a host can hold opens as a **partial view**: its head, read-only,
-with the real size shown. Before, IntelliJ threw from `FileChannel.map` (over `Int.MAX_VALUE`) and
-VS Code's `workspace.fs.readFile` rejected anything over 2 GiB — both left a broken editor.
+How Hexana handles files over 2 GiB (and, in VS Code, over `hexana.maxLoadedFileSizeMB`). History:
+before 2026-11-06 such files failed to open (`FileChannel.map` / `readFile` refuse > 2 GiB); on
+2026-11-06 a read-only head window shipped; later the same day this design replaced it (branch
+`user/large-files`): every host shows the **whole file** in the hex view, and the formats that
+matter at that size **parse the whole file** on the JVM. Large files stay **read-only** (user
+decision: editing them is a separate follow-up).
 
-## Why only the head
+## The split: `LargeBytes` vs `CommonByteBuffer`
 
-`CommonByteBuffer` and every parser and both hex viewers address bytes with `Int`. Making them
-`Long`-addressed (chunked mmap, ranged reads) touches almost every parser; the head-window design was
-chosen instead (user decision 2026-11-06). Consequence: formats whose tables sit at the end of the file
-(ZIP central directory, Parquet/Arrow footers, ELF section headers) show what the head contains, while
-head-described formats (GGUF, safetensors, tar listings up to the window, pcap packets in the window) work.
+`CommonByteBuffer` (encdec) stays `Int`-addressed — widening it would break ~250 files for formats
+that cannot exceed 2 GiB anyway (Wasm, DEX, class, protobuf, PE). Instead:
 
-## Pieces
+- `encdec/.../LargeBytes.kt` — `size: Long`, `get(Long)`, `read(Long, …)`, `window(offset: Long,
+  length: Int): CommonByteBuffer` (zero-copy where possible), `asCommonByteBufferOrNull()`,
+  `containsRange`, `readBytes`, `u16/u32/u64LeOrNull`; `CommonByteBuffer.asLargeBytes()`.
+  `LargeBytesSearch.kt` — chunked `indexOf` (forward/reverse) and `findAll(limit)`.
+- JVM `MappedFileBytes.open(path)` — lazily maps 1 GiB chunks that run 256 MiB into the next, so
+  windows up to 256 MiB are views; larger windows get their own mapping. Holds no file handle.
+- Decoders that are `Int`-bound keep working on a **window** of just their region.
 
-- `binaryProvider/.../LargeFiles.kt` — `MAX_BINARY_WINDOW_BYTES` = 2 GiB − 1 MiB (headroom so
-  `offset + size` near the end cannot overflow `Int`).
-- `BinaryProvider.fileSize` (default `bytes.size`) and a `fileSize: Long?` parameter on every
-  `createBinaryProvider` overload and `nativeOrGenericBinaryProvider`. Only `GgufBinaryProvider` /
-  `SafetensorsBinaryProvider` use it (their parsers validate tensor ranges against it). **Do not use
-  `provider.fileSize > bytes.size` to detect a partial view** — every other provider reports its buffer
-  size; the hosts track partial state themselves.
-- Model tabs select a tensor's data only when it lies inside the loaded bytes, else its info record /
-  the JSON header; `sizeAnalysis` is `null` for a partial model (Int-sized `BinarySizeNode`).
-- `plugins-shared/.../PartialView.kt` — `partialViewNotice(loaded, fileSize)` (one text for all hosts)
-  and `isPartialView`.
+## Ranges and selections are 64-bit
 
-## IntelliJ
+- `NativeByteRange` stores `start`/`length`/`end` as `Long`. **`offset`/`size`/`endExclusive` are
+  checked `Int` views that throw `ArithmeticException` past 2 GiB** — so PE, COFF, archives and every
+  existing consumer compile unchanged, and a consumer on the large-file path that still uses them
+  fails loudly instead of truncating. Code that handles ELF/Mach-O/PDB ranges uses `start`/`length`.
+- `RowSelectionData(offset: Long, size: Long)` (+ `Int` constructor). `structureRangeOrNull` has a
+  `Long fileSize` overload. `HexViewStateHolder` offsets, `HexPosition.getByteOffset`,
+  `displayBaseOffset`, `HexanaBinaryVirtualFile.BASE_OFFSET_KEY` are `Long`; nested tab names keep
+  the 8-digit hex form when the offset fits an `Int` (they are user-visible and test-pinned).
+- Not widened (deliberate): `BinarySizeNode` (Int) — providers return `sizeAnalysis = null` past
+  2 GiB rather than a truncated tree; `BinaryStringRecord` (Int) — string scans skip sections past it.
 
-- `VirtualFile.toBinaryWindow()` (`HexanaUtil.kt`) maps at most the window; used only by
-  `HexanaFileEditor.initPanel`. `toMappedBuffer` / `File.toCommonByteBuffer` now throw
-  `FileTooLargeToMapException` with a readable message — callers that need the whole file (running
-  Wasm, diff, breakpoint identity SHA) must not silently get a head.
-- `HexanaFileEditor.partialFileSize` → passed to the factory (`fileSizeFor`: never for an inflated
-  `.gz` or in-memory entry) and to `BinaryEditorView`, which routes `editableDoc = null` into the hex
-  viewer, description bar and panels (`hexEditDoc`) and skips the sidecar journal restore. Reason:
-  "Overwrite" writes the document back over the file and would truncate it to the window.
-- A partial Wasm file gets plain `WasmBinaryProvider`s, not the `VirtualFile`-backed ones (they re-map
-  the whole file). `GenericBinaryVirtualFileProvider` takes the already-loaded buffer for the same reason.
-- `PartialViewNotification` (EditorNotificationProvider) decides from `file.length` because
-  notifications are collected before `initPanel` sets the editor's state.
-- Structural diff catches `FileTooLargeToMapException` (it used to hang on "Comparing…"); hex diff
-  already showed "Could not compare: <message>".
-- Test: `PartialViewEditorTest` opens a **sparse** 3 GiB file (`RandomAccessFile.setLength`), so the
-  suite writes nothing big.
+## Providers take the whole file
 
-## VS Code
+`BinaryProvider.fileSize` (default `bytes.size`). Every factory overload
+(`createBinaryProvider(bytes, …, fileSize, source)`, `(kind, …)`, `(parser, …)`,
+`nativeOrGenericBinaryProvider`) threads `source: LargeBytes?`. Migrated providers take
+`source: LargeBytes = sharedBytes.asLargeBytes()`, override `fileSize`, and parse tables from it;
+`bytes` stays the (≤ 2 GiB) head for everything unmigrated. `NativeBinaryProvider.wholeFile` gives the
+source for ELF / Mach-O / fat Mach-O (else `bytes`).
 
-- `src/largeFiles.ts`: `readHead(uri, max)` reads via a Node file handle for `file:` URIs; other
-  schemes have no ranged read, so they are read whole if they fit, else `FileTooLargeError`
-  (shown via the existing `load-expired` message). `readPrefix` replaces two whole-file reads used only
-  for magic sniffing (`isHexanaBinary`, the tab-reopen detector).
-- Limit: `hexana.maxLoadedFileSizeMB`, default **512**, clamped to `MAX_LOADABLE_BYTES` (kept equal
-  to the Kotlin constant — a unit test reads `LargeFiles.kt`). Lower than IntelliJ's because the
-  webview holds its own copy of the payload.
-- `WasmDocument.partialFileSize` → `load-wasm.fileSize` → webview `Main.kt` → factory `fileSize` and
-  `BinaryEditorContent(partialFileSize)`: no `HexEditState` (it copies every byte), real size in the
-  toolbar, warning notice. Host `overwriteFile` / `saveCopy` refuse a partial document too.
-- A partial `.gz` is not inflated (the head of a gzip stream cannot be).
-- `messageBytesOrNull` now views a posted `Uint8Array` in place (`Int8Array` over the same buffer)
-  instead of copying byte by byte. Test the type on an expression (`payload.unsafeCast<Any>() is
-  Uint8Array`): a smart cast on the `dynamic` parameter broke the array-like path with an
-  `IrLinkageError` on `length`.
-- Analytics: `captureBinaryOpenedOfSize` reports the size on disk.
-- "Compare Files" (`openDiff`) stats both sides first and refuses a file over the limit with the reason.
+| Format | What reads the whole file | Windowed decoders |
+|---|---|---|
+| ELF | `ElfParser` (LargeBytes, Long offsets) | DWARF over `debugSectionSpan` (one window, accessor `base`); ARM attributes via `sectionView`; build-id / `.gnu_debuglink` in `NativeDebugCompanionScanner.sectionView` |
+| Mach-O, fat | `MachOParser`; string tables copied only up to 64 MiB | DWARF via `machODebugSectionSpan`; fat slices only via `FatMachOBinaryProvider.sliceHeader/sliceBytes` (never slice `provider.bytes`) |
+| ZIP64, tar | `ZipParser`, `TarParser` | entry extraction (`decompressZipEntry`/`extractTarEntry` take `LargeBytes`) |
+| Windows PDB | `MsfStream` (block × size as Long) | — (companion PDBs next to a PE stay capped by `MAX_AUTOMATIC_PDB_SIZE`) |
+| Parquet, Arrow file | footer read from the end of `source` | preview chunk / first batch through a window with rebased page offsets; **value provenance shifted back by the window base** |
+| GGUF, safetensors | header only; tensor ranges validated against `fileSize` | — |
+| PE, COFF, ar, DEX, class, Wasm, pcap (10k-packet cap), Arrow stream | head only | — |
 
-## Not covered
+Virtualized native disassembly decodes each function from `wholeFile.window(...)`.
 
-Webapp (50 MB cap, unchanged), MCP/CLI (own explicit caps), scripts (`binary.size` is the loaded size;
-raw providers expose `fileSize`), and a movable window for viewing bytes past the head.
+## IntelliJ host
+
+- `VirtualFile.toBinaryWindow()` → `BinaryWindow(buffer = head, source = MappedFileBytes)`;
+  `HexanaFileEditor.partialFileSize`/`fileSource`; `sourceFor`/`fileSizeFor` give them to the factory
+  only for the file itself (never for an inflated `.gz` or an in-memory entry).
+- `HexViewer(source=)`, `DataInspectorPanel`, `HexViewStatusBar`, `HexSearchField(source=)` read the
+  whole file. Rows read via `LargeBytes.read`; offset column widens past 8 hex digits. Search runs on
+  `Dispatchers.Default` with chunked `findAll` (≤ 100k highlights, per-cell binary search
+  `isInSearchResult`) and `indexOf` from the cursor. Copy is capped at 16 MiB.
+- The Compose v2 `ScrollbarAdapter` is `Double`-based, so ~335M rows scroll fine.
+- `toMappedBuffer` / `File.toCommonByteBuffer` throw `FileTooLargeToMapException` (readable message)
+  for paths that need the whole file in one buffer (running Wasm, diff); the structural diff shows it.
+- Read-only: `hexEditDoc = null` for partial views; `PieceTableDocument.originalHash` is now lazy (it
+  hashed the whole original on open).
+- `PartialViewNotification` (decided from `file.length`) shows `largeFileNotice`.
+
+## VS Code host
+
+- Head read with Node file handles (`largeFiles.ts` `readHead`), limit `hexana.maxLoadedFileSizeMB`
+  (default 512, ≤ `MAX_LOADABLE_BYTES`, test-checked against the Kotlin constant); tabs parse the head.
+- **Paged hex view**: `web-ui` `HexBytes` (`BufferHexBytes` for in-memory files — webapp unchanged —
+  and `PagedHexBytes`: head from memory, 64 KiB pages fetched from the host, ≤ 512 cached, a
+  `loadStamp` state re-renders rows; unloaded bytes show `··`). Host messages `read-byte-range` →
+  `byte-range-content` and `search-bytes` → `search-bytes-result` (`readRange`/`searchFile`, exactly
+  one reply each; webview `HostRequests` with deadlines, caught before the composable handler).
+- **Scroll model** (`HexScroller`): rows are drawn pinned to the viewport top from an authoritative
+  `Long topRow`. Up to `MAX_SCROLL_PX` (8M px) the container scrolls natively; beyond, the spacer is
+  capped and the scrollbar position *scales* to a row, while wheel/keys/drag/auto-scroll move whole
+  rows (our own `scrollTop` writes are ignored when the scroll event comes back). Chromium caps
+  element height at ~33.5M px — the old 1:1 spacer could not scroll past ~27 MB of rows.
+  `scrollHexViewerTo` posts to `HexViewerScrollRequests` instead of touching the DOM.
+- `HexSelectionState` is `Long`; `select(RowSelectionData)` / `matches(...)` helpers. Paged search
+  asks the host for one match at a time (label "at 0x…").
+- `messageBytesOrNull` views a posted `Uint8Array` in place; test the type on an expression
+  (`payload.unsafeCast<Any>() is Uint8Array`) — a smart cast on the `dynamic` broke the array path.
+- Webapp parser-worker wire protocol stays `Int` (50 MB cap); it narrows bounded offsets.
+
+## Tests (all sparse files — nothing big is written)
+
+encdec `MappedFileBytesTest` (3 GiB, chunk boundaries, large windows), `LargeBytesSearchTest`;
+idea-plugin `PartialViewEditorTest` (editor on 3 GiB: marker past 2 GiB, search); plugins-shared
+`LargeElfTest`, `LargeMachOTest`, `LargeArchivesTest` (ZIP64 + tar), `ParquetWholeFileTest`
+(head-only buffer + whole source, provenance equality), `PartialViewTest`; pdb `LargePdbTest`;
+web-ui `HexBytesTest`, `HexScrollerTest` (real DOM, 5 GiB of rows); vscode `largeFiles.test.ts`.
+Gotcha: `encdec` Wasm test linking once failed with a "missing key" internal compiler error — a
+stale incremental cache, fixed by `--rerun-tasks`. The webapp `parserWorker` source set is only
+compiled by `:webapp:compileParserWorkerKotlinJs`, not `compileKotlinJs`.
+
+## Not done
+
+Editing large files; MCP/CLI (own caps); scripting `binary.size` is the parsed size; webapp (50 MB);
+DWARF larger than one 2 GiB window; native-image detection past the head.

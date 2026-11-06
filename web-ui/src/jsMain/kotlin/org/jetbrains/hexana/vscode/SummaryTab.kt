@@ -167,7 +167,7 @@ private fun SummarySectionsTable(sections: List<WasmSection>, selection: HexSele
         defaultSortColumn = 1,
     ) {
         for (section in sections) {
-            val sectionStart = section.sectionOffset
+            val sectionStart = section.sectionOffset.toLong()
             val sectionEnd = maxOf(sectionStart, sectionStart + section.sectionSize - 1)
 
             PanelTableRow(

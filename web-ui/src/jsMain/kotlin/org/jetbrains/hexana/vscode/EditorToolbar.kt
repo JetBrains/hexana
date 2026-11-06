@@ -199,7 +199,7 @@ fun EditorToolbar(
             if (onSizeClick != null) onClick { onSizeClick() }
         }) {
             Span({ style { property("opacity", "0.7") } }) {
-                Text(if (fileSize != null) "${formatSizeLong(fileSize)} (first ${formatSize(size)} loaded)" else formatSize(size))
+                Text(if (fileSize != null) "${formatSizeLong(fileSize)} (first ${formatSize(size)} parsed)" else formatSize(size))
             }
             if (sizeTooltip != null && sizeHovered) {
                 Div({

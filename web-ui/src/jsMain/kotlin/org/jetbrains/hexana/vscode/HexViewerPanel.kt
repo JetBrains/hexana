@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.vscode
 
+import org.jetbrains.hexana.shared.RowSelectionData
 import androidx.compose.runtime.*
 import kotlinx.browser.document
 import kotlinx.browser.window
@@ -7,6 +8,7 @@ import org.jetbrains.compose.web.attributes.InputType
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.*
 import org.jetbrains.hexana.io.CommonByteBuffer
+import kotlin.js.Promise
 import org.jetbrains.hexana.providers.StructureRange
 import org.jetbrains.hexana.providers.StructureRangeLookup
 import org.jetbrains.hexana.shared.RowDetailData
@@ -28,19 +30,20 @@ private const val AUTO_SCROLL_PX_PER_SEC = 120.0
 enum class HexSearchMode { STRING, BYTES }
 
 /**
- * Tracks search state for the hex viewer: the set of byte indices that belong
- * to any match and the list of match start offsets for prev/next navigation.
+ * Tracks search state for the hex viewer: match start offsets (sorted) for prev/next navigation
+ * and highlighting. For a file held in memory every match is found up front (at most
+ * [MAX_SEARCH_MATCHES]); for a paged file the host finds one match at a time and [matchStarts]
+ * holds just the current one, with [isPaged] set.
  */
 class HexSearchState {
-    var matchIndices by mutableStateOf(emptySet<Int>())
-    var matchStarts by mutableStateOf(emptyList<Int>())
+    var matchStarts by mutableStateOf(emptyList<Long>())
     var matchLength by mutableStateOf(0)
     var currentMatchIndex by mutableStateOf(-1)
+    var isPaged by mutableStateOf(false)
 
-    val currentMatchStart: Int get() = matchStarts.getOrElse(currentMatchIndex) { -1 }
+    val currentMatchStart: Long get() = matchStarts.getOrElse(currentMatchIndex) { -1L }
 
     fun clear() {
-        matchIndices = emptySet()
         matchStarts = emptyList()
         matchLength = 0
         currentMatchIndex = -1
@@ -56,26 +59,42 @@ class HexSearchState {
         currentMatchIndex = if (currentMatchIndex <= 0) matchStarts.size - 1 else currentMatchIndex - 1
     }
 
-    fun isInCurrentMatch(byteIndex: Int): Boolean {
+    /** Whether [byteIndex] is inside any match, by binary search over the sorted starts. */
+    fun isMatch(byteIndex: Long): Boolean {
+        val starts = matchStarts
+        if (starts.isEmpty() || matchLength == 0) return false
+        var low = 0
+        var high = starts.size - 1
+        var candidate = -1
+        while (low <= high) {
+            val mid = (low + high) ushr 1
+            if (starts[mid] <= byteIndex) { candidate = mid; low = mid + 1 } else high = mid - 1
+        }
+        return candidate >= 0 && byteIndex < starts[candidate] + matchLength
+    }
+
+    fun isInCurrentMatch(byteIndex: Long): Boolean {
         val start = currentMatchStart
         if (start < 0) return false
         return byteIndex >= start && byteIndex < start + matchLength
     }
 }
 
+/** Most matches found and highlighted for an in-memory file. */
+private const val MAX_SEARCH_MATCHES = 100_000
+
 /**
- * Finds all occurrences of [pattern] in [bytes] and updates [state] with
- * the matching byte indices and match start positions.
+ * Finds the occurrences of [pattern] in [bytes] (non-overlapping, at most [MAX_SEARCH_MATCHES])
+ * and updates [state] with their start positions.
  */
 private fun computeSearchMatches(bytes: CommonByteBuffer, pattern: ByteArray, state: HexSearchState) {
     if (pattern.isEmpty()) {
         state.clear()
         return
     }
-    val indices = mutableSetOf<Int>()
-    val starts = mutableListOf<Int>()
+    val starts = mutableListOf<Long>()
     var i = 0
-    while (i <= bytes.size - pattern.size) {
+    while (i <= bytes.size - pattern.size && starts.size < MAX_SEARCH_MATCHES) {
         var found = true
         for (j in pattern.indices) {
             if (bytes[i + j] != pattern[j]) {
@@ -84,14 +103,13 @@ private fun computeSearchMatches(bytes: CommonByteBuffer, pattern: ByteArray, st
             }
         }
         if (found) {
-            starts.add(i)
-            for (j in pattern.indices) indices.add(i + j)
+            starts.add(i.toLong())
             i += pattern.size
         } else {
             i++
         }
     }
-    state.matchIndices = indices
+    state.isPaged = false
     state.matchStarts = starts
     state.matchLength = pattern.size
     state.currentMatchIndex = if (starts.isNotEmpty()) 0 else -1
@@ -116,12 +134,13 @@ private fun parseHexQuery(query: String): ByteArray? {
 
 /**
  * Selection state for the hex viewer, tracking a range of selected bytes
- * by absolute byte index.
+ * by absolute byte index. [Long], because the hex view covers the whole of a
+ * file of any size, not just the part the tabs were parsed from.
  */
 class HexSelectionState {
-    var anchorIndex by mutableStateOf(-1)
-    var activeIndex by mutableStateOf(-1)
-    var cursorIndex by mutableStateOf(-1)
+    var anchorIndex by mutableStateOf(-1L)
+    var activeIndex by mutableStateOf(-1L)
+    var cursorIndex by mutableStateOf(-1L)
 
     /**
      * Bytes of the last clicked table row that exist nowhere in the file - the
@@ -134,10 +153,10 @@ class HexSelectionState {
 
     val hasSelection: Boolean get() = anchorIndex >= 0 && activeIndex >= 0 && anchorIndex != activeIndex
 
-    val selectionStart: Int get() = if (anchorIndex <= activeIndex) anchorIndex else activeIndex
-    val selectionEnd: Int get() = if (anchorIndex <= activeIndex) activeIndex else anchorIndex
+    val selectionStart: Long get() = if (anchorIndex <= activeIndex) anchorIndex else activeIndex
+    val selectionEnd: Long get() = if (anchorIndex <= activeIndex) activeIndex else anchorIndex
 
-    fun contains(absoluteIndex: Int): Boolean {
+    fun contains(absoluteIndex: Long): Boolean {
         if (anchorIndex < 0 || activeIndex < 0) return false
         return absoluteIndex in selectionStart..selectionEnd
     }
@@ -147,24 +166,33 @@ class HexSelectionState {
         activeIndex = -1
     }
 
-    fun startSelection(index: Int) {
+    fun startSelection(index: Long) {
         anchorIndex = index
         activeIndex = index
         cursorIndex = index
     }
 
-    fun extendSelection(index: Int) {
+    fun extendSelection(index: Long) {
         activeIndex = index
         cursorIndex = index
     }
 
     /** Selects [size] bytes starting at [offset] and scrolls them into view. */
-    fun selectRange(offset: Int, size: Int) {
+    fun selectRange(offset: Long, size: Long) {
         anchorIndex = offset
         activeIndex = offset + size.coerceAtLeast(1) - 1
         cursorIndex = offset
         scrollHexViewerTo(offset)
     }
+
+    fun selectRange(offset: Int, size: Int) = selectRange(offset.toLong(), size.toLong())
+
+    /** Selects what a table row points at. */
+    fun select(row: RowSelectionData) = selectRange(row.offset, row.size)
+
+    /** Whether the selection is exactly what [row] points at. */
+    fun matches(row: RowSelectionData): Boolean =
+        hasSelection && selectionStart == row.offset && selectionEnd == row.offset + row.size - 1
 }
 
 /**
@@ -233,31 +261,159 @@ private val STRUCTURE_LABEL_COLORS = listOf(
 )
 
 /**
- * Compose for Web hex viewer panel with virtual scrolling and byte selection.
+ * Global "show this byte" requests ([scrollHexViewerTo]), observed by the hex viewer: tables and
+ * tabs select bytes without holding a reference to it.
+ */
+internal object HexViewerScrollRequests {
+    var offset by mutableStateOf(-1L)
+        private set
+    var serial by mutableStateOf(0)
+        private set
+
+    fun request(byteOffset: Long) {
+        offset = byteOffset
+        serial++
+    }
+}
+
+/** Tallest the scroll container's content gets; Chromium caps element heights near 33.5M px. */
+internal const val MAX_SCROLL_PX = 8_000_000.0
+
+/**
+ * The hex viewer's position: the first visible row, as a [Long] row index.
  *
- * Renders the raw binary content in a classic hex-dump layout:
- * offset | hex bytes | ASCII decode.
+ * Up to [MAX_SCROLL_PX] of rows the scroll container scrolls them natively, one pixel per pixel.
+ * Beyond that — a file of a few hundred megabytes and up — the content height is capped and the
+ * scrollbar position *scales* to a row, while the wheel, the keys, dragging and auto-scroll move by
+ * whole rows. In both cases the visible rows are drawn pinned to the top of the viewport, starting
+ * at [topRow]; [subPx] is the part of the top row scrolled out of view in native mode.
+ */
+internal class HexScroller {
+    var container: HTMLElement? = null
+    var totalRows by mutableStateOf(0L)
+    var viewportHeight by mutableStateOf(600)
+    var topRow by mutableStateOf(0L)
+    var subPx by mutableStateOf(0.0)
+    var scrollPx by mutableStateOf(0.0)
+    private var programmaticScrollPx = -1.0
+    private var wheelRemainder = 0.0
+
+    val scaled: Boolean get() = totalRows * ROW_HEIGHT_PX > MAX_SCROLL_PX
+    val spacerPx: Double get() = if (scaled) MAX_SCROLL_PX else totalRows * ROW_HEIGHT_PX.toDouble()
+    val visibleRows: Long get() = ((viewportHeight - ROW_HEIGHT_PX) / ROW_HEIGHT_PX).coerceAtLeast(1).toLong()
+    val maxTopRow: Long get() = (totalRows - visibleRows).coerceAtLeast(0)
+    private val maxScrollPx: Double
+        get() = container?.let { (it.scrollHeight - it.clientHeight).toDouble() }?.takeIf { it > 0 }
+            ?: (spacerPx + ROW_HEIGHT_PX - viewportHeight).coerceAtLeast(1.0)
+
+    fun onScroll(px: Double, clientHeight: Int) {
+        viewportHeight = clientHeight
+        scrollPx = px
+        if (scaled) {
+            // Our own scrollTo lands here too; its row is already set, more precisely than the
+            // scaled pixel position could say.
+            if (programmaticScrollPx >= 0 && kotlin.math.abs(px - programmaticScrollPx) < 2.0) return
+            programmaticScrollPx = -1.0
+            topRow = kotlin.math.round(px / maxScrollPx * maxTopRow).toLong().coerceIn(0, maxTopRow)
+            subPx = 0.0
+        } else {
+            topRow = (px / ROW_HEIGHT_PX).toLong()
+            subPx = px - topRow * ROW_HEIGHT_PX
+        }
+    }
+
+    fun scrollToRow(row: Long) {
+        val target = row.coerceIn(0, maxTopRow)
+        val element = container ?: return
+        if (scaled) {
+            topRow = target
+            subPx = 0.0
+            val px = if (maxTopRow == 0L) 0.0 else target.toDouble() / maxTopRow * maxScrollPx
+            programmaticScrollPx = px
+            scrollPx = px
+            element.scrollTop = px
+        } else {
+            element.scrollTop = target * ROW_HEIGHT_PX.toDouble()
+        }
+    }
+
+    fun scrollByRows(delta: Long) = scrollToRow(topRow + delta)
+
+    /** Scrolls the least distance that shows [row] whole. */
+    fun ensureRowVisible(row: Long) {
+        val first = topRow + if (subPx > 0.0) 1 else 0
+        val last = topRow + visibleRows - 1
+        when {
+            row < first -> scrollToRow(row)
+            row > last -> scrollToRow(row - visibleRows + 1)
+        }
+    }
+
+    /** The row under a point [y] pixels below the top of the rows area (under the header). */
+    fun rowAt(y: Double): Long =
+        (topRow + kotlin.math.floor((y + subPx) / ROW_HEIGHT_PX).toLong()).coerceIn(0, (totalRows - 1).coerceAtLeast(0))
+
+    /** Wheel scrolling in scaled mode, in rows; native mode leaves the wheel to the browser. */
+    fun onWheel(deltaY: Double, deltaMode: Int): Boolean {
+        if (!scaled) return false
+        val rows = when (deltaMode) {
+            1 -> deltaY // lines
+            2 -> deltaY * visibleRows // pages
+            else -> deltaY / ROW_HEIGHT_PX
+        } + wheelRemainder
+        val whole = rows.toLong()
+        wheelRemainder = rows - whole
+        if (whole != 0L) scrollByRows(whole)
+        return true
+    }
+
+    /** Auto-scroll during drag selection by [px] pixels. */
+    fun autoScrollBy(px: Double) {
+        val element = container ?: return
+        if (!scaled) {
+            element.scrollTop += px
+        } else {
+            wheelRemainder += px / ROW_HEIGHT_PX
+            val whole = wheelRemainder.toLong()
+            wheelRemainder -= whole
+            if (whole != 0L) scrollByRows(whole)
+        }
+    }
+}
+
+/**
+ * A virtualized hex viewer covering the whole of [bytes], of any size.
  *
  * Only rows visible in the viewport (plus a small overscan) are rendered.
  * Selection is supported via click, shift-click, drag, and keyboard navigation.
  * When [editState] is provided, hex digits typed on the cursor cell are
  * committed as byte edits (high nibble first, then low nibble).
+ *
+ * [onSearchFile] finds the next (or previous) occurrence of a pattern in a file that is not
+ * fully loaded ([HexBytes.isFullyLoaded] false); search is local otherwise.
  */
 @Composable
 fun HexViewerPanel(
-    bytes: CommonByteBuffer,
+    bytes: HexBytes,
     selection: HexSelectionState = remember { HexSelectionState() },
     editState: HexEditState? = null,
     structureRanges: List<StructureRange> = emptyList(),
     onTabChangeRequest: ((String) -> Unit)? = null,
+    onSearchFile: ((pattern: ByteArray, from: Long, reverse: Boolean) -> Promise<Long>)? = null,
 ) {
-    val totalRows = (bytes.size + BYTES_PER_ROW - 1) / BYTES_PER_ROW
-    val totalHeight = totalRows * ROW_HEIGHT_PX
+    val totalBytes = bytes.size
+    val totalRows = (totalBytes + BYTES_PER_ROW - 1) / BYTES_PER_ROW
+    // Re-render the rows when fetched pages arrive.
+    @Suppress("UNUSED_VARIABLE")
+    val loadStamp = bytes.loadStamp
     // Script regions overlay the base parser's, so the ranges may overlap.
     val structureLookup = remember(structureRanges) { StructureRangeLookup(structureRanges) }
+    // Offsets past 4 GiB need more than eight hex digits.
+    val offsetDigits = maxOf(8, (totalBytes - 1).coerceAtLeast(0).toString(16).length)
+    val offsetColumnPx = 80 + 8 * (offsetDigits - 8)
 
-    var scrollTop by remember { mutableStateOf(0) }
-    var viewportHeight by remember { mutableStateOf(600) }
+    val scroller = remember { HexScroller() }
+    scroller.totalRows = totalRows
 
     // Drag state is tracked via plain JS variables (not Compose mutableStateOf) to avoid
     // recomposition-driven DisposableEffect teardown/rebuild cycles that would lose the
@@ -275,24 +431,53 @@ fun HexViewerPanel(
     var hexSearchQuery by remember { mutableStateOf("") }
     var hexSearchMode by remember { mutableStateOf(HexSearchMode.BYTES) }
     val hexSearchState = remember { HexSearchState() }
+    // Bumped to make the host search from the current match again (paged files).
+    var pagedSearchStep by remember { mutableStateOf<Boolean?>(null) }
+
+    fun searchPattern(): ByteArray? = when (hexSearchMode) {
+        HexSearchMode.STRING -> hexSearchQuery.encodeToByteArray().takeIf { it.isNotEmpty() }
+        HexSearchMode.BYTES -> parseHexQuery(hexSearchQuery)
+    }
 
     // Recompute matches when query, mode, or underlying bytes change.
     LaunchedEffect(hexSearchQuery, hexSearchMode, bytes) {
-        if (hexSearchQuery.isEmpty()) {
-            hexSearchState.clear()
-        } else {
-            when (hexSearchMode) {
-                HexSearchMode.STRING -> {
-                    val pattern = hexSearchQuery.encodeToByteArray()
-                    computeSearchMatches(bytes, pattern, hexSearchState)
+        val pattern = if (hexSearchQuery.isEmpty()) null else searchPattern()
+        when {
+            pattern == null -> hexSearchState.clear()
+            bytes is BufferHexBytes -> computeSearchMatches(bytes.bytes, pattern, hexSearchState)
+            onSearchFile != null -> {
+                hexSearchState.isPaged = true
+                hexSearchState.matchLength = pattern.size
+                onSearchFile(pattern, 0L, false).then { at ->
+                    hexSearchState.matchStarts = if (at >= 0) listOf(at) else emptyList()
+                    hexSearchState.currentMatchIndex = if (at >= 0) 0 else -1
                 }
-                HexSearchMode.BYTES -> {
-                    val pattern = parseHexQuery(hexSearchQuery)
-                    if (pattern != null) {
-                        computeSearchMatches(bytes, pattern, hexSearchState)
-                    } else {
-                        hexSearchState.clear()
-                    }
+            }
+            else -> hexSearchState.clear()
+        }
+    }
+
+    // Paged files: next / previous asks the host for the match after / before the current one.
+    LaunchedEffect(pagedSearchStep) {
+        val reverse = pagedSearchStep ?: return@LaunchedEffect
+        pagedSearchStep = null
+        val pattern = searchPattern() ?: return@LaunchedEffect
+        val search = onSearchFile ?: return@LaunchedEffect
+        val current = hexSearchState.currentMatchStart
+        val from = when {
+            current < 0 -> if (reverse) totalBytes - 1 else 0L
+            reverse -> current - 1
+            else -> current + 1
+        }
+        search(pattern, from, reverse).then { at ->
+            // Wrap around once, as the in-memory search does.
+            if (at >= 0) {
+                hexSearchState.matchStarts = listOf(at)
+                hexSearchState.currentMatchIndex = 0
+            } else {
+                search(pattern, if (reverse) totalBytes - 1 else 0L, reverse).then { wrapped ->
+                    hexSearchState.matchStarts = if (wrapped >= 0) listOf(wrapped) else emptyList()
+                    hexSearchState.currentMatchIndex = if (wrapped >= 0) 0 else -1
                 }
             }
         }
@@ -302,17 +487,13 @@ fun HexViewerPanel(
     LaunchedEffect(hexSearchState.currentMatchStart) {
         val matchStart = hexSearchState.currentMatchStart
         if (matchStart < 0) return@LaunchedEffect
-        val container = document.querySelector(".hex-viewer-scroll") as? HTMLElement ?: return@LaunchedEffect
-        val headerHeight = ROW_HEIGHT_PX
-        val currentScroll = container.scrollTop.toInt()
-        val currentVpHeight = container.clientHeight
-        val matchRow = matchStart / BYTES_PER_ROW
-        val matchTopInContainer = matchRow * ROW_HEIGHT_PX + headerHeight
-        if (matchTopInContainer < currentScroll + headerHeight ||
-            matchTopInContainer + ROW_HEIGHT_PX > currentScroll + currentVpHeight
-        ) {
-            container.scrollTop = (matchTopInContainer - headerHeight).toDouble()
-        }
+        scroller.ensureRowVisible(matchStart / BYTES_PER_ROW)
+    }
+
+    // Selections made elsewhere (tables, tabs) scroll their first byte into view.
+    LaunchedEffect(HexViewerScrollRequests.serial) {
+        val offset = HexViewerScrollRequests.offset
+        if (offset >= 0) scroller.ensureRowVisible(offset / BYTES_PER_ROW)
     }
 
     // Modification stamp used as a key to force the hex grid to recompose
@@ -320,15 +501,10 @@ fun HexViewerPanel(
     // even when modifiedOffsets stays the same empty set.
     val editStamp = editState?.modificationStamp ?: 0L
 
-    val firstVisibleRow = (scrollTop / ROW_HEIGHT_PX - OVERSCAN_ROWS).coerceAtLeast(0)
-    val lastVisibleRow = ((scrollTop + viewportHeight) / ROW_HEIGHT_PX + OVERSCAN_ROWS).coerceAtMost(totalRows - 1)
-    val topSpacerHeight = firstVisibleRow * ROW_HEIGHT_PX
+    val firstVisibleRow = scroller.topRow.coerceAtMost((totalRows - 1).coerceAtLeast(0))
+    val lastVisibleRow = (scroller.topRow + scroller.visibleRows + OVERSCAN_ROWS).coerceAtMost(totalRows - 1)
 
     // Keyboard handler.
-    // Reads scroll position directly from the DOM element (not from Compose state)
-    // to avoid a feedback loop: setting container.scrollTop fires a scroll event
-    // that updates Compose scrollTop state, which triggers recomposition, which
-    // changes virtual-scroll spacer heights, which can shift scroll position again.
     DisposableEffect(Unit) {
         val handler: (Event) -> Unit = handler@{ event ->
             val ke = event as? KeyboardEvent ?: return@handler
@@ -372,7 +548,7 @@ fun HexViewerPanel(
                 return@handler
             }
 
-            // Hex digit input for editing.
+            // Hex digit input for editing (only ever wired for a file held whole in memory).
             if (editState != null) {
                 val digit = hexDigitValue(key)
                 if (digit != null && !ke.ctrlKey && !ke.metaKey && !ke.altKey) {
@@ -384,7 +560,7 @@ fun HexViewerPanel(
                         pendingDigit = digit
                     } else {
                         val byte = ((pd and 0xF) shl 4) or (digit and 0xF)
-                        editState.replaceByte(cursorIdx, byte.toByte())
+                        editState.replaceByte(cursorIdx.toInt(), byte.toByte())
                         pendingDigit = null
                         // Advance cursor to next cell.
                         val nextIdx = cursorIdx + 1
@@ -396,9 +572,10 @@ fun HexViewerPanel(
                 }
             }
 
-            if (key !in listOf("ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight")) return@handler
+            val isJump = (key == "Home" || key == "End") && (ke.ctrlKey || ke.metaKey)
+            if (key !in listOf("ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "PageUp", "PageDown") && !isJump) return@handler
 
-            // Only handle arrow keys when focus is actually on the hex
+            // Only handle navigation keys when focus is actually on the hex
             // viewer or its scroll container.  After tree-table
             // recomposition the focused <tr> may be destroyed and focus
             // falls to <body>; without this positive check the hex viewer
@@ -410,17 +587,22 @@ fun HexViewerPanel(
             } else if (target?.closest(".hexana-panel-table") != null) {
                 return@handler
             }
+            if (totalBytes == 0L) return@handler
 
             ke.preventDefault()
             pendingDigit = null
-            val cur = if (selection.cursorIndex >= 0) selection.cursorIndex else 0
-            val totalBytes = bytes.size
+            val cur = if (selection.cursorIndex >= 0) selection.cursorIndex else 0L
+            val pageBytes = scroller.visibleRows * BYTES_PER_ROW
 
             val newIndex = when (key) {
                 "ArrowRight" -> (cur + 1).coerceAtMost(totalBytes - 1)
                 "ArrowLeft" -> (cur - 1).coerceAtLeast(0)
                 "ArrowDown" -> (cur + BYTES_PER_ROW).coerceAtMost(totalBytes - 1)
                 "ArrowUp" -> (cur - BYTES_PER_ROW).coerceAtLeast(0)
+                "PageDown" -> (cur + pageBytes).coerceAtMost(totalBytes - 1)
+                "PageUp" -> (cur - pageBytes).coerceAtLeast(0)
+                "Home" -> 0L
+                "End" -> totalBytes - 1
                 else -> cur
             }
 
@@ -432,29 +614,7 @@ fun HexViewerPanel(
             } else {
                 selection.startSelection(newIndex)
             }
-
-            // Scroll cursor into view.
-            // Read current scroll position from the DOM element directly to avoid
-            // stale Compose state and recomposition-driven feedback loops.
-            // The column header (ROW_HEIGHT_PX tall, sticky) sits inside the scroll
-            // container, so the content rows start at an offset of ROW_HEIGHT_PX
-            // within the scrollable area.  Account for that when computing whether
-            // the cursor row is visible.
-            val container = document.querySelector(".hex-viewer-scroll") as? HTMLElement
-            if (container != null) {
-                val headerHeight = ROW_HEIGHT_PX
-                val currentScroll = container.scrollTop.toInt()
-                val currentVpHeight = container.clientHeight
-                val cursorRow = newIndex / BYTES_PER_ROW
-                // Position of the cursor row inside the scroll container's
-                // scrollable content (content starts after the header).
-                val cursorTopInContainer = cursorRow * ROW_HEIGHT_PX + headerHeight
-                if (cursorTopInContainer < currentScroll + headerHeight) {
-                    container.scrollTop = (cursorTopInContainer - headerHeight).toDouble()
-                } else if (cursorTopInContainer + ROW_HEIGHT_PX > currentScroll + currentVpHeight) {
-                    container.scrollTop = (cursorTopInContainer + ROW_HEIGHT_PX - currentVpHeight).toDouble()
-                }
-            }
+            scroller.ensureRowVisible(newIndex / BYTES_PER_ROW)
         }
         window.addEventListener("keydown", handler)
         onDispose { window.removeEventListener("keydown", handler) }
@@ -468,12 +628,11 @@ fun HexViewerPanel(
     DisposableEffect(Unit) {
         fun updateSelectionAt(clientX: Double, clientY: Double) {
             val container = document.querySelector(".hex-viewer-scroll") as? HTMLElement ?: return
+            if (scroller.totalRows == 0L) return
             val rect = container.getBoundingClientRect()
-            val relY = clientY - rect.top + container.scrollTop - ROW_HEIGHT_PX
-            val relX = clientX - rect.left
-            val row = (relY / ROW_HEIGHT_PX).toInt().coerceIn(0, totalRows - 1)
-            val col = resolveColumn(relX, container.clientWidth.toDouble())
-            val idx = (row * BYTES_PER_ROW + col).coerceIn(0, bytes.size - 1)
+            val row = scroller.rowAt(clientY - rect.top - ROW_HEIGHT_PX)
+            val col = resolveColumn(clientX - rect.left, offsetColumnPx)
+            val idx = (row * BYTES_PER_ROW + col).coerceIn(0, scroller.totalRows * BYTES_PER_ROW - 1)
             selection.extendSelection(idx)
         }
 
@@ -492,12 +651,8 @@ fun HexViewerPanel(
             dragState.autoScrollLastTime = timestamp
 
             if (dt > 0) {
-                val px = AUTO_SCROLL_PX_PER_SEC * dragState.autoScrollDirection * (dt / 1000.0)
-                val container = document.querySelector(".hex-viewer-scroll") as? HTMLElement
-                if (container != null) {
-                    container.scrollTop += px
-                    updateSelectionAt(dragState.lastClientX, dragState.lastClientY)
-                }
+                scroller.autoScrollBy(AUTO_SCROLL_PX_PER_SEC * dragState.autoScrollDirection * (dt / 1000.0))
+                updateSelectionAt(dragState.lastClientX, dragState.lastClientY)
             }
 
             // Schedule the next frame.
@@ -609,8 +764,9 @@ fun HexViewerPanel(
             onModeChange = { hexSearchMode = it },
             matchCount = hexSearchState.matchStarts.size,
             currentMatch = hexSearchState.currentMatchIndex,
-            onNext = { hexSearchState.goToNext() },
-            onPrevious = { hexSearchState.goToPrevious() },
+            pagedMatchStart = hexSearchState.currentMatchStart.takeIf { hexSearchState.isPaged },
+            onNext = { if (hexSearchState.isPaged) pagedSearchStep = false else hexSearchState.goToNext() },
+            onPrevious = { if (hexSearchState.isPaged) pagedSearchStep = true else hexSearchState.goToPrevious() },
             onClose = {
                 hexSearchVisible = false
                 hexSearchQuery = ""
@@ -634,41 +790,59 @@ fun HexViewerPanel(
             property("outline", "none")
         }
         tabIndex(0)
+        ref { element ->
+            scroller.container = element
+            scroller.viewportHeight = element.clientHeight
+            onDispose { if (scroller.container === element) scroller.container = null }
+        }
         addEventListener("scroll") { event ->
             val target = event.target as? HTMLElement ?: return@addEventListener
-            scrollTop = target.scrollTop.toInt()
-            viewportHeight = target.clientHeight
+            scroller.onScroll(target.scrollTop, target.clientHeight)
+        }
+        addEventListener("wheel") { event ->
+            val wheel = event.nativeEvent.asDynamic()
+            if (scroller.onWheel((wheel.deltaY as Number).toDouble(), (wheel.deltaMode as Number).toInt())) {
+                event.preventDefault()
+            }
         }
     }) {
         // Column header
-        HexColumnHeader(structureRanges = structureRanges, scrollTop = scrollTop, totalRows = totalRows, bytesPerRow = BYTES_PER_ROW, onTabChangeRequest = onTabChangeRequest)
+        HexColumnHeader(
+            structureRanges = structureRanges,
+            scroller = scroller,
+            bytesPerRow = BYTES_PER_ROW,
+            offsetColumnPx = offsetColumnPx,
+            onTabChangeRequest = onTabChangeRequest,
+        )
 
-        // Virtual scroll container — uses a fixed-height outer div with
-        // position:relative and an absolutely-positioned inner div for the
-        // visible rows.  This avoids variable-height top/bottom spacer divs
-        // whose recalculation during recomposition would shift the browser's
-        // scroll position and create a feedback loop.
+        // Virtual scroll container: a fixed-height spacer gives the scrollbar its range, and the
+        // visible rows are drawn pinned to the top of the viewport (translateY of the scroll
+        // position, less the part of the top row scrolled out of view).
         Div({
             style {
-                height(totalHeight.px)
+                height(scroller.spacerPx.px)
                 property("position", "relative")
+                property("overflow", "hidden")
             }
         }) {
-            // Visible rows positioned via translateY — no spacers needed.
             Div({
                 style {
                     property("position", "absolute")
                     property("left", "0")
                     property("right", "0")
                     property("top", "0")
-                    property("transform", "translateY(${topSpacerHeight}px)")
+                    property("transform", "translateY(${scroller.scrollPx - scroller.subPx}px)")
                 }
             }) {
                 key(editStamp) {
-                    for (row in firstVisibleRow..lastVisibleRow) {
-                        HexRow(bytes, row, selection, hexSearchState, editState, editStamp, pendingDigit, structureRanges, structureLookup, onTabChangeRequest) { ox, oy ->
-                            dragState.pendingOriginX = ox
-                            dragState.pendingOriginY = oy
+                    if (totalRows > 0) {
+                        var row = firstVisibleRow
+                        while (row <= lastVisibleRow) {
+                            HexRow(bytes, row, offsetDigits, offsetColumnPx, selection, hexSearchState, editState, editStamp, pendingDigit, structureRanges, structureLookup, onTabChangeRequest) { ox, oy ->
+                                dragState.pendingOriginX = ox
+                                dragState.pendingOriginY = oy
+                            }
+                            row++
                         }
                     }
                 }
@@ -683,9 +857,9 @@ fun HexViewerPanel(
 @Composable
 private fun HexColumnHeader(
     structureRanges: List<StructureRange>,
-    scrollTop: Int,
-    totalRows: Int,
+    scroller: HexScroller,
     bytesPerRow: Int,
+    offsetColumnPx: Int,
     onTabChangeRequest: ((String) -> Unit)? = null,
 ) {
     Div({
@@ -707,7 +881,7 @@ private fun HexColumnHeader(
         Span({
             classes("hex-offset")
             style {
-                property("min-width", "80px")
+                property("min-width", "${offsetColumnPx}px")
                 property("padding-right", "12px")
                 property("text-align", "right")
                 color(Color("#6A9955"))
@@ -763,17 +937,9 @@ private fun HexColumnHeader(
                     classes("hexana-section-nav")
                     attr("title", "Previous section")
                     onClick {
-                        val currentRow = scrollTop / ROW_HEIGHT_PX
-                        val prevIdx = structureRanges.indexOfLast {
-                            (it.offset / bytesPerRow).toInt() < currentRow
-                        }
-                        if (prevIdx >= 0) {
-                            val targetRow = (structureRanges[prevIdx].offset / bytesPerRow).toInt()
-                            val container = document.querySelector(".hex-viewer-scroll") as? HTMLElement
-                            if (container != null) {
-                                container.scrollTop = (targetRow * ROW_HEIGHT_PX).toDouble()
-                            }
-                        }
+                        val currentRow = scroller.topRow
+                        val prevIdx = structureRanges.indexOfLast { it.offset / bytesPerRow < currentRow }
+                        if (prevIdx >= 0) scroller.scrollToRow(structureRanges[prevIdx].offset / bytesPerRow)
                     }
                 }) {
                     Text("\u25B2") // ▲
@@ -783,17 +949,9 @@ private fun HexColumnHeader(
                     classes("hexana-section-nav")
                     attr("title", "Next section")
                     onClick {
-                        val currentRow = scrollTop / ROW_HEIGHT_PX
-                        val nextIdx = structureRanges.indexOfFirst {
-                            (it.offset / bytesPerRow).toInt() > currentRow
-                        }
-                        if (nextIdx >= 0) {
-                            val targetRow = (structureRanges[nextIdx].offset / bytesPerRow).toInt()
-                            val container = document.querySelector(".hex-viewer-scroll") as? HTMLElement
-                            if (container != null) {
-                                container.scrollTop = (targetRow * ROW_HEIGHT_PX).toDouble()
-                            }
-                        }
+                        val currentRow = scroller.topRow
+                        val nextIdx = structureRanges.indexOfFirst { it.offset / bytesPerRow > currentRow }
+                        if (nextIdx >= 0) scroller.scrollToRow(structureRanges[nextIdx].offset / bytesPerRow)
                     }
                 }) {
                     Text("\u25BC") // ▼
@@ -814,6 +972,8 @@ private fun HexSearchBar(
     onModeChange: (HexSearchMode) -> Unit,
     matchCount: Int,
     currentMatch: Int,
+    /** For a file searched on the host: where the current match is, `-1` for none, `null` for local search. */
+    pagedMatchStart: Long? = null,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
     onClose: () -> Unit,
@@ -870,10 +1030,10 @@ private fun HexSearchBar(
             Span({
                 classes("hexana-hex-search-count")
             }) {
-                if (matchCount > 0) {
-                    Text("${currentMatch + 1} of $matchCount")
-                } else {
-                    Text("No results")
+                when {
+                    pagedMatchStart != null && pagedMatchStart >= 0 -> Text("at 0x${pagedMatchStart.toString(16).uppercase()}")
+                    matchCount > 0 -> Text("${currentMatch + 1} of $matchCount")
+                    else -> Text("No results")
                 }
             }
         }
@@ -907,8 +1067,10 @@ private fun HexSearchBar(
 
 @Composable
 private fun HexRow(
-    bytes: CommonByteBuffer,
-    row: Int,
+    bytes: HexBytes,
+    row: Long,
+    offsetDigits: Int,
+    offsetColumnPx: Int,
     selection: HexSelectionState,
     searchState: HexSearchState,
     editState: HexEditState?,
@@ -921,10 +1083,12 @@ private fun HexRow(
 ) {
     val offset = row * BYTES_PER_ROW
     val end = minOf(offset + BYTES_PER_ROW, bytes.size)
+    // A byte still being fetched reads null and shows as a placeholder until its page arrives.
+    fun byteAt(i: Long): Byte? = if (editState != null) editState.getByte(i.toInt()) else bytes.byteOrNull(i)
 
     // Determine structure color for the offset column (use the first byte's range)
     val offsetStructureIdx = if (structureRanges.isNotEmpty()) {
-        structureLookup.indexAt(offset.toLong())
+        structureLookup.indexAt(offset)
     } else -1
     val offsetStructureBg = if (offsetStructureIdx >= 0) {
         STRUCTURE_COLORS[offsetStructureIdx % STRUCTURE_COLORS.size]
@@ -933,7 +1097,7 @@ private fun HexRow(
     // Indices of every structure range that starts on this row. Several sections
     // can start on the same row, and each of them gets its own label.
     val labelIndices = if (structureRanges.isNotEmpty()) {
-        structureRanges.indices.filter { (structureRanges[it].offset / BYTES_PER_ROW).toInt() == row }
+        structureRanges.indices.filter { structureRanges[it].offset / BYTES_PER_ROW == row }
     } else emptyList()
 
     Div({
@@ -949,7 +1113,7 @@ private fun HexRow(
         Span({
             classes("hex-offset")
             style {
-                property("min-width", "80px")
+                property("min-width", "${offsetColumnPx}px")
                 property("padding-right", "12px")
                 property("text-align", "right")
                 color(Color("#6A9955"))
@@ -958,7 +1122,7 @@ private fun HexRow(
                 }
             }
         }) {
-            Text(offset.toString(16).padStart(8, '0'))
+            Text(offset.toString(16).padStart(offsetDigits, '0'))
         }
 
         // Hex bytes column
@@ -971,16 +1135,16 @@ private fun HexRow(
         }) {
             for (i in offset until end) {
                 val byteIndex = i
-                val byteVal = if (editState != null) editState.getByte(i).toUByte() else bytes[i].toUByte()
+                val byteVal = byteAt(i)?.toUByte()
                 val isSelected = selection.contains(byteIndex)
                 val isCursor = selection.cursorIndex == byteIndex
-                val isSearchMatch = searchState.matchIndices.contains(byteIndex)
+                val isSearchMatch = searchState.isMatch(byteIndex)
                 val isCurrentMatch = isSearchMatch && searchState.isInCurrentMatch(byteIndex)
-                val isEdited = editState?.modifiedOffsets?.contains(byteIndex) == true
+                val isEdited = editState?.modifiedOffsets?.contains(byteIndex.toInt()) == true
                 val hasPendingDigit = isCursor && pendingDigit != null
 
                 val byteStructureIdx = if (structureRanges.isNotEmpty()) {
-                    structureLookup.indexAt(byteIndex.toLong())
+                    structureLookup.indexAt(byteIndex)
                 } else -1
                 val byteStructureBg = if (byteStructureIdx >= 0) {
                     STRUCTURE_COLORS[byteStructureIdx % STRUCTURE_COLORS.size]
@@ -1029,12 +1193,12 @@ private fun HexRow(
                     if (hasPendingDigit) {
                         Text(pendingDigit!!.toString(16) + "_")
                     } else {
-                        Text(byteVal.toString(16).padStart(2, '0'))
+                        Text(byteVal?.toString(16)?.padStart(2, '0') ?: "\u00B7\u00B7")
                     }
                 }
             }
             // Pad incomplete last row
-            val missing = BYTES_PER_ROW - (end - offset)
+            val missing = BYTES_PER_ROW - (end - offset).toInt()
             if (missing > 0) {
                 for (p in 0 until missing) {
                     Span({
@@ -1060,17 +1224,17 @@ private fun HexRow(
         }) {
             for (i in offset until end) {
                 val byteIndex = i
-                val rawByte = if (editState != null) editState.getByte(i) else bytes[i]
-                val c = rawByte.toInt().and(0xFF).toChar()
-                val display = if (c in ' '..'~') c.toString() else "."
+                val rawByte = byteAt(i)
+                val c = rawByte?.toInt()?.and(0xFF)?.toChar()
+                val display = if (c != null && c in ' '..'~') c.toString() else if (c == null) " " else "."
                 val isSelected = selection.contains(byteIndex)
                 val isCursor = selection.cursorIndex == byteIndex
-                val isSearchMatch = searchState.matchIndices.contains(byteIndex)
+                val isSearchMatch = searchState.isMatch(byteIndex)
                 val isCurrentMatch = isSearchMatch && searchState.isInCurrentMatch(byteIndex)
-                val isEdited = editState?.modifiedOffsets?.contains(byteIndex) == true
+                val isEdited = editState?.modifiedOffsets?.contains(byteIndex.toInt()) == true
 
                 val asciiStructureIdx = if (structureRanges.isNotEmpty()) {
-                    structureLookup.indexAt(byteIndex.toLong())
+                    structureLookup.indexAt(byteIndex)
                 } else -1
                 val asciiStructureBg = if (asciiStructureIdx >= 0) {
                     STRUCTURE_COLORS[asciiStructureIdx % STRUCTURE_COLORS.size]
@@ -1154,9 +1318,9 @@ private fun HexRow(
     }
 }
 
-private fun resolveColumn(relativeX: Double, containerWidth: Double): Int {
-    // The offset column is ~80px + 12px gap, hex bytes area starts around 92px
-    val hexAreaStart = 92.0
+private fun resolveColumn(relativeX: Double, offsetColumnPx: Int): Int {
+    // The offset column plus its 12px gap comes first; the hex bytes are 28px each after it.
+    val hexAreaStart = offsetColumnPx + 12.0
     val byteWidth = 28.0
     val col = ((relativeX - hexAreaStart) / byteWidth).toInt()
     return col.coerceIn(0, BYTES_PER_ROW - 1)

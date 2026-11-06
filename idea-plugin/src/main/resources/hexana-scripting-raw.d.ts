@@ -162,6 +162,7 @@ interface ArrowBinaryProvider extends BinaryProvider {
     };
     version: number;
   };
+  fileSize: number;
   format: "FILE" | "STREAM";
   schema?: {
     endianness: number;
@@ -208,6 +209,9 @@ interface ArrowBinaryProvider extends BinaryProvider {
       step: number;
     };
     lastIndex: number;
+    size: number;
+  };
+  source: {
     size: number;
   };
   sourcePath?: string;
@@ -350,9 +354,13 @@ interface NativeBinaryProvider extends BinaryProvider {
     name: string;
     rangeConfidence: "SymbolSize" | "NextSymbolInSection" | "BackendProvided" | "Unknown";
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionIndex: number;
     sectionName?: string;
@@ -388,9 +396,13 @@ interface NativeBinaryProvider extends BinaryProvider {
     code: string;
     message: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     severity: "Info" | "Warning" | "Error";
   }[];
@@ -422,28 +434,44 @@ interface ArchiveBinaryProvider extends NativeBinaryProvider {
       code: string;
       message: string;
       range?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       severity: "Info" | "Warning" | "Error";
     }[];
     magicRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     members: {
       contentRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       groupId: string;
       headerRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       index: number;
       isBookkeeping: boolean;
@@ -455,32 +483,48 @@ interface ArchiveBinaryProvider extends NativeBinaryProvider {
     }[];
     unresolvedRecords: {
       contentRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       id?: number;
       kind: string;
       name?: string;
       reason?: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
     }[];
   };
   members: {
     contentRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     groupId: string;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     isBookkeeping: boolean;
@@ -505,9 +549,13 @@ interface CoffBinaryProvider extends NativeBinaryProvider {
   coffHeader?: {
     characteristics: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     machine: number;
     optionalHeaderSize: number;
@@ -521,9 +569,13 @@ interface CoffBinaryProvider extends NativeBinaryProvider {
     index: number;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionNumber: number;
     storageClass: number;
@@ -544,9 +596,13 @@ interface CoffBinaryProvider extends NativeBinaryProvider {
     name: string;
     rangeConfidence: "SymbolSize" | "NextSymbolInSection" | "BackendProvided" | "Unknown";
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionIndex: number;
     sectionName?: string;
@@ -560,23 +616,35 @@ interface CoffBinaryProvider extends NativeBinaryProvider {
     code: string;
     message: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     severity: "Info" | "Warning" | "Error";
   }[];
   sections?: {
     characteristics: number;
     contentRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     lineNumberCount: number;
@@ -605,111 +673,188 @@ interface ElfBinaryProvider extends NativeBinaryProvider {
     index: number;
     neededLibrary?: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     tag: number;
     value: number;
   }[];
+  fileSize: number;
   header?: {
     abiVersion: number;
     endian: "Little" | "Big" | "Unknown";
     entryPoint: number;
     fieldRanges: {
       abiVersion: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       entryPoint: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       fileType: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       flags: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       headerSize: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       ident: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       machine: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       osAbi: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       programHeaderCount: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       programHeaderEntrySize: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       programHeaderOffset: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       sectionHeaderCount: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       sectionHeaderEntrySize: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       sectionHeaderOffset: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       sectionNameStringTableIndex: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       version: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
     };
     fileType: number;
     flags: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     headerSize: number;
     identRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     isElf64: boolean;
     machine: number;
@@ -740,9 +885,13 @@ interface ElfBinaryProvider extends NativeBinaryProvider {
     name: string;
     rangeConfidence: "SymbolSize" | "NextSymbolInSection" | "BackendProvided" | "Unknown";
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionIndex: number;
     sectionName?: string;
@@ -778,9 +927,13 @@ interface ElfBinaryProvider extends NativeBinaryProvider {
     code: string;
     message: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     severity: "Info" | "Warning" | "Error";
   }[];
@@ -788,16 +941,24 @@ interface ElfBinaryProvider extends NativeBinaryProvider {
     alignment: number;
     fileOffset: number;
     fileRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     fileSize: number;
     flags: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     memorySize: number;
@@ -811,9 +972,13 @@ interface ElfBinaryProvider extends NativeBinaryProvider {
     info: number;
     offset: number;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     relocationSectionIndex: number;
     symbol?: {
@@ -824,9 +989,13 @@ interface ElfBinaryProvider extends NativeBinaryProvider {
       nameOffset: number;
       other: number;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       sectionIndex: number;
       size: number;
@@ -843,17 +1012,25 @@ interface ElfBinaryProvider extends NativeBinaryProvider {
     address: number;
     addressAlignment: number;
     contentRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     entrySize: number;
     fileOffset: number;
     flags: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     info: number;
@@ -867,6 +1044,9 @@ interface ElfBinaryProvider extends NativeBinaryProvider {
     children: BinarySizeNode[];
     name: string;
     offset: number;
+    size: number;
+  };
+  source: {
     size: number;
   };
   structureRanges: {
@@ -883,9 +1063,13 @@ interface ElfBinaryProvider extends NativeBinaryProvider {
     nameOffset: number;
     other: number;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionIndex: number;
     size: number;
@@ -900,9 +1084,13 @@ interface FatMachOBinaryProvider extends NativeBinaryProvider {
   architectures?: {
     alignment: number;
     archRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     cpuSubtype: number;
     cpuType: number;
@@ -911,26 +1099,39 @@ interface FatMachOBinaryProvider extends NativeBinaryProvider {
     reserved?: number;
     size: number;
     sliceRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   }[];
   fatHeader?: {
     archCount: number;
     archTableRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     endian: "Little" | "Big" | "Unknown";
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     wordSize: "Bits32" | "Bits64" | "Unknown";
   };
+  fileSize: number;
   nativeFormat: {
     displayName: string;
     endian: "Little" | "Big" | "Unknown";
@@ -940,9 +1141,13 @@ interface FatMachOBinaryProvider extends NativeBinaryProvider {
     code: string;
     message: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     severity: "Info" | "Warning" | "Error";
   }[];
@@ -950,6 +1155,9 @@ interface FatMachOBinaryProvider extends NativeBinaryProvider {
     children: BinarySizeNode[];
     name: string;
     offset: number;
+    size: number;
+  };
+  source: {
     size: number;
   };
   structureRanges: {
@@ -963,9 +1171,13 @@ interface FatMachOBinaryProvider extends NativeBinaryProvider {
 interface MachOBinaryProvider extends NativeBinaryProvider {
   dylibs?: {
     commandRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     compatibilityVersion: number;
     currentVersion: number;
@@ -973,18 +1185,26 @@ interface MachOBinaryProvider extends NativeBinaryProvider {
     kind: "Load" | "WeakLoad" | "Reexport" | "UpwardLoad" | "LazyLoad" | "Id" | "Other";
     name: string;
     nameRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     timestamp: number;
     type: number;
   }[];
   dysymtab?: {
     commandRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     externalDefinedSymbolCount: number;
     externalDefinedSymbolIndex: number;
@@ -1005,6 +1225,7 @@ interface MachOBinaryProvider extends NativeBinaryProvider {
     undefinedSymbolCount: number;
     undefinedSymbolIndex: number;
   };
+  fileSize: number;
   header?: {
     cpuSubtype: number;
     cpuType: number;
@@ -1012,15 +1233,23 @@ interface MachOBinaryProvider extends NativeBinaryProvider {
     fileType: number;
     flags: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     loadCommandCount: number;
     loadCommandsRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     loadCommandsSize: number;
     magic: number;
@@ -1030,9 +1259,13 @@ interface MachOBinaryProvider extends NativeBinaryProvider {
   loadCommands?: {
     index: number;
     range: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     size: number;
     type: number;
@@ -1052,9 +1285,13 @@ interface MachOBinaryProvider extends NativeBinaryProvider {
     name: string;
     rangeConfidence: "SymbolSize" | "NextSymbolInSection" | "BackendProvided" | "Unknown";
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionIndex: number;
     sectionName?: string;
@@ -1090,9 +1327,13 @@ interface MachOBinaryProvider extends NativeBinaryProvider {
     code: string;
     message: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     severity: "Info" | "Warning" | "Error";
   }[];
@@ -1103,9 +1344,13 @@ interface MachOBinaryProvider extends NativeBinaryProvider {
     length: number;
     pcrel: boolean;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     scattered: boolean;
     sectionIndex: number;
@@ -1116,9 +1361,13 @@ interface MachOBinaryProvider extends NativeBinaryProvider {
       name: string;
       nameOffset: number;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       sectionIndex: number;
       type: number;
@@ -1132,16 +1381,24 @@ interface MachOBinaryProvider extends NativeBinaryProvider {
     address: number;
     alignment: number;
     contentRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     fileOffset: number;
     flags: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     name: string;
@@ -1153,15 +1410,23 @@ interface MachOBinaryProvider extends NativeBinaryProvider {
   }[];
   segments?: {
     commandRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     fileOffset: number;
     fileRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     fileSize: number;
     flags: number;
@@ -1174,16 +1439,24 @@ interface MachOBinaryProvider extends NativeBinaryProvider {
       address: number;
       alignment: number;
       contentRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       fileOffset: number;
       flags: number;
       headerRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       index: number;
       name: string;
@@ -1200,6 +1473,9 @@ interface MachOBinaryProvider extends NativeBinaryProvider {
     children: BinarySizeNode[];
     name: string;
     offset: number;
+    size: number;
+  };
+  source: {
     size: number;
   };
   strings: {
@@ -1221,9 +1497,13 @@ interface MachOBinaryProvider extends NativeBinaryProvider {
     name: string;
     nameOffset: number;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionIndex: number;
     type: number;
@@ -1231,35 +1511,55 @@ interface MachOBinaryProvider extends NativeBinaryProvider {
   }[];
   symtab?: {
     commandRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     stringTableOffset: number;
     stringTableRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     stringTableSize: number;
     symbolCount: number;
     symbolTableOffset: number;
     symbolTableRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   };
   uuid?: {
     commandRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     uuidRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     value: string;
   };
@@ -1317,9 +1617,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     entryIndex: number;
     pageRva: number;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     targetRva: number;
     type: number;
@@ -1332,9 +1636,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       name: string;
       publicKey: number[];
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       version: {
         build: number;
@@ -1349,9 +1657,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       name: string;
       publicKeyOrToken: number[];
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       token: number;
@@ -1366,9 +1678,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       code: string;
       message: string;
       range?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       severity: "Info" | "Warning" | "Error";
     }[];
@@ -1378,9 +1694,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       flags: number;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       token: number;
@@ -1391,9 +1711,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       flags: number;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       token: number;
@@ -1404,9 +1728,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       flags: number;
       hasNativeEntryPoint: boolean;
       headerRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       isIlOnly: boolean;
       isStrongNameSigned: boolean;
@@ -1428,9 +1756,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     };
     manifestResources: {
       dataRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       flags: number;
       implementation: string;
@@ -1438,9 +1770,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       name: string;
       offset: number;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       size?: number;
@@ -1450,9 +1786,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       name: string;
       parent: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       signature: string;
@@ -1461,9 +1801,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     methods: {
       body?: {
         codeRange: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         codeSize: number;
         exceptionClauses: {
@@ -1476,9 +1820,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
           tryOffset: number;
         }[];
         exceptionSectionsRange?: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         hasExceptionSections: boolean;
         initLocals: boolean;
@@ -1486,9 +1834,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
         localVarSigToken: number;
         maxStack: number;
         range: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
       };
       declaringTypeRow: number;
@@ -1496,9 +1848,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       implFlags: number;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       rva: number;
@@ -1508,9 +1864,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     methodsByType: Record<number, {
       body?: {
         codeRange: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         codeSize: number;
         exceptionClauses: {
@@ -1523,9 +1883,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
           tryOffset: number;
         }[];
         exceptionSectionsRange?: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         hasExceptionSections: boolean;
         initLocals: boolean;
@@ -1533,9 +1897,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
         localVarSigToken: number;
         maxStack: number;
         range: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
       };
       declaringTypeRow: number;
@@ -1543,9 +1911,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       implFlags: number;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       rva: number;
@@ -1557,17 +1929,25 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       mvid?: string;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
     };
     moduleRefs: {
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
     }[];
@@ -1578,9 +1958,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
         language?: string;
         name: string;
         recordRange: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         row: number;
       }[];
@@ -1588,9 +1972,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
         entryPointToken: number;
         guid: string;
         range: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         referencedTableRows: Record<number, number>;
         stamp: number;
@@ -1605,23 +1993,35 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       majorVersion: number;
       minorVersion: number;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       streamCount: number;
       version: string;
     };
     streams: {
       contentRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       headerRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       index: number;
       name: string;
@@ -1632,9 +2032,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       id: number;
       name: string;
       range?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       rowCount: number;
       rowSize: number;
@@ -1645,9 +2049,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       majorVersion: number;
       minorVersion: number;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       sortedMask: number;
       streamName: string;
@@ -1666,9 +2074,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       name: string;
       namespace: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       token: number;
@@ -1678,9 +2090,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       name: string;
       namespace: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       scope: string;
@@ -1689,9 +2105,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     userStrings: {
       heapOffset: number;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       token: number;
       value: string;
@@ -1700,9 +2120,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
   coffHeader?: {
     characteristics: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     machine: number;
     optionalHeaderSize: number;
@@ -1716,9 +2140,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     index: number;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionNumber: number;
     storageClass: number;
@@ -1734,9 +2162,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       signature: string;
     };
     dataRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     isPortablePdbCodeView: boolean;
@@ -1744,9 +2176,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     minorVersion: number;
     pointerToRawData: number;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sizeOfData: number;
     timeDateStamp: number;
@@ -1759,20 +2195,32 @@ interface PeBinaryProvider extends NativeBinaryProvider {
   };
   dosHeader?: {
     mzRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     peHeaderOffset: number;
     peHeaderOffsetRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     peSignatureRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   };
   embeddedPortablePdb?: {
@@ -1782,9 +2230,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       language?: string;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
     }[];
@@ -1792,9 +2244,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       entryPointToken: number;
       guid: string;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       referencedTableRows: Record<number, number>;
       stamp: number;
@@ -1805,23 +2261,35 @@ interface PeBinaryProvider extends NativeBinaryProvider {
   };
   exports?: {
     directoryRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     entries: {
       addressTableRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       forwarder?: string;
       index: number;
       name?: string;
       nameRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       ordinal: number;
       rva: number;
@@ -1830,9 +2298,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     name: string;
     nameCount: number;
     nameRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     ordinalBase: number;
   };
@@ -1840,24 +2312,36 @@ interface PeBinaryProvider extends NativeBinaryProvider {
   hasOnlyManagedCode: boolean;
   imports?: {
     descriptorRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     entries: {
       hint?: number;
       hintNameRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       index: number;
       name?: string;
       ordinal?: number;
       thunkRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       thunkRva: number;
     }[];
@@ -1866,9 +2350,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     index: number;
     name: string;
     nameRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   }[];
   isManaged: boolean;
@@ -1905,9 +2393,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       index: number;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       rva: number;
       size: number;
@@ -1916,9 +2408,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     dllCharacteristics: number;
     fileAlignment: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     imageBase: number;
     magic: number;
@@ -1932,9 +2428,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     code: string;
     message: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     severity: "Info" | "Warning" | "Error";
   }[];
@@ -1950,9 +2450,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       language?: string;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
     }[];
@@ -1960,9 +2464,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       entryPointToken: number;
       guid: string;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       referencedTableRows: Record<number, number>;
       stamp: number;
@@ -1977,37 +2485,57 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       code: string;
       message: string;
       range?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       severity: "Info" | "Warning" | "Error";
     }[];
     exceptionInfo: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     }[];
     flags: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     importSections: {
       auxiliaryDataOffset?: number;
       cells?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       entrySize: number;
       flags: number;
       signatureOffsets: number[];
       signatureTable?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       type: number;
     }[];
@@ -2015,9 +2543,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     majorVersion: number;
     methods: {
       codeRanges: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       }[];
       codeSize: number;
       firstRuntimeFunction: number;
@@ -2034,9 +2566,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     runtimeFunctions: {
       beginRva: number;
       codeRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       index: number;
       unwindRva: number;
@@ -2044,9 +2580,13 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     sections: {
       name: string;
       range?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       rva: number;
       size: number;
@@ -2058,14 +2598,22 @@ interface PeBinaryProvider extends NativeBinaryProvider {
   sections?: {
     characteristics: number;
     contentRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     lineNumberCount: number;
@@ -2123,6 +2671,7 @@ interface ParquetBinaryProvider extends BinaryProvider {
     truncated: boolean;
     undecodedReason: string | null[];
   };
+  fileSize: number;
   leafElements: {
     name: string;
     numChildren?: number;
@@ -2174,6 +2723,9 @@ interface ParquetBinaryProvider extends BinaryProvider {
     lastIndex: number;
     size: number;
   };
+  source: {
+    size: number;
+  };
   sourcePath?: string;
   structureRanges: {
     label: string;
@@ -2207,6 +2759,7 @@ interface TarBinaryProvider extends BinaryProvider {
     size: number;
     typeFlag: string;
   }[];
+  fileSize: number;
   sharedBytes: {
     indices: {
       endExclusive: number;
@@ -2217,6 +2770,9 @@ interface TarBinaryProvider extends BinaryProvider {
       step: number;
     };
     lastIndex: number;
+    size: number;
+  };
+  source: {
     size: number;
   };
   structureRanges: {
@@ -3989,6 +4545,7 @@ interface ZipBinaryProvider extends BinaryProvider {
     name: string;
     uncompressedSize: number;
   }[];
+  fileSize: number;
   sharedBytes: {
     indices: {
       endExclusive: number;
@@ -3999,6 +4556,9 @@ interface ZipBinaryProvider extends BinaryProvider {
       step: number;
     };
     lastIndex: number;
+    size: number;
+  };
+  source: {
     size: number;
   };
   structureRanges: {
@@ -4253,50 +4813,78 @@ interface ArscBinaryProvider extends GenericBinaryProvider {
 interface ClrResourcesBinaryProvider extends GenericBinaryProvider {
   parsedResources?: {
     dataSectionRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     diagnostics: {
       code: string;
       message: string;
       range?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       severity: "Info" | "Warning" | "Error";
     }[];
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     managerHeaderVersion: number;
     nameSectionRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     readerType: string;
     resourceSetType: string;
     resources: {
       dataRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       kind: "Null" | "String" | "Primitive" | "ByteArray" | "Stream" | "Serialized" | "Unreadable";
       name: string;
       nameRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       payloadRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       stringValue?: string;
       type: string;
@@ -4483,11 +5071,16 @@ interface PdbSymbolsBinaryProvider extends GenericBinaryProvider {
 }
 
 interface PdbBinaryProvider extends PdbSymbolsBinaryProvider {
+  fileSize: number;
   parsedPdb?: {
     blockMapRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     dbi?: {
       age: number;
@@ -4506,9 +5099,13 @@ interface PdbBinaryProvider extends PdbSymbolsBinaryProvider {
           characteristics: number;
           dataCrc: number;
           fileRange?: {
+            end: number;
             endExclusive: number;
+            fitsInt: boolean;
+            length: number;
             offset: number;
             size: number;
+            start: number;
           };
           moduleIndex: number;
           offset: number;
@@ -4517,9 +5114,13 @@ interface PdbBinaryProvider extends PdbSymbolsBinaryProvider {
           size: number;
         };
         fileRange?: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         flags: number;
         index: number;
@@ -4540,9 +5141,13 @@ interface PdbBinaryProvider extends PdbSymbolsBinaryProvider {
         characteristics: number;
         dataCrc: number;
         fileRange?: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         moduleIndex: number;
         offset: number;
@@ -4552,9 +5157,13 @@ interface PdbBinaryProvider extends PdbSymbolsBinaryProvider {
       }[];
       substreams: {
         fileRange?: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         name: string;
         size: number;
@@ -4568,9 +5177,13 @@ interface PdbBinaryProvider extends PdbSymbolsBinaryProvider {
       code: string;
       message: string;
       range?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       severity: "Info" | "Warning" | "Error";
     }[];
@@ -4617,15 +5230,6 @@ interface PdbBinaryProvider extends PdbSymbolsBinaryProvider {
       blockSize: number;
       blocks: number[];
       bytes: {
-        indices: {
-          endExclusive: number;
-          endInclusive: number;
-          first: number;
-          last: number;
-          start: number;
-          step: number;
-        };
-        lastIndex: number;
         size: number;
       };
       index: number;
@@ -4639,15 +5243,6 @@ interface PdbBinaryProvider extends PdbSymbolsBinaryProvider {
         blockSize: number;
         blocks: number[];
         bytes: {
-          indices: {
-            endExclusive: number;
-            endInclusive: number;
-            first: number;
-            last: number;
-            start: number;
-            step: number;
-          };
-          lastIndex: number;
           size: number;
         };
         index: number;
@@ -4662,9 +5257,13 @@ interface PdbBinaryProvider extends PdbSymbolsBinaryProvider {
       directoryByteCount: number;
       freeBlockMapBlock: number;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
     };
     tpi?: {
@@ -4679,6 +5278,9 @@ interface PdbBinaryProvider extends PdbSymbolsBinaryProvider {
     };
   };
   pdbGuid?: string;
+  source: {
+    size: number;
+  };
   structureRanges: {
     label: string;
     offset: number;
@@ -4696,9 +5298,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
       name: string;
       publicKey: number[];
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       version: {
         build: number;
@@ -4713,9 +5319,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
       name: string;
       publicKeyOrToken: number[];
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       token: number;
@@ -4730,9 +5340,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
       code: string;
       message: string;
       range?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       severity: "Info" | "Warning" | "Error";
     }[];
@@ -4742,9 +5356,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
       flags: number;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       token: number;
@@ -4755,9 +5373,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
       flags: number;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       token: number;
@@ -4768,9 +5390,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
       flags: number;
       hasNativeEntryPoint: boolean;
       headerRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       isIlOnly: boolean;
       isStrongNameSigned: boolean;
@@ -4792,9 +5418,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
     };
     manifestResources: {
       dataRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       flags: number;
       implementation: string;
@@ -4802,9 +5432,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
       name: string;
       offset: number;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       size?: number;
@@ -4814,9 +5448,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
       name: string;
       parent: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       signature: string;
@@ -4825,9 +5463,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
     methods: {
       body?: {
         codeRange: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         codeSize: number;
         exceptionClauses: {
@@ -4840,9 +5482,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
           tryOffset: number;
         }[];
         exceptionSectionsRange?: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         hasExceptionSections: boolean;
         initLocals: boolean;
@@ -4850,9 +5496,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
         localVarSigToken: number;
         maxStack: number;
         range: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
       };
       declaringTypeRow: number;
@@ -4860,9 +5510,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
       implFlags: number;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       rva: number;
@@ -4872,9 +5526,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
     methodsByType: Record<number, {
       body?: {
         codeRange: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         codeSize: number;
         exceptionClauses: {
@@ -4887,9 +5545,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
           tryOffset: number;
         }[];
         exceptionSectionsRange?: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         hasExceptionSections: boolean;
         initLocals: boolean;
@@ -4897,9 +5559,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
         localVarSigToken: number;
         maxStack: number;
         range: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
       };
       declaringTypeRow: number;
@@ -4907,9 +5573,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
       implFlags: number;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       rva: number;
@@ -4921,17 +5591,25 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
       mvid?: string;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
     };
     moduleRefs: {
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
     }[];
@@ -4942,9 +5620,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
         language?: string;
         name: string;
         recordRange: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         row: number;
       }[];
@@ -4952,9 +5634,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
         entryPointToken: number;
         guid: string;
         range: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         referencedTableRows: Record<number, number>;
         stamp: number;
@@ -4969,23 +5655,35 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
       majorVersion: number;
       minorVersion: number;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       streamCount: number;
       version: string;
     };
     streams: {
       contentRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       headerRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       index: number;
       name: string;
@@ -4996,9 +5694,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
       id: number;
       name: string;
       range?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       rowCount: number;
       rowSize: number;
@@ -5009,9 +5711,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
       majorVersion: number;
       minorVersion: number;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       sortedMask: number;
       streamName: string;
@@ -5030,9 +5736,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
       name: string;
       namespace: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       token: number;
@@ -5042,9 +5752,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
       name: string;
       namespace: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       scope: string;
@@ -5053,9 +5767,13 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
     userStrings: {
       heapOffset: number;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       token: number;
       value: string;
@@ -6888,9 +7606,13 @@ interface ClrAssembly {
   name: string;
   publicKey: number[];
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   version: {
     build: number;
@@ -6904,9 +7626,13 @@ interface ClrAssembly {
     minor: number;
     revision: number;
   }, culture: string, flags: number, hashAlgorithm: number, publicKey: number[], recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     culture: string;
     flags: number;
@@ -6914,9 +7640,13 @@ interface ClrAssembly {
     name: string;
     publicKey: number[];
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     version: {
       build: number;
@@ -6933,9 +7663,13 @@ interface ClrAssemblyRef {
   name: string;
   publicKeyOrToken: number[];
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   row: number;
   token: number;
@@ -6951,18 +7685,26 @@ interface ClrAssemblyRef {
     minor: number;
     revision: number;
   }, culture: string, flags: number, publicKeyOrToken: number[], recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     culture: string;
     flags: number;
     name: string;
     publicKeyOrToken: number[];
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     token: number;
@@ -6980,9 +7722,13 @@ interface ClrCliHeader {
   flags: number;
   hasNativeEntryPoint: boolean;
   headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   isIlOnly: boolean;
   isStrongNameSigned: boolean;
@@ -7002,17 +7748,25 @@ interface ClrCliHeader {
   vTableFixupsRva: number;
   vTableFixupsSize: number;
   copy(size: number, majorRuntimeVersion: number, minorRuntimeVersion: number, metadataRva: number, metadataSize: number, flags: number, entryPointToken: number, resourcesRva: number, resourcesSize: number, strongNameSignatureRva: number, strongNameSignatureSize: number, vTableFixupsRva: number, vTableFixupsSize: number, managedNativeHeaderRva: number, managedNativeHeaderSize: number, headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     entryPointToken: number;
     flags: number;
     hasNativeEntryPoint: boolean;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     isIlOnly: boolean;
     isStrongNameSigned: boolean;
@@ -7058,25 +7812,37 @@ interface ClrField {
   flags: number;
   name: string;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   row: number;
   token: number;
   type: string;
   copy(row: number, name: string, flags: number, type: string, declaringTypeRow: number, recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     declaringTypeRow: number;
     flags: number;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     token: number;
@@ -7086,9 +7852,13 @@ interface ClrField {
 
 interface ClrManifestResource {
   dataRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   flags: number;
   implementation: string;
@@ -7096,25 +7866,41 @@ interface ClrManifestResource {
   name: string;
   offset: number;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   row: number;
   size?: number;
   copy(row: number, name: string, offset: number, flags: number, implementation: string, size: number | null, dataRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null, recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     dataRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     flags: number;
     implementation: string;
@@ -7122,9 +7908,13 @@ interface ClrManifestResource {
     name: string;
     offset: number;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     size?: number;
@@ -7136,25 +7926,37 @@ interface ClrMemberRef {
   name: string;
   parent: string;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   row: number;
   signature: string;
   token: number;
   copy(row: number, parent: string, name: string, signature: string, isField: boolean, recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     isField: boolean;
     name: string;
     parent: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     signature: string;
@@ -7170,9 +7972,13 @@ interface ClrMetadata {
     name: string;
     publicKey: number[];
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     version: {
       build: number;
@@ -7187,9 +7993,13 @@ interface ClrMetadata {
     name: string;
     publicKeyOrToken: number[];
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     token: number;
@@ -7204,9 +8014,13 @@ interface ClrMetadata {
     code: string;
     message: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     severity: "Info" | "Warning" | "Error";
   }[];
@@ -7216,9 +8030,13 @@ interface ClrMetadata {
     flags: number;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     token: number;
@@ -7229,9 +8047,13 @@ interface ClrMetadata {
     flags: number;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     token: number;
@@ -7242,9 +8064,13 @@ interface ClrMetadata {
     flags: number;
     hasNativeEntryPoint: boolean;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     isIlOnly: boolean;
     isStrongNameSigned: boolean;
@@ -7266,9 +8092,13 @@ interface ClrMetadata {
   };
   manifestResources: {
     dataRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     flags: number;
     implementation: string;
@@ -7276,9 +8106,13 @@ interface ClrMetadata {
     name: string;
     offset: number;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     size?: number;
@@ -7288,9 +8122,13 @@ interface ClrMetadata {
     name: string;
     parent: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     signature: string;
@@ -7299,9 +8137,13 @@ interface ClrMetadata {
   methods: {
     body?: {
       codeRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       codeSize: number;
       exceptionClauses: {
@@ -7314,9 +8156,13 @@ interface ClrMetadata {
         tryOffset: number;
       }[];
       exceptionSectionsRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       hasExceptionSections: boolean;
       initLocals: boolean;
@@ -7324,9 +8170,13 @@ interface ClrMetadata {
       localVarSigToken: number;
       maxStack: number;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
     };
     declaringTypeRow: number;
@@ -7334,9 +8184,13 @@ interface ClrMetadata {
     implFlags: number;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     rva: number;
@@ -7346,9 +8200,13 @@ interface ClrMetadata {
   methodsByType: Record<number, {
     body?: {
       codeRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       codeSize: number;
       exceptionClauses: {
@@ -7361,9 +8219,13 @@ interface ClrMetadata {
         tryOffset: number;
       }[];
       exceptionSectionsRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       hasExceptionSections: boolean;
       initLocals: boolean;
@@ -7371,9 +8233,13 @@ interface ClrMetadata {
       localVarSigToken: number;
       maxStack: number;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
     };
     declaringTypeRow: number;
@@ -7381,9 +8247,13 @@ interface ClrMetadata {
     implFlags: number;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     rva: number;
@@ -7395,17 +8265,25 @@ interface ClrMetadata {
     mvid?: string;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   };
   moduleRefs: {
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
   }[];
@@ -7416,9 +8294,13 @@ interface ClrMetadata {
       language?: string;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
     }[];
@@ -7426,9 +8308,13 @@ interface ClrMetadata {
       entryPointToken: number;
       guid: string;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       referencedTableRows: Record<number, number>;
       stamp: number;
@@ -7443,23 +8329,35 @@ interface ClrMetadata {
     majorVersion: number;
     minorVersion: number;
     range: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     streamCount: number;
     version: string;
   };
   streams: {
     contentRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     name: string;
@@ -7470,9 +8368,13 @@ interface ClrMetadata {
     id: number;
     name: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     rowCount: number;
     rowSize: number;
@@ -7483,9 +8385,13 @@ interface ClrMetadata {
     majorVersion: number;
     minorVersion: number;
     range: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sortedMask: number;
     streamName: string;
@@ -7504,9 +8410,13 @@ interface ClrMetadata {
     name: string;
     namespace: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     token: number;
@@ -7516,9 +8426,13 @@ interface ClrMetadata {
     name: string;
     namespace: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     scope: string;
@@ -7527,9 +8441,13 @@ interface ClrMetadata {
   userStrings: {
     heapOffset: number;
     range: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     token: number;
     value: string;
@@ -7539,9 +8457,13 @@ interface ClrMetadata {
     flags: number;
     hasNativeEntryPoint: boolean;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     isIlOnly: boolean;
     isStrongNameSigned: boolean;
@@ -7565,22 +8487,34 @@ interface ClrMetadata {
     majorVersion: number;
     minorVersion: number;
     range: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     streamCount: number;
     version: string;
   } | null, streams: {
     contentRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     name: string;
@@ -7591,9 +8525,13 @@ interface ClrMetadata {
     majorVersion: number;
     minorVersion: number;
     range: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sortedMask: number;
     streamName: string;
@@ -7602,9 +8540,13 @@ interface ClrMetadata {
     id: number;
     name: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     rowCount: number;
     rowSize: number;
@@ -7614,9 +8556,13 @@ interface ClrMetadata {
     mvid?: string;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   } | null, assembly: {
     culture: string;
@@ -7625,9 +8571,13 @@ interface ClrMetadata {
     name: string;
     publicKey: number[];
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     version: {
       build: number;
@@ -7640,9 +8590,13 @@ interface ClrMetadata {
     name: string;
     namespace: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     scope: string;
@@ -7658,9 +8612,13 @@ interface ClrMetadata {
     name: string;
     namespace: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     token: number;
@@ -7669,9 +8627,13 @@ interface ClrMetadata {
     flags: number;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     token: number;
@@ -7679,9 +8641,13 @@ interface ClrMetadata {
   }[], methods: {
     body?: {
       codeRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       codeSize: number;
       exceptionClauses: {
@@ -7694,9 +8660,13 @@ interface ClrMetadata {
         tryOffset: number;
       }[];
       exceptionSectionsRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       hasExceptionSections: boolean;
       initLocals: boolean;
@@ -7704,9 +8674,13 @@ interface ClrMetadata {
       localVarSigToken: number;
       maxStack: number;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
     };
     declaringTypeRow: number;
@@ -7714,9 +8688,13 @@ interface ClrMetadata {
     implFlags: number;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     rva: number;
@@ -7727,9 +8705,13 @@ interface ClrMetadata {
     name: string;
     parent: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     signature: string;
@@ -7737,9 +8719,13 @@ interface ClrMetadata {
   }[], moduleRefs: {
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
   }[], assemblyRefs: {
@@ -7748,9 +8734,13 @@ interface ClrMetadata {
     name: string;
     publicKeyOrToken: number[];
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     token: number;
@@ -7762,9 +8752,13 @@ interface ClrMetadata {
     };
   }[], manifestResources: {
     dataRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     flags: number;
     implementation: string;
@@ -7772,18 +8766,26 @@ interface ClrMetadata {
     name: string;
     offset: number;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     size?: number;
   }[], userStrings: {
     heapOffset: number;
     range: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     token: number;
     value: string;
@@ -7791,9 +8793,13 @@ interface ClrMetadata {
     code: string;
     message: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     severity: "Info" | "Warning" | "Error";
   }[], tokens: ClrTokenResolver, portablePdb: {
@@ -7803,9 +8809,13 @@ interface ClrMetadata {
       language?: string;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
     }[];
@@ -7813,9 +8823,13 @@ interface ClrMetadata {
       entryPointToken: number;
       guid: string;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       referencedTableRows: Record<number, number>;
       stamp: number;
@@ -7831,9 +8845,13 @@ interface ClrMetadata {
       name: string;
       publicKey: number[];
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       version: {
         build: number;
@@ -7848,9 +8866,13 @@ interface ClrMetadata {
       name: string;
       publicKeyOrToken: number[];
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       token: number;
@@ -7865,9 +8887,13 @@ interface ClrMetadata {
       code: string;
       message: string;
       range?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       severity: "Info" | "Warning" | "Error";
     }[];
@@ -7877,9 +8903,13 @@ interface ClrMetadata {
       flags: number;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       token: number;
@@ -7890,9 +8920,13 @@ interface ClrMetadata {
       flags: number;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       token: number;
@@ -7903,9 +8937,13 @@ interface ClrMetadata {
       flags: number;
       hasNativeEntryPoint: boolean;
       headerRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       isIlOnly: boolean;
       isStrongNameSigned: boolean;
@@ -7927,9 +8965,13 @@ interface ClrMetadata {
     };
     manifestResources: {
       dataRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       flags: number;
       implementation: string;
@@ -7937,9 +8979,13 @@ interface ClrMetadata {
       name: string;
       offset: number;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       size?: number;
@@ -7949,9 +8995,13 @@ interface ClrMetadata {
       name: string;
       parent: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       signature: string;
@@ -7960,9 +9010,13 @@ interface ClrMetadata {
     methods: {
       body?: {
         codeRange: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         codeSize: number;
         exceptionClauses: {
@@ -7975,9 +9029,13 @@ interface ClrMetadata {
           tryOffset: number;
         }[];
         exceptionSectionsRange?: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         hasExceptionSections: boolean;
         initLocals: boolean;
@@ -7985,9 +9043,13 @@ interface ClrMetadata {
         localVarSigToken: number;
         maxStack: number;
         range: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
       };
       declaringTypeRow: number;
@@ -7995,9 +9057,13 @@ interface ClrMetadata {
       implFlags: number;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       rva: number;
@@ -8007,9 +9073,13 @@ interface ClrMetadata {
     methodsByType: Record<number, {
       body?: {
         codeRange: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         codeSize: number;
         exceptionClauses: {
@@ -8022,9 +9092,13 @@ interface ClrMetadata {
           tryOffset: number;
         }[];
         exceptionSectionsRange?: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         hasExceptionSections: boolean;
         initLocals: boolean;
@@ -8032,9 +9106,13 @@ interface ClrMetadata {
         localVarSigToken: number;
         maxStack: number;
         range: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
       };
       declaringTypeRow: number;
@@ -8042,9 +9120,13 @@ interface ClrMetadata {
       implFlags: number;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       rva: number;
@@ -8056,17 +9138,25 @@ interface ClrMetadata {
       mvid?: string;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
     };
     moduleRefs: {
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
     }[];
@@ -8077,9 +9167,13 @@ interface ClrMetadata {
         language?: string;
         name: string;
         recordRange: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         row: number;
       }[];
@@ -8087,9 +9181,13 @@ interface ClrMetadata {
         entryPointToken: number;
         guid: string;
         range: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         referencedTableRows: Record<number, number>;
         stamp: number;
@@ -8104,23 +9202,35 @@ interface ClrMetadata {
       majorVersion: number;
       minorVersion: number;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       streamCount: number;
       version: string;
     };
     streams: {
       contentRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       headerRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       index: number;
       name: string;
@@ -8131,9 +9241,13 @@ interface ClrMetadata {
       id: number;
       name: string;
       range?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       rowCount: number;
       rowSize: number;
@@ -8144,9 +9258,13 @@ interface ClrMetadata {
       majorVersion: number;
       minorVersion: number;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       sortedMask: number;
       streamName: string;
@@ -8165,9 +9283,13 @@ interface ClrMetadata {
       name: string;
       namespace: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       token: number;
@@ -8177,9 +9299,13 @@ interface ClrMetadata {
       name: string;
       namespace: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       row: number;
       scope: string;
@@ -8188,9 +9314,13 @@ interface ClrMetadata {
     userStrings: {
       heapOffset: number;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       token: number;
       value: string;
@@ -8203,24 +9333,36 @@ interface ClrMetadataRoot {
   majorVersion: number;
   minorVersion: number;
   range: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   streamCount: number;
   version: string;
   copy(majorVersion: number, minorVersion: number, version: string, flags: number, streamCount: number, range: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     flags: number;
     majorVersion: number;
     minorVersion: number;
     range: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     streamCount: number;
     version: string;
@@ -8229,9 +9371,13 @@ interface ClrMetadataRoot {
 
 interface ClrMethodBody {
   codeRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   codeSize: number;
   exceptionClauses: {
@@ -8244,9 +9390,13 @@ interface ClrMethodBody {
     tryOffset: number;
   }[];
   exceptionSectionsRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   hasExceptionSections: boolean;
   initLocals: boolean;
@@ -8254,18 +9404,30 @@ interface ClrMethodBody {
   localVarSigToken: number;
   maxStack: number;
   range: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   copy(isFat: boolean, maxStack: number, codeSize: number, localVarSigToken: number, hasExceptionSections: boolean, range: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, codeRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, exceptionClauses: {
     catchType?: string;
     filterOffset?: number;
@@ -8275,14 +9437,22 @@ interface ClrMethodBody {
     tryLength: number;
     tryOffset: number;
   }[], initLocals: boolean, exceptionSectionsRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null): {
     codeRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     codeSize: number;
     exceptionClauses: {
@@ -8295,9 +9465,13 @@ interface ClrMethodBody {
       tryOffset: number;
     }[];
     exceptionSectionsRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     hasExceptionSections: boolean;
     initLocals: boolean;
@@ -8305,9 +9479,13 @@ interface ClrMethodBody {
     localVarSigToken: number;
     maxStack: number;
     range: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   };
 }
@@ -8315,9 +9493,13 @@ interface ClrMethodBody {
 interface ClrMethodDef {
   body?: {
     codeRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     codeSize: number;
     exceptionClauses: {
@@ -8330,9 +9512,13 @@ interface ClrMethodDef {
       tryOffset: number;
     }[];
     exceptionSectionsRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     hasExceptionSections: boolean;
     initLocals: boolean;
@@ -8340,9 +9526,13 @@ interface ClrMethodDef {
     localVarSigToken: number;
     maxStack: number;
     range: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   };
   declaringTypeRow: number;
@@ -8350,9 +9540,13 @@ interface ClrMethodDef {
   implFlags: number;
   name: string;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   row: number;
   rva: number;
@@ -8360,9 +9554,13 @@ interface ClrMethodDef {
   token: number;
   copy(row: number, name: string, rva: number, flags: number, implFlags: number, signature: string, declaringTypeRow: number, body: {
     codeRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     codeSize: number;
     exceptionClauses: {
@@ -8375,9 +9573,13 @@ interface ClrMethodDef {
       tryOffset: number;
     }[];
     exceptionSectionsRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     hasExceptionSections: boolean;
     initLocals: boolean;
@@ -8385,20 +9587,32 @@ interface ClrMethodDef {
     localVarSigToken: number;
     maxStack: number;
     range: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   } | null, recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     body?: {
       codeRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       codeSize: number;
       exceptionClauses: {
@@ -8411,9 +9625,13 @@ interface ClrMethodDef {
         tryOffset: number;
       }[];
       exceptionSectionsRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       hasExceptionSections: boolean;
       initLocals: boolean;
@@ -8421,9 +9639,13 @@ interface ClrMethodDef {
       localVarSigToken: number;
       maxStack: number;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
     };
     declaringTypeRow: number;
@@ -8431,9 +9653,13 @@ interface ClrMethodDef {
     implFlags: number;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     rva: number;
@@ -8447,22 +9673,34 @@ interface ClrModule {
   mvid?: string;
   name: string;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   copy(generation: number, name: string, mvid: string | null, recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     generation: number;
     mvid?: string;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   };
 }
@@ -8470,21 +9708,33 @@ interface ClrModule {
 interface ClrModuleRef {
   name: string;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   row: number;
   copy(row: number, name: string, recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
   };
@@ -8496,24 +9746,36 @@ interface ClrPdbDocument {
   language?: string;
   name: string;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   row: number;
   copy(row: number, name: string, hashAlgorithm: string | null, hash: string, language: string | null, recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     hash: string;
     hashAlgorithm?: string;
     language?: string;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
   };
@@ -8523,23 +9785,35 @@ interface ClrPdbStreamHeader {
   entryPointToken: number;
   guid: string;
   range: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   referencedTableRows: Record<number, number>;
   stamp: number;
   copy(guid: string, stamp: number, entryPointToken: number, referencedTableRows: Record<number, number>, range: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     entryPointToken: number;
     guid: string;
     range: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     referencedTableRows: Record<number, number>;
     stamp: number;
@@ -8553,9 +9827,13 @@ interface ClrPortablePdb {
     language?: string;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
   }[];
@@ -8563,9 +9841,13 @@ interface ClrPortablePdb {
     entryPointToken: number;
     guid: string;
     range: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     referencedTableRows: Record<number, number>;
     stamp: number;
@@ -8579,9 +9861,13 @@ interface ClrPortablePdb {
     language?: string;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
   } | null;
@@ -8602,37 +9888,57 @@ interface ClrReadyToRunImage {
     code: string;
     message: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     severity: "Info" | "Warning" | "Error";
   }[];
   exceptionInfo: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }[];
   flags: number;
   headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   importSections: {
     auxiliaryDataOffset?: number;
     cells?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     entrySize: number;
     flags: number;
     signatureOffsets: number[];
     signatureTable?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     type: number;
   }[];
@@ -8640,9 +9946,13 @@ interface ClrReadyToRunImage {
   majorVersion: number;
   methods: {
     codeRanges: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     }[];
     codeSize: number;
     firstRuntimeFunction: number;
@@ -8659,9 +9969,13 @@ interface ClrReadyToRunImage {
   runtimeFunctions: {
     beginRva: number;
     codeRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     unwindRva: number;
@@ -8669,9 +9983,13 @@ interface ClrReadyToRunImage {
   sections: {
     name: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     rva: number;
     size: number;
@@ -8680,15 +9998,23 @@ interface ClrReadyToRunImage {
   targetMachine: number;
   targetOs: string;
   copy(majorVersion: number, minorVersion: number, flags: number, targetOs: string, targetMachine: number, headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, sections: {
     name: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     rva: number;
     size: number;
@@ -8696,17 +10022,25 @@ interface ClrReadyToRunImage {
   }[], runtimeFunctions: {
     beginRva: number;
     codeRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     unwindRva: number;
   }[], methods: {
     codeRanges: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     }[];
     codeSize: number;
     firstRuntimeFunction: number;
@@ -8721,30 +10055,46 @@ interface ClrReadyToRunImage {
   }[], importSections: {
     auxiliaryDataOffset?: number;
     cells?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     entrySize: number;
     flags: number;
     signatureOffsets: number[];
     signatureTable?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     type: number;
   }[], exceptionInfo: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }[], codeSizesApproximate: boolean, diagnostics: {
     code: string;
     message: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     severity: "Info" | "Warning" | "Error";
   }[]): {
@@ -8753,37 +10103,57 @@ interface ClrReadyToRunImage {
       code: string;
       message: string;
       range?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       severity: "Info" | "Warning" | "Error";
     }[];
     exceptionInfo: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     }[];
     flags: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     importSections: {
       auxiliaryDataOffset?: number;
       cells?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       entrySize: number;
       flags: number;
       signatureOffsets: number[];
       signatureTable?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       type: number;
     }[];
@@ -8791,9 +10161,13 @@ interface ClrReadyToRunImage {
     majorVersion: number;
     methods: {
       codeRanges: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       }[];
       codeSize: number;
       firstRuntimeFunction: number;
@@ -8810,9 +10184,13 @@ interface ClrReadyToRunImage {
     runtimeFunctions: {
       beginRva: number;
       codeRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       index: number;
       unwindRva: number;
@@ -8820,9 +10198,13 @@ interface ClrReadyToRunImage {
     sections: {
       name: string;
       range?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       rva: number;
       size: number;
@@ -8836,41 +10218,65 @@ interface ClrReadyToRunImage {
 interface ClrReadyToRunImportSection {
   auxiliaryDataOffset?: number;
   cells?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   entrySize: number;
   flags: number;
   signatureOffsets: number[];
   signatureTable?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   type: number;
   copy(type: number, flags: number, entrySize: number, cells: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null, signatureTable: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null, signatureOffsets: number[], auxiliaryDataOffset: number | null): {
     auxiliaryDataOffset?: number;
     cells?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     entrySize: number;
     flags: number;
     signatureOffsets: number[];
     signatureTable?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     type: number;
   };
@@ -8878,9 +10284,13 @@ interface ClrReadyToRunImportSection {
 
 interface ClrReadyToRunMethod {
   codeRanges: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }[];
   codeSize: number;
   firstRuntimeFunction: number;
@@ -8893,14 +10303,22 @@ interface ClrReadyToRunMethod {
   ownerType?: string;
   runtimeFunctionCount: number;
   copy(methodDefRow: number | null, memberRefRow: number | null, foreignAssembly: string | null, foreignToken: number | null, isInstantiation: boolean, ownerType: string | null, methodTypeArguments: string[], firstRuntimeFunction: number, runtimeFunctionCount: number, codeRanges: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }[]): {
     codeRanges: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     }[];
     codeSize: number;
     firstRuntimeFunction: number;
@@ -8918,23 +10336,35 @@ interface ClrReadyToRunMethod {
 interface ClrReadyToRunSection {
   name: string;
   range?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   rva: number;
   size: number;
   type: number;
   copy(type: number, name: string, rva: number, size: number, range: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null): {
     name: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     rva: number;
     size: number;
@@ -8944,54 +10374,90 @@ interface ClrReadyToRunSection {
 
 interface ClrResource {
   dataRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   kind: "Null" | "String" | "Primitive" | "ByteArray" | "Stream" | "Serialized" | "Unreadable";
   name: string;
   nameRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   payloadRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   stringValue?: string;
   type: string;
   value: string;
   copy(name: string, type: string, kind: "Null" | "String" | "Primitive" | "ByteArray" | "Stream" | "Serialized" | "Unreadable", value: string, stringValue: string | null, nameRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, dataRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null, payloadRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null): {
     dataRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     kind: "Null" | "String" | "Primitive" | "ByteArray" | "Stream" | "Serialized" | "Unreadable";
     name: string;
     nameRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     payloadRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     stringValue?: string;
     type: string;
@@ -9001,50 +10467,78 @@ interface ClrResource {
 
 interface ClrResourcesFile {
   dataSectionRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   diagnostics: {
     code: string;
     message: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     severity: "Info" | "Warning" | "Error";
   }[];
   headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   managerHeaderVersion: number;
   nameSectionRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   readerType: string;
   resourceSetType: string;
   resources: {
     dataRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     kind: "Null" | "String" | "Primitive" | "ByteArray" | "Stream" | "Serialized" | "Unreadable";
     name: string;
     nameRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     payloadRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     stringValue?: string;
     type: string;
@@ -9054,92 +10548,148 @@ interface ClrResourcesFile {
   version: number;
   copy(managerHeaderVersion: number, readerType: string, resourceSetType: string, version: number, types: string[], resources: {
     dataRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     kind: "Null" | "String" | "Primitive" | "ByteArray" | "Stream" | "Serialized" | "Unreadable";
     name: string;
     nameRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     payloadRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     stringValue?: string;
     type: string;
     value: string;
   }[], headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, nameSectionRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null, dataSectionRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null, diagnostics: {
     code: string;
     message: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     severity: "Info" | "Warning" | "Error";
   }[]): {
     dataSectionRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     diagnostics: {
       code: string;
       message: string;
       range?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       severity: "Info" | "Warning" | "Error";
     }[];
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     managerHeaderVersion: number;
     nameSectionRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     readerType: string;
     resourceSetType: string;
     resources: {
       dataRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       kind: "Null" | "String" | "Primitive" | "ByteArray" | "Stream" | "Serialized" | "Unreadable";
       name: string;
       nameRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       payloadRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       stringValue?: string;
       type: string;
@@ -9153,22 +10703,34 @@ interface ClrResourcesFile {
 interface ClrRuntimeFunction {
   beginRva: number;
   codeRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   index: number;
   unwindRva: number;
   copy(index: number, beginRva: number, codeRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null, unwindRva: number): {
     beginRva: number;
     codeRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     unwindRva: number;
@@ -9196,37 +10758,61 @@ interface ClrSequencePoint {
 
 interface ClrStream {
   contentRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   index: number;
   name: string;
   offset: number;
   size: number;
   copy(index: number, name: string, offset: number, size: number, headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, contentRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null): {
     contentRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     name: string;
@@ -9239,24 +10825,36 @@ interface ClrTableInfo {
   id: number;
   name: string;
   range?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   rowCount: number;
   rowSize: number;
   sorted: boolean;
   copy(id: number, name: string, rowCount: number, rowSize: number, sorted: boolean, range: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null): {
     id: number;
     name: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     rowCount: number;
     rowSize: number;
@@ -9269,25 +10867,37 @@ interface ClrTablesHeader {
   majorVersion: number;
   minorVersion: number;
   range: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   sortedMask: number;
   streamName: string;
   validMask: number;
   copy(streamName: string, majorVersion: number, minorVersion: number, heapSizes: number, validMask: number, sortedMask: number, range: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     heapSizes: number;
     majorVersion: number;
     minorVersion: number;
     range: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sortedMask: number;
     streamName: string;
@@ -9299,9 +10909,13 @@ interface ClrTokenResolver {
   describe(token: number, method: {
     body?: {
       codeRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       codeSize: number;
       exceptionClauses: {
@@ -9314,9 +10928,13 @@ interface ClrTokenResolver {
         tryOffset: number;
       }[];
       exceptionSectionsRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       hasExceptionSections: boolean;
       initLocals: boolean;
@@ -9324,9 +10942,13 @@ interface ClrTokenResolver {
       localVarSigToken: number;
       maxStack: number;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
     };
     declaringTypeRow: number;
@@ -9334,9 +10956,13 @@ interface ClrTokenResolver {
     implFlags: number;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     rva: number;
@@ -9346,9 +10972,13 @@ interface ClrTokenResolver {
   localVariableTypes(method: {
     body?: {
       codeRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       codeSize: number;
       exceptionClauses: {
@@ -9361,9 +10991,13 @@ interface ClrTokenResolver {
         tryOffset: number;
       }[];
       exceptionSectionsRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       hasExceptionSections: boolean;
       initLocals: boolean;
@@ -9371,9 +11005,13 @@ interface ClrTokenResolver {
       localVarSigToken: number;
       maxStack: number;
       range: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
     };
     declaringTypeRow: number;
@@ -9381,9 +11019,13 @@ interface ClrTokenResolver {
     implFlags: number;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     rva: number;
@@ -9403,16 +11045,24 @@ interface ClrTypeDef {
   name: string;
   namespace: string;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   row: number;
   token: number;
   copy(row: number, namespace: string, name: string, fullName: string, flags: number, kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module", interfaces: string[], extends: string | null, enclosingTypeRow: number | null, genericParameters: string[], recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     enclosingTypeRow?: number;
     extends?: string;
@@ -9424,9 +11074,13 @@ interface ClrTypeDef {
     name: string;
     namespace: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     token: number;
@@ -9438,25 +11092,37 @@ interface ClrTypeRef {
   name: string;
   namespace: string;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   row: number;
   scope: string;
   token: number;
   copy(row: number, namespace: string, name: string, fullName: string, scope: string, recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     fullName: string;
     name: string;
     namespace: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     row: number;
     scope: string;
@@ -9467,22 +11133,34 @@ interface ClrTypeRef {
 interface ClrUserString {
   heapOffset: number;
   range: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   token: number;
   value: string;
   copy(heapOffset: number, value: string, range: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     heapOffset: number;
     range: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     token: number;
     value: string;
@@ -10236,24 +11914,36 @@ interface ElfDynamicEntry {
   index: number;
   neededLibrary?: string;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   tag: number;
   value: number;
   copy(index: number, dynamicSectionIndex: number, tag: number, value: number, neededLibrary: string | null, recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     dynamicSectionIndex: number;
     index: number;
     neededLibrary?: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     tag: number;
     value: number;
@@ -10266,98 +11956,170 @@ interface ElfHeader {
   entryPoint: number;
   fieldRanges: {
     abiVersion: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     entryPoint: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     fileType: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     flags: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     headerSize: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     ident: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     machine: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     osAbi: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     programHeaderCount: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     programHeaderEntrySize: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     programHeaderOffset: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionHeaderCount: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionHeaderEntrySize: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionHeaderOffset: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionNameStringTableIndex: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     version: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   };
   fileType: number;
   flags: number;
   headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   headerSize: number;
   identRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   isElf64: boolean;
   machine: number;
@@ -10372,93 +12134,165 @@ interface ElfHeader {
   version: number;
   wordSize: "Bits32" | "Bits64" | "Unknown";
   copy(wordSize: "Bits32" | "Bits64" | "Unknown", endian: "Little" | "Big" | "Unknown", osAbi: number, abiVersion: number, fileType: number, machine: number, version: number, entryPoint: number, programHeaderOffset: number, sectionHeaderOffset: number, flags: number, headerSize: number, programHeaderEntrySize: number, programHeaderCount: number, sectionHeaderEntrySize: number, sectionHeaderCount: number, sectionNameStringTableIndex: number, identRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, fieldRanges: {
     abiVersion: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     entryPoint: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     fileType: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     flags: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     headerSize: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     ident: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     machine: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     osAbi: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     programHeaderCount: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     programHeaderEntrySize: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     programHeaderOffset: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionHeaderCount: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionHeaderEntrySize: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionHeaderOffset: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionNameStringTableIndex: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     version: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   }): {
     abiVersion: number;
@@ -10466,98 +12300,170 @@ interface ElfHeader {
     entryPoint: number;
     fieldRanges: {
       abiVersion: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       entryPoint: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       fileType: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       flags: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       headerSize: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       ident: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       machine: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       osAbi: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       programHeaderCount: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       programHeaderEntrySize: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       programHeaderOffset: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       sectionHeaderCount: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       sectionHeaderEntrySize: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       sectionHeaderOffset: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       sectionNameStringTableIndex: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       version: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
     };
     fileType: number;
     flags: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     headerSize: number;
     identRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     isElf64: boolean;
     machine: number;
@@ -10576,229 +12482,421 @@ interface ElfHeader {
 
 interface ElfHeaderFieldRanges {
   abiVersion: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   entryPoint: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   fileType: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   flags: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   headerSize: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   ident: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   machine: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   osAbi: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   programHeaderCount: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   programHeaderEntrySize: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   programHeaderOffset: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   sectionHeaderCount: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   sectionHeaderEntrySize: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   sectionHeaderOffset: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   sectionNameStringTableIndex: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   version: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   copy(ident: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, osAbi: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, abiVersion: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, fileType: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, machine: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, version: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, entryPoint: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, programHeaderOffset: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, sectionHeaderOffset: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, flags: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, headerSize: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, programHeaderEntrySize: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, programHeaderCount: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, sectionHeaderEntrySize: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, sectionHeaderCount: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, sectionNameStringTableIndex: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     abiVersion: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     entryPoint: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     fileType: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     flags: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     headerSize: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     ident: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     machine: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     osAbi: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     programHeaderCount: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     programHeaderEntrySize: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     programHeaderOffset: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionHeaderCount: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionHeaderEntrySize: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionHeaderOffset: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionNameStringTableIndex: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     version: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   };
 }
@@ -10807,16 +12905,24 @@ interface ElfProgramHeader {
   alignment: number;
   fileOffset: number;
   fileRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   fileSize: number;
   flags: number;
   headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   index: number;
   memorySize: number;
@@ -10824,27 +12930,43 @@ interface ElfProgramHeader {
   type: number;
   virtualAddress: number;
   copy(index: number, type: number, flags: number, fileOffset: number, virtualAddress: number, physicalAddress: number, fileSize: number, memorySize: number, alignment: number, headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, fileRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null): {
     alignment: number;
     fileOffset: number;
     fileRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     fileSize: number;
     flags: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     memorySize: number;
@@ -10860,9 +12982,13 @@ interface ElfRelocation {
   info: number;
   offset: number;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   relocationSectionIndex: number;
   symbol?: {
@@ -10873,9 +12999,13 @@ interface ElfRelocation {
     nameOffset: number;
     other: number;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionIndex: number;
     size: number;
@@ -10895,9 +13025,13 @@ interface ElfRelocation {
     nameOffset: number;
     other: number;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionIndex: number;
     size: number;
@@ -10906,18 +13040,26 @@ interface ElfRelocation {
     value: number;
     visibility: number;
   } | null, recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     addend?: number;
     index: number;
     info: number;
     offset: number;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     relocationSectionIndex: number;
     symbol?: {
@@ -10928,9 +13070,13 @@ interface ElfRelocation {
       nameOffset: number;
       other: number;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       sectionIndex: number;
       size: number;
@@ -10949,17 +13095,25 @@ interface ElfSectionHeader {
   address: number;
   addressAlignment: number;
   contentRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   entrySize: number;
   fileOffset: number;
   flags: number;
   headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   index: number;
   info: number;
@@ -10969,28 +13123,44 @@ interface ElfSectionHeader {
   size: number;
   type: number;
   copy(index: number, nameOffset: number, name: string, type: number, flags: number, address: number, fileOffset: number, size: number, link: number, info: number, addressAlignment: number, entrySize: number, headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, contentRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null): {
     address: number;
     addressAlignment: number;
     contentRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     entrySize: number;
     fileOffset: number;
     flags: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     info: number;
@@ -11010,9 +13180,13 @@ interface ElfSymbol {
   nameOffset: number;
   other: number;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   sectionIndex: number;
   size: number;
@@ -11021,9 +13195,13 @@ interface ElfSymbol {
   value: number;
   visibility: number;
   copy(index: number, tableSectionIndex: number, nameOffset: number, name: string, info: number, binding: number, type: number, other: number, visibility: number, sectionIndex: number, value: number, size: number, recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     binding: number;
     index: number;
@@ -11032,9 +13210,13 @@ interface ElfSymbol {
     nameOffset: number;
     other: number;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionIndex: number;
     size: number;
@@ -12149,6 +14331,36 @@ interface KotlinWasmInfo {
   };
 }
 
+interface LargeBytes {
+  size: number;
+  asCommonByteBufferOrNull(): {
+    indices: {
+      endExclusive: number;
+      endInclusive: number;
+      first: number;
+      last: number;
+      start: number;
+      step: number;
+    };
+    lastIndex: number;
+    size: number;
+  } | null;
+  get(offset: number): number;
+  read(offset: number, dst: number[], dstOffset: number, length: number): void;
+  window(offset: number, length: number): {
+    indices: {
+      endExclusive: number;
+      endInclusive: number;
+      first: number;
+      last: number;
+      start: number;
+      step: number;
+    };
+    lastIndex: number;
+    size: number;
+  };
+}
+
 interface Lazy {
   value: T;
   isInitialized(): boolean;
@@ -12169,9 +14381,13 @@ interface MachO {
 
 interface MachODylibCommand {
   commandRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   compatibilityVersion: number;
   currentVersion: number;
@@ -12179,25 +14395,41 @@ interface MachODylibCommand {
   kind: "Load" | "WeakLoad" | "Reexport" | "UpwardLoad" | "LazyLoad" | "Id" | "Other";
   name: string;
   nameRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   timestamp: number;
   type: number;
   copy(index: number, type: number, kind: "Load" | "WeakLoad" | "Reexport" | "UpwardLoad" | "LazyLoad" | "Id" | "Other", name: string, timestamp: number, currentVersion: number, compatibilityVersion: number, commandRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, nameRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null): {
     commandRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     compatibilityVersion: number;
     currentVersion: number;
@@ -12205,9 +14437,13 @@ interface MachODylibCommand {
     kind: "Load" | "WeakLoad" | "Reexport" | "UpwardLoad" | "LazyLoad" | "Id" | "Other";
     name: string;
     nameRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     timestamp: number;
     type: number;
@@ -12216,9 +14452,13 @@ interface MachODylibCommand {
 
 interface MachODysymtabCommand {
   commandRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   externalDefinedSymbolCount: number;
   externalDefinedSymbolIndex: number;
@@ -12239,14 +14479,22 @@ interface MachODysymtabCommand {
   undefinedSymbolCount: number;
   undefinedSymbolIndex: number;
   copy(localSymbolIndex: number, localSymbolCount: number, externalDefinedSymbolIndex: number, externalDefinedSymbolCount: number, undefinedSymbolIndex: number, undefinedSymbolCount: number, tableOfContentsOffset: number, tableOfContentsCount: number, moduleTableOffset: number, moduleTableCount: number, externalReferenceSymbolTableOffset: number, externalReferenceSymbolTableCount: number, indirectSymbolTableOffset: number, indirectSymbolTableCount: number, externalRelocationOffset: number, externalRelocationCount: number, localRelocationOffset: number, localRelocationCount: number, commandRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     commandRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     externalDefinedSymbolCount: number;
     externalDefinedSymbolIndex: number;
@@ -12272,9 +14520,13 @@ interface MachODysymtabCommand {
 interface MachOFatArch {
   alignment: number;
   archRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   cpuSubtype: number;
   cpuType: number;
@@ -12283,24 +14535,40 @@ interface MachOFatArch {
   reserved?: number;
   size: number;
   sliceRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   copy(index: number, cpuType: number, cpuSubtype: number, offset: number, size: number, alignment: number, reserved: number | null, archRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, sliceRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null): {
     alignment: number;
     archRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     cpuSubtype: number;
     cpuType: number;
@@ -12309,9 +14577,13 @@ interface MachOFatArch {
     reserved?: number;
     size: number;
     sliceRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   };
 }
@@ -12319,37 +14591,61 @@ interface MachOFatArch {
 interface MachOFatHeader {
   archCount: number;
   archTableRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   endian: "Little" | "Big" | "Unknown";
   headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   wordSize: "Bits32" | "Bits64" | "Unknown";
   copy(wordSize: "Bits32" | "Bits64" | "Unknown", endian: "Little" | "Big" | "Unknown", archCount: number, headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, archTableRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     archCount: number;
     archTableRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     endian: "Little" | "Big" | "Unknown";
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     wordSize: "Bits32" | "Bits64" | "Unknown";
   };
@@ -12362,28 +14658,44 @@ interface MachOHeader {
   fileType: number;
   flags: number;
   headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   loadCommandCount: number;
   loadCommandsRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   loadCommandsSize: number;
   magic: number;
   reserved?: number;
   wordSize: "Bits32" | "Bits64" | "Unknown";
   copy(wordSize: "Bits32" | "Bits64" | "Unknown", endian: "Little" | "Big" | "Unknown", magic: number, cpuType: number, cpuSubtype: number, fileType: number, loadCommandCount: number, loadCommandsSize: number, flags: number, reserved: number | null, headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, loadCommandsRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     cpuSubtype: number;
     cpuType: number;
@@ -12391,15 +14703,23 @@ interface MachOHeader {
     fileType: number;
     flags: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     loadCommandCount: number;
     loadCommandsRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     loadCommandsSize: number;
     magic: number;
@@ -12411,22 +14731,34 @@ interface MachOHeader {
 interface MachOLoadCommand {
   index: number;
   range: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   size: number;
   type: number;
   copy(index: number, type: number, size: number, range: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     index: number;
     range: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     size: number;
     type: number;
@@ -12440,9 +14772,13 @@ interface MachORelocation {
   length: number;
   pcrel: boolean;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   scattered: boolean;
   sectionIndex: number;
@@ -12453,9 +14789,13 @@ interface MachORelocation {
     name: string;
     nameOffset: number;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionIndex: number;
     type: number;
@@ -12470,17 +14810,25 @@ interface MachORelocation {
     name: string;
     nameOffset: number;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionIndex: number;
     type: number;
     value: number;
   } | null, recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     address: number;
     external: boolean;
@@ -12488,9 +14836,13 @@ interface MachORelocation {
     length: number;
     pcrel: boolean;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     scattered: boolean;
     sectionIndex: number;
@@ -12501,9 +14853,13 @@ interface MachORelocation {
       name: string;
       nameOffset: number;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       sectionIndex: number;
       type: number;
@@ -12519,16 +14875,24 @@ interface MachOSection {
   address: number;
   alignment: number;
   contentRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   fileOffset: number;
   flags: number;
   headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   index: number;
   name: string;
@@ -12538,27 +14902,43 @@ interface MachOSection {
   segmentName: string;
   size: number;
   copy(index: number, segmentIndex: number, name: string, segmentName: string, address: number, size: number, fileOffset: number, alignment: number, relocationOffset: number, relocationCount: number, flags: number, headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, contentRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null): {
     address: number;
     alignment: number;
     contentRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     fileOffset: number;
     flags: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     name: string;
@@ -12572,15 +14952,23 @@ interface MachOSection {
 
 interface MachOSegment {
   commandRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   fileOffset: number;
   fileRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   fileSize: number;
   flags: number;
@@ -12593,16 +14981,24 @@ interface MachOSegment {
     address: number;
     alignment: number;
     contentRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     fileOffset: number;
     flags: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     name: string;
@@ -12615,27 +15011,43 @@ interface MachOSegment {
   virtualAddress: number;
   virtualSize: number;
   copy(index: number, name: string, virtualAddress: number, virtualSize: number, fileOffset: number, fileSize: number, maxProtection: number, initialProtection: number, sectionCount: number, flags: number, commandRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, fileRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null, sections: {
     address: number;
     alignment: number;
     contentRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     fileOffset: number;
     flags: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     name: string;
@@ -12646,15 +15058,23 @@ interface MachOSegment {
     size: number;
   }[]): {
     commandRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     fileOffset: number;
     fileRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     fileSize: number;
     flags: number;
@@ -12667,16 +15087,24 @@ interface MachOSegment {
       address: number;
       alignment: number;
       contentRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       fileOffset: number;
       flags: number;
       headerRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       index: number;
       name: string;
@@ -12697,26 +15125,38 @@ interface MachOSymbol {
   name: string;
   nameOffset: number;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   sectionIndex: number;
   type: number;
   value: number;
   copy(index: number, nameOffset: number, name: string, type: number, sectionIndex: number, description: number, value: number, recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     description: number;
     index: number;
     name: string;
     nameOffset: number;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionIndex: number;
     type: number;
@@ -12726,89 +15166,149 @@ interface MachOSymbol {
 
 interface MachOSymtabCommand {
   commandRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   stringTableOffset: number;
   stringTableRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   stringTableSize: number;
   symbolCount: number;
   symbolTableOffset: number;
   symbolTableRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   copy(symbolTableOffset: number, symbolCount: number, stringTableOffset: number, stringTableSize: number, commandRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, symbolTableRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null, stringTableRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null): {
     commandRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     stringTableOffset: number;
     stringTableRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     stringTableSize: number;
     symbolCount: number;
     symbolTableOffset: number;
     symbolTableRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   };
 }
 
 interface MachOUuid {
   commandRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   uuidRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   value: string;
   copy(value: string, commandRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, uuidRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     commandRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     uuidRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     value: string;
   };
@@ -12951,24 +15451,19 @@ interface MsfStream {
   blockSize: number;
   blocks: number[];
   bytes: {
-    indices: {
-      endExclusive: number;
-      endInclusive: number;
-      first: number;
-      last: number;
-      start: number;
-      step: number;
-    };
-    lastIndex: number;
     size: number;
   };
   index: number;
   isNil: boolean;
   size: number;
   blockRanges(): {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }[];
   bytes(position: number, length: number): number[] | null;
   cString(position: number, maxLength: number): {
@@ -12977,9 +15472,13 @@ interface MsfStream {
   } | null;
   fileOffset(position: number): number | null;
   fileRange(position: number, length: number): {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null;
   guid(position: number): string | null;
   i32(position: number): number | null;
@@ -12996,14 +15495,22 @@ interface MsfSuperBlock {
   directoryByteCount: number;
   freeBlockMapBlock: number;
   range: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   copy(blockSize: number, freeBlockMapBlock: number, blockCount: number, directoryByteCount: number, blockMapAddress: number, range: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     blockCount: number;
     blockMapAddress: number;
@@ -13011,9 +15518,13 @@ interface MsfSuperBlock {
     directoryByteCount: number;
     freeBlockMapBlock: number;
     range: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   };
 }
@@ -13023,13 +15534,21 @@ interface NativeBinaryFormat {
 }
 
 interface NativeByteRange {
+  end: number;
   endExclusive: number;
+  fitsInt: boolean;
+  length: number;
   offset: number;
   size: number;
-  copy(offset: number, size: number): {
+  start: number;
+  copy(start: number, length: number): {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
 }
 
@@ -13057,9 +15576,13 @@ interface NativeFunctionRecord {
   name: string;
   rangeConfidence: "SymbolSize" | "NextSymbolInSection" | "BackendProvided" | "Unknown";
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   sectionIndex: number;
   sectionName?: string;
@@ -13069,9 +15592,13 @@ interface NativeFunctionRecord {
   thunkLike: boolean;
   virtualAddress: number;
   copy(name: string, demangledName: string | null, symbolIndex: number, source: "Symtab" | "Dynsym" | "ExternalBackend" | "Heuristic" | "Unknown", binding: number, sectionIndex: number, sectionName: string | null, imported: boolean, thunkLike: boolean, virtualAddress: number, fileOffset: number | null, size: number | null, rangeConfidence: "SymbolSize" | "NextSymbolInSection" | "BackendProvided" | "Unknown", recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, isThumb: boolean): {
     binding: number;
     demangledName?: string;
@@ -13081,9 +15608,13 @@ interface NativeFunctionRecord {
     name: string;
     rangeConfidence: "SymbolSize" | "NextSymbolInSection" | "BackendProvided" | "Unknown";
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionIndex: number;
     sectionName?: string;
@@ -13130,22 +15661,34 @@ interface NativeParserDiagnostic {
   code: string;
   message: string;
   range?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   severity: "Info" | "Warning" | "Error";
   copy(code: string, message: string, range: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null, severity: "Info" | "Warning" | "Error"): {
     code: string;
     message: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     severity: "Info" | "Warning" | "Error";
   };
@@ -13169,41 +15712,65 @@ interface NativeSourceLocationProvider {
 
 interface NativeUnresolvedRecord {
   contentRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   id?: number;
   kind: string;
   name?: string;
   reason?: string;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   copy(kind: string, id: number | null, name: string | null, recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, contentRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null, reason: string | null): {
     contentRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     id?: number;
     kind: string;
     name?: string;
     reason?: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   };
 }
@@ -13614,9 +16181,13 @@ interface PdbDbiStream {
       characteristics: number;
       dataCrc: number;
       fileRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       moduleIndex: number;
       offset: number;
@@ -13625,9 +16196,13 @@ interface PdbDbiStream {
       size: number;
     };
     fileRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     flags: number;
     index: number;
@@ -13648,9 +16223,13 @@ interface PdbDbiStream {
     characteristics: number;
     dataCrc: number;
     fileRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     moduleIndex: number;
     offset: number;
@@ -13660,9 +16239,13 @@ interface PdbDbiStream {
   }[];
   substreams: {
     fileRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     name: string;
     size: number;
@@ -13678,9 +16261,13 @@ interface PdbDbiStream {
       characteristics: number;
       dataCrc: number;
       fileRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       moduleIndex: number;
       offset: number;
@@ -13689,9 +16276,13 @@ interface PdbDbiStream {
       size: number;
     };
     fileRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     flags: number;
     index: number;
@@ -13707,9 +16298,13 @@ interface PdbDbiStream {
     characteristics: number;
     dataCrc: number;
     fileRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     moduleIndex: number;
     offset: number;
@@ -13718,9 +16313,13 @@ interface PdbDbiStream {
     size: number;
   }[], optionalDebugStreams: Record<"Fpo" | "Exception" | "Fixup" | "OmapToSource" | "OmapFromSource" | "SectionHeaders" | "TokenRidMap" | "Xdata" | "Pdata" | "NewFpo" | "OriginalSectionHeaders", number>, substreams: {
     fileRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     name: string;
     size: number;
@@ -13742,9 +16341,13 @@ interface PdbDbiStream {
         characteristics: number;
         dataCrc: number;
         fileRange?: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         moduleIndex: number;
         offset: number;
@@ -13753,9 +16356,13 @@ interface PdbDbiStream {
         size: number;
       };
       fileRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       flags: number;
       index: number;
@@ -13776,9 +16383,13 @@ interface PdbDbiStream {
       characteristics: number;
       dataCrc: number;
       fileRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       moduleIndex: number;
       offset: number;
@@ -13788,9 +16399,13 @@ interface PdbDbiStream {
     }[];
     substreams: {
       fileRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       name: string;
       size: number;
@@ -13804,22 +16419,34 @@ interface PdbDbiStream {
 
 interface PdbDbiSubstream {
   fileRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   name: string;
   size: number;
   streamOffset: number;
   copy(name: string, streamOffset: number, size: number, fileRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null): {
     fileRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     name: string;
     size: number;
@@ -13829,9 +16456,13 @@ interface PdbDbiSubstream {
 
 interface PdbFile {
   blockMapRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   dbi?: {
     age: number;
@@ -13850,9 +16481,13 @@ interface PdbFile {
         characteristics: number;
         dataCrc: number;
         fileRange?: {
+          end: number;
           endExclusive: number;
+          fitsInt: boolean;
+          length: number;
           offset: number;
           size: number;
+          start: number;
         };
         moduleIndex: number;
         offset: number;
@@ -13861,9 +16496,13 @@ interface PdbFile {
         size: number;
       };
       fileRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       flags: number;
       index: number;
@@ -13884,9 +16523,13 @@ interface PdbFile {
       characteristics: number;
       dataCrc: number;
       fileRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       moduleIndex: number;
       offset: number;
@@ -13896,9 +16539,13 @@ interface PdbFile {
     }[];
     substreams: {
       fileRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       name: string;
       size: number;
@@ -13912,9 +16559,13 @@ interface PdbFile {
     code: string;
     message: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     severity: "Info" | "Warning" | "Error";
   }[];
@@ -13961,15 +16612,6 @@ interface PdbFile {
     blockSize: number;
     blocks: number[];
     bytes: {
-      indices: {
-        endExclusive: number;
-        endInclusive: number;
-        first: number;
-        last: number;
-        start: number;
-        step: number;
-      };
-      lastIndex: number;
       size: number;
     };
     index: number;
@@ -13983,15 +16625,6 @@ interface PdbFile {
       blockSize: number;
       blocks: number[];
       bytes: {
-        indices: {
-          endExclusive: number;
-          endInclusive: number;
-          first: number;
-          last: number;
-          start: number;
-          step: number;
-        };
-        lastIndex: number;
         size: number;
       };
       index: number;
@@ -14006,9 +16639,13 @@ interface PdbFile {
     directoryByteCount: number;
     freeBlockMapBlock: number;
     range: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   };
   tpi?: {
@@ -14028,9 +16665,13 @@ interface PdbFile {
       characteristics: number;
       dataCrc: number;
       fileRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       moduleIndex: number;
       offset: number;
@@ -14039,9 +16680,13 @@ interface PdbFile {
       size: number;
     };
     fileRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     flags: number;
     index: number;
@@ -14076,9 +16721,13 @@ interface PdbFile {
       characteristics: number;
       dataCrc: number;
       fileRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       moduleIndex: number;
       offset: number;
@@ -14087,9 +16736,13 @@ interface PdbFile {
       size: number;
     };
     fileRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     flags: number;
     index: number;
@@ -14110,15 +16763,6 @@ interface PdbFile {
     blockSize: number;
     blocks: number[];
     bytes: {
-      indices: {
-        endExclusive: number;
-        endInclusive: number;
-        first: number;
-        last: number;
-        start: number;
-        step: number;
-      };
-      lastIndex: number;
       size: number;
     };
     index: number;
@@ -14220,9 +16864,13 @@ interface PdbModule {
     characteristics: number;
     dataCrc: number;
     fileRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     moduleIndex: number;
     offset: number;
@@ -14231,9 +16879,13 @@ interface PdbModule {
     size: number;
   };
   fileRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   flags: number;
   index: number;
@@ -14249,9 +16901,13 @@ interface PdbModule {
     characteristics: number;
     dataCrc: number;
     fileRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     moduleIndex: number;
     offset: number;
@@ -14259,9 +16915,13 @@ interface PdbModule {
     section: number;
     size: number;
   }, streamOffset: number, recordSize: number, fileRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null): {
     c11ByteSize: number;
     c13ByteSize: number;
@@ -14269,9 +16929,13 @@ interface PdbModule {
       characteristics: number;
       dataCrc: number;
       fileRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       moduleIndex: number;
       offset: number;
@@ -14280,9 +16944,13 @@ interface PdbModule {
       size: number;
     };
     fileRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     flags: number;
     index: number;
@@ -14301,9 +16969,13 @@ interface PdbSectionContribution {
   characteristics: number;
   dataCrc: number;
   fileRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   moduleIndex: number;
   offset: number;
@@ -14311,16 +16983,24 @@ interface PdbSectionContribution {
   section: number;
   size: number;
   copy(section: number, offset: number, size: number, characteristics: number, moduleIndex: number, dataCrc: number, relocCrc: number, fileRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null): {
     characteristics: number;
     dataCrc: number;
     fileRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     moduleIndex: number;
     offset: number;
@@ -14337,15 +17017,6 @@ interface PdbStringTable {
     blockSize: number;
     blocks: number[];
     bytes: {
-      indices: {
-        endExclusive: number;
-        endInclusive: number;
-        first: number;
-        last: number;
-        start: number;
-        step: number;
-      };
-      lastIndex: number;
       size: number;
     };
     index: number;
@@ -14392,28 +17063,44 @@ interface PeArchiveFile {
     code: string;
     message: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     severity: "Info" | "Warning" | "Error";
   }[];
   magicRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   members: {
     contentRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     groupId: string;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     isBookkeeping: boolean;
@@ -14425,35 +17112,55 @@ interface PeArchiveFile {
   }[];
   unresolvedRecords: {
     contentRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     id?: number;
     kind: string;
     name?: string;
     reason?: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   }[];
   copy(magicRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, members: {
     contentRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     groupId: string;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     isBookkeeping: boolean;
@@ -14464,26 +17171,38 @@ interface PeArchiveFile {
     timestamp: string;
   }[], unresolvedRecords: {
     contentRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     id?: number;
     kind: string;
     name?: string;
     reason?: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   }[], diagnostics: {
     code: string;
     message: string;
     range?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     severity: "Info" | "Warning" | "Error";
   }[]): {
@@ -14491,28 +17210,44 @@ interface PeArchiveFile {
       code: string;
       message: string;
       range?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       severity: "Info" | "Warning" | "Error";
     }[];
     magicRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     members: {
       contentRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       groupId: string;
       headerRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       index: number;
       isBookkeeping: boolean;
@@ -14524,18 +17259,26 @@ interface PeArchiveFile {
     }[];
     unresolvedRecords: {
       contentRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       id?: number;
       kind: string;
       name?: string;
       reason?: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
     }[];
   };
@@ -14543,15 +17286,23 @@ interface PeArchiveFile {
 
 interface PeArchiveMember {
   contentRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   groupId: string;
   headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   index: number;
   isBookkeeping: boolean;
@@ -14561,24 +17312,40 @@ interface PeArchiveMember {
   size: number;
   timestamp: string;
   copy(index: number, name: string, timestamp: string, ownerId: string, groupId: string, mode: string, size: number, headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, contentRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, isBookkeeping: boolean): {
     contentRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     groupId: string;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     isBookkeeping: boolean;
@@ -14595,24 +17362,36 @@ interface PeBaseRelocation {
   entryIndex: number;
   pageRva: number;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   targetRva: number;
   type: number;
   copy(blockIndex: number, entryIndex: number, type: number, pageRva: number, targetRva: number, recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     blockIndex: number;
     entryIndex: number;
     pageRva: number;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     targetRva: number;
     type: number;
@@ -14635,9 +17414,13 @@ interface PeCodeViewDebugInfo {
 interface PeCoffHeader {
   characteristics: number;
   headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   machine: number;
   optionalHeaderSize: number;
@@ -14646,15 +17429,23 @@ interface PeCoffHeader {
   symbolTableOffset: number;
   timeDateStamp: number;
   copy(machine: number, sectionCount: number, timeDateStamp: number, symbolTableOffset: number, symbolCount: number, optionalHeaderSize: number, characteristics: number, headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     characteristics: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     machine: number;
     optionalHeaderSize: number;
@@ -14670,26 +17461,38 @@ interface PeCoffSymbol {
   index: number;
   name: string;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   sectionNumber: number;
   storageClass: number;
   type: number;
   value: number;
   copy(index: number, name: string, value: number, sectionNumber: number, type: number, storageClass: number, auxiliaryCount: number, recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     auxiliaryCount: number;
     index: number;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sectionNumber: number;
     storageClass: number;
@@ -14702,23 +17505,35 @@ interface PeDataDirectory {
   index: number;
   name: string;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   rva: number;
   size: number;
   copy(index: number, name: string, rva: number, size: number, recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     index: number;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     rva: number;
     size: number;
@@ -14734,9 +17549,13 @@ interface PeDebugEntry {
     signature: string;
   };
   dataRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   index: number;
   isPortablePdbCodeView: boolean;
@@ -14744,9 +17563,13 @@ interface PeDebugEntry {
   minorVersion: number;
   pointerToRawData: number;
   recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   sizeOfData: number;
   timeDateStamp: number;
@@ -14757,13 +17580,21 @@ interface PeDebugEntry {
     pdbPath?: string;
     signature: string;
   } | null, recordRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, dataRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null, majorVersion: number, minorVersion: number): {
     addressOfRawData: number;
     codeView?: {
@@ -14773,9 +17604,13 @@ interface PeDebugEntry {
       signature: string;
     };
     dataRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     isPortablePdbCodeView: boolean;
@@ -14783,9 +17618,13 @@ interface PeDebugEntry {
     minorVersion: number;
     pointerToRawData: number;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     sizeOfData: number;
     timeDateStamp: number;
@@ -14808,72 +17647,120 @@ interface PeDebugSymbolsRejection {
 
 interface PeDosHeader {
   mzRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   peHeaderOffset: number;
   peHeaderOffsetRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   peSignatureRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   copy(peHeaderOffset: number, mzRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, peHeaderOffsetRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, peSignatureRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     mzRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     peHeaderOffset: number;
     peHeaderOffsetRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     peSignatureRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   };
 }
 
 interface PeExportDirectory {
   directoryRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   entries: {
     addressTableRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     forwarder?: string;
     index: number;
     name?: string;
     nameRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     ordinal: number;
     rva: number;
@@ -14882,54 +17769,86 @@ interface PeExportDirectory {
   name: string;
   nameCount: number;
   nameRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   ordinalBase: number;
   copy(name: string, ordinalBase: number, functionCount: number, nameCount: number, directoryRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, nameRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null, entries: {
     addressTableRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     forwarder?: string;
     index: number;
     name?: string;
     nameRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     ordinal: number;
     rva: number;
   }[]): {
     directoryRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     entries: {
       addressTableRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       forwarder?: string;
       index: number;
       name?: string;
       nameRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       ordinal: number;
       rva: number;
@@ -14938,9 +17857,13 @@ interface PeExportDirectory {
     name: string;
     nameCount: number;
     nameRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     ordinalBase: number;
   };
@@ -14948,41 +17871,65 @@ interface PeExportDirectory {
 
 interface PeExportEntry {
   addressTableRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   forwarder?: string;
   index: number;
   name?: string;
   nameRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   ordinal: number;
   rva: number;
   copy(index: number, name: string | null, ordinal: number, rva: number, forwarder: string | null, addressTableRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, nameRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null): {
     addressTableRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     forwarder?: string;
     index: number;
     name?: string;
     nameRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     ordinal: number;
     rva: number;
@@ -14992,41 +17939,65 @@ interface PeExportEntry {
 interface PeImportEntry {
   hint?: number;
   hintNameRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   index: number;
   name?: string;
   ordinal?: number;
   thunkRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   thunkRva: number;
   copy(index: number, name: string | null, hint: number | null, ordinal: number | null, thunkRva: number, thunkRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, hintNameRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null): {
     hint?: number;
     hintNameRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     name?: string;
     ordinal?: number;
     thunkRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     thunkRva: number;
   };
@@ -15034,24 +18005,36 @@ interface PeImportEntry {
 
 interface PeImportLibrary {
   descriptorRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   entries: {
     hint?: number;
     hintNameRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     name?: string;
     ordinal?: number;
     thunkRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     thunkRva: number;
   }[];
@@ -15060,54 +18043,86 @@ interface PeImportLibrary {
   index: number;
   name: string;
   nameRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   copy(index: number, name: string, importLookupTableRva: number, importAddressTableRva: number, entries: {
     hint?: number;
     hintNameRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     name?: string;
     ordinal?: number;
     thunkRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     thunkRva: number;
   }[], descriptorRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, nameRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null): {
     descriptorRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     entries: {
       hint?: number;
       hintNameRange?: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       index: number;
       name?: string;
       ordinal?: number;
       thunkRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       thunkRva: number;
     }[];
@@ -15116,9 +18131,13 @@ interface PeImportLibrary {
     index: number;
     name: string;
     nameRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
   };
 }
@@ -15129,9 +18148,13 @@ interface PeOptionalHeader {
     index: number;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     rva: number;
     size: number;
@@ -15140,9 +18163,13 @@ interface PeOptionalHeader {
   dllCharacteristics: number;
   fileAlignment: number;
   headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   imageBase: number;
   magic: number;
@@ -15155,25 +18182,37 @@ interface PeOptionalHeader {
     index: number;
     name: string;
     recordRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     rva: number;
     size: number;
   }[], headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }): {
     addressOfEntryPoint: number;
     dataDirectories: {
       index: number;
       name: string;
       recordRange: {
+        end: number;
         endExclusive: number;
+        fitsInt: boolean;
+        length: number;
         offset: number;
         size: number;
+        start: number;
       };
       rva: number;
       size: number;
@@ -15182,9 +18221,13 @@ interface PeOptionalHeader {
     dllCharacteristics: number;
     fileAlignment: number;
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     imageBase: number;
     magic: number;
@@ -15205,14 +18248,22 @@ interface PePdbReference {
 interface PeSection {
   characteristics: number;
   contentRange?: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   };
   index: number;
   lineNumberCount: number;
@@ -15225,24 +18276,40 @@ interface PeSection {
   virtualAddress: number;
   virtualSize: number;
   copy(index: number, name: string, virtualSize: number, virtualAddress: number, rawDataSize: number, rawDataPointer: number, relocationPointer: number, lineNumberPointer: number, relocationCount: number, lineNumberCount: number, characteristics: number, headerRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   }, contentRange: {
+    end: number;
     endExclusive: number;
+    fitsInt: boolean;
+    length: number;
     offset: number;
     size: number;
+    start: number;
   } | null): {
     characteristics: number;
     contentRange?: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     headerRange: {
+      end: number;
       endExclusive: number;
+      fitsInt: boolean;
+      length: number;
       offset: number;
       size: number;
+      start: number;
     };
     index: number;
     lineNumberCount: number;

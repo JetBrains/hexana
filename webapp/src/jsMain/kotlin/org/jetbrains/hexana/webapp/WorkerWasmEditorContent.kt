@@ -279,16 +279,12 @@ private fun WorkerWasmSummaryTab(
             defaultSortColumn = 1,
         ) {
             presentation.ranges.forEach { range ->
-                val end = range.offset + range.size - 1
+                val start = range.offset.toLong()
+                val end = start + range.size - 1
                 PanelTableRow(
                     isHighlighted = selection.hasSelection &&
-                        selection.selectionStart == range.offset && selection.selectionEnd == end,
-                    onClick = {
-                        selection.anchorIndex = range.offset
-                        selection.activeIndex = end
-                        selection.cursorIndex = range.offset
-                        scrollHexViewerTo(range.offset)
-                    },
+                        selection.selectionStart == start && selection.selectionEnd == end,
+                    onClick = { selection.selectRange(range.offset, range.size) },
                 ) {
                     Td({ classes("cell") }) { Text(range.label) }
                     Td({ classes("cell-right") }) { Text("0x${range.offset.toString(16)}") }

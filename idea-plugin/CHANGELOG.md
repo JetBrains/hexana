@@ -14,7 +14,7 @@
 ### Removed
 
 ### Fixed
-- **Files over 2 GB open instead of failing.** Hexana loads the first 2 GB, shows the file's real size in the editor header with a notice above it, and makes the view read-only, since overwriting the file from it would truncate it. GGUF and safetensors models still list every tensor with its true offset and size; other formats show what lies in the loaded part. Comparing a file over 2 GB says why it cannot be compared instead of staying on "Comparing…".
+- **Files of any size.** Files over 2 GB used to fail to open. The hex view, search, Go to Offset, the data inspector and the status bar now cover the whole file, which is memory-mapped in chunks; search runs in the background and highlights up to 100,000 matches. ELF (sections and segments anywhere in the file, DWARF source lines, disassembly), Mach-O and universal binaries, ZIP64 and tar archives (every entry listed and openable), Windows PDBs, Parquet and Arrow files, and GGUF/safetensors models are parsed from the whole file. Other formats show what lies in their first 2 GB, and a notice above the editor says so. Files this large are read-only: editing them is not supported yet. The "Top" size breakdown is not shown for files over 2 GB. Comparing a file over 2 GB says why it cannot be compared instead of staying on "Comparing…".
 
 ### Security
 

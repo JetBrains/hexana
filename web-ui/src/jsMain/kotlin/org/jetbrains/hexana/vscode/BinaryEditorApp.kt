@@ -2,6 +2,7 @@ package org.jetbrains.hexana.vscode
 
 import org.jetbrains.hexana.shared.PROBLEMS_TAB_NAME
 import org.jetbrains.hexana.shared.isPartialView
+import org.jetbrains.hexana.shared.largeFileNotice
 import org.jetbrains.hexana.shared.partialViewNotice
 import org.jetbrains.hexana.shared.inspections.BinaryProblem
 import org.jetbrains.hexana.shared.inspections.InspectionContext
@@ -174,6 +175,13 @@ fun BinaryEditorContent(
      * can hold), else `null`. Such a view is read-only and says so above the hex view.
      */
     partialFileSize: Long? = null,
+    /**
+     * The whole file for the hex view, the data inspector and the status bar, when the host can
+     * fetch bytes beyond [provider]'s head ([PagedHexBytes]); `null` shows the provider's bytes.
+     */
+    hexBytes: HexBytes? = null,
+    /** Searches the whole file on the host; used with a paged [hexBytes]. */
+    onSearchFile: ((pattern: ByteArray, from: Long, reverse: Boolean) -> kotlin.js.Promise<Long>)? = null,
     /** Text of a key log the host just picked, or blank. */
     sslKeyLogContent: String = "",
     onSslKeyLogConsumed: () -> Unit = {},
@@ -286,6 +294,7 @@ fun BinaryEditorContent(
     // Edit state: tracks in-memory byte modifications. None for a partial view: overwriting the
     // file with its edited head would truncate it, and the state copies every loaded byte.
     val isPartial = isPartialView(buffer.size, partialFileSize)
+    val shownBytes: HexBytes = hexBytes ?: remember(buffer) { BufferHexBytes(buffer) }
     val editState: HexEditState? = remember(provider, isPartial) {
         if (isPartial) null else HexEditState(buffer.toByteArray())
     }
@@ -412,7 +421,12 @@ fun BinaryEditorContent(
                     property("background", "var(--vscode-inputValidation-warningBackground, #5A4A2A)")
                     property("color", "var(--vscode-editorWarning-foreground, #E0C070)")
                 }
-            }) { Text(partialViewNotice(buffer.size, partialFileSize)) }
+            }) {
+                Text(
+                    // With the whole file in the hex view only the tabs are limited to the head.
+                    if (hexBytes != null) largeFileNotice(buffer.size, partialFileSize) else partialViewNotice(buffer.size, partialFileSize),
+                )
+            }
         }
         Div({
             style {
@@ -423,7 +437,8 @@ fun BinaryEditorContent(
             }
         }) {
             HexViewerPanel(
-                bytes = buffer,
+                bytes = shownBytes,
+                onSearchFile = onSearchFile,
                 selection = selection,
                 editState = editState,
                 structureRanges = remember(provider, initialStructureRanges, showSemanticHighlighting, scriptStructureRanges) {
@@ -436,7 +451,7 @@ fun BinaryEditorContent(
                 onTabChangeRequest = { tabName -> activeTab = tabName },
             )
             if (showDataInspector) {
-                DataInspectorPanel(bytes = buffer, selection = selection)
+                DataInspectorPanel(bytes = shownBytes, selection = selection)
             }
             // A second, independent column: the row detail panel shows bytes
             // that are not in the file, so it has nothing to do with the
@@ -447,7 +462,7 @@ fun BinaryEditorContent(
         }
         SelectionStatusBar(
             selection = selection,
-            totalBytes = buffer.size,
+            totalBytes = shownBytes.size,
             showDataInspector = showDataInspector,
             onToggleDataInspector = { showDataInspector = !showDataInspector },
         )

@@ -4,7 +4,9 @@ import * as vscode from "vscode";
 import { getWebviewContent } from "./webviewContent";
 import { extensionLib, getSelectedRuntime, runExport } from "./WasmRunConfigurations";
 import { isNativeBinary } from "./NativeBinaryFileTypeDetector";
-import { FileTooLargeError, formatSize, isPartial, maxLoadedBytes, readHead, readPrefix } from "./largeFiles";
+import {
+    FileTooLargeError, formatSize, isPartial, maxLoadedBytes, readHead, readPrefix, readRange, searchFile,
+} from "./largeFiles";
 import { detectAndroidSdk, runApkOnEmulator } from "./apkRunner";
 import { DIFF_LABEL_SEPARATOR, pairSidesForLabel } from "./diffTabPairing";
 import { WasmFeatureCatalogProvider } from "./wasmFeatureCatalog";
@@ -1300,6 +1302,10 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     message.path as string,
                     webviewPanel,
                 );
+            } else if (message.type === "read-byte-range") {
+                void this.readByteRange(document, message, webviewPanel);
+            } else if (message.type === "search-bytes") {
+                void this.searchBytes(document, message, webviewPanel);
             } else if (message.type === "script-tab-added") {
                 this.addScriptTabToState(document, message.scriptPath as string);
             } else if (message.type === "script-tab-removed") {
@@ -2542,6 +2548,52 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
      * only shown as notifications, because the script's own `try/catch` is
      * supposed to see them, exactly as it does in the IntelliJ plugin and the CLI.
      */
+    /**
+     * Answers a webview hex view showing a file larger than it holds: the bytes of one page of
+     * the document's file. Exactly one reply per request, on every path.
+     */
+    private async readByteRange(
+        document: WasmDocument,
+        message: { requestId: string; offset: number; length: number },
+        webviewPanel: vscode.WebviewPanel,
+    ): Promise<void> {
+        try {
+            if (document.partialFileSize === undefined) throw new Error("The document is loaded whole.");
+            const data = await readRange(document.uri, message.offset, message.length);
+            void webviewPanel.webview.postMessage({
+                type: "byte-range-content",
+                requestId: message.requestId,
+                data: toWebviewBytes(data),
+            });
+        } catch (err) {
+            void webviewPanel.webview.postMessage({
+                type: "byte-range-content",
+                requestId: message.requestId,
+                error: fileReadFailureReason(err),
+            });
+        }
+    }
+
+    /** Finds a byte pattern in the whole file of a partially loaded document. One reply per request. */
+    private async searchBytes(
+        document: WasmDocument,
+        message: { requestId: string; pattern: number[] | Uint8Array; from: number; reverse: boolean },
+        webviewPanel: vscode.WebviewPanel,
+    ): Promise<void> {
+        try {
+            if (document.partialFileSize === undefined) throw new Error("The document is loaded whole.");
+            const pattern = message.pattern instanceof Uint8Array ? message.pattern : Uint8Array.from(message.pattern);
+            const offset = await searchFile(document.uri, pattern, message.from, message.reverse === true);
+            void webviewPanel.webview.postMessage({ type: "search-bytes-result", requestId: message.requestId, offset });
+        } catch (err) {
+            void webviewPanel.webview.postMessage({
+                type: "search-bytes-result",
+                requestId: message.requestId,
+                error: fileReadFailureReason(err),
+            });
+        }
+    }
+
     private async readBinaryFile(
         requestId: string,
         binaryPath: string,

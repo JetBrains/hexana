@@ -662,7 +662,8 @@ private fun workerTables(provider: BinaryProvider, inputBytes: Int, fileName: St
                     producerRecordLimited = true
                     null
                 }
-                val offset = range?.offset?.takeIf { it >= 0 && range.size > 0 && it <= inputBytes - range.size }
+                // Bounded by the input, which the webapp caps far below 2 GiB, so the wire's Int fits.
+                val offset = range?.offset?.takeIf { it >= 0 && range.size > 0 && it <= inputBytes - range.size }?.toInt()
                 val childRows = runCatching { children?.invoke(index) }.getOrElse {
                     producerRecordLimited = true
                     null
@@ -679,7 +680,7 @@ private fun workerTables(provider: BinaryProvider, inputBytes: Int, fileName: St
                 materialized += row(
                     values = values,
                     offset = offset,
-                    size = offset?.let { range!!.size },
+                    size = offset?.let { range!!.size.toInt() },
                     actions = actions,
                     children = childRecords.orEmpty(),
                     numericValues = cells.map { cell -> (cell.value as? Number)?.toDouble()?.takeIf(::isWireSafeNumber) },

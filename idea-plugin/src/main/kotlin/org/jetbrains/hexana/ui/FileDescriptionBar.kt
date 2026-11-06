@@ -239,7 +239,8 @@ private fun SizeLabel(
     }
 
     // A partial view shows the file's real size, marked so it does not read as what is loaded.
-    val sizeText = if (fileSize != null) "${formatSizeLong(fileSize)} (first ${formatSize(size)} loaded)" else formatSize(size)
+    // The hex view shows all of a large file; only the tabs come from parsing its head.
+    val sizeText = if (fileSize != null) "${formatSizeLong(fileSize)} (first ${formatSize(size)} parsed)" else formatSize(size)
     val sizeModifier = if (onSizeClick != null) {
         Modifier
             .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))

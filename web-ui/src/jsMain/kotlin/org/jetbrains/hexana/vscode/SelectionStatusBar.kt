@@ -12,7 +12,7 @@ import org.jetbrains.compose.web.dom.Text
 @Composable
 fun SelectionStatusBar(
     selection: HexSelectionState,
-    totalBytes: Int,
+    totalBytes: Long,
     showDataInspector: Boolean = false,
     onToggleDataInspector: () -> Unit = {},
 ) {
@@ -43,7 +43,7 @@ fun SelectionStatusBar(
         if (selection.hasSelection) {
             val count = selection.selectionEnd - selection.selectionStart + 1
             Span {
-                Text("Selected: $count byte${if (count != 1) "s" else ""}")
+                Text("Selected: $count byte${if (count != 1L) "s" else ""}")
             }
             Span {
                 Text("Range: 0x${selection.selectionStart.toString(16)} – 0x${selection.selectionEnd.toString(16)}")

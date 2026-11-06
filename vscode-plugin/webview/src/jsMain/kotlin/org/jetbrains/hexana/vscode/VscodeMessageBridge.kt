@@ -688,6 +688,72 @@ private object HttpReplaySends {
     }
 }
 
+/**
+ * Requests to the extension host for bytes and searches of the open document's file, which the hex
+ * view shows whole even when the webview only holds its head. Each request gets exactly one reply
+ * (`byte-range-content` / `search-bytes-result`), or fails after [timeoutMs] if the reply is lost.
+ */
+internal class HostRequests<T>(
+    private val requestType: String,
+    private val timeoutMs: Int,
+    private val decode: (dynamic) -> T,
+) {
+    private var nextId = 0
+    private val pending = mutableMapOf<String, (Result<T>) -> Unit>()
+
+    fun request(fill: (dynamic) -> Unit): Promise<T> {
+        val requestId = "$requestType-${nextId++}"
+        return Promise { resolve, reject ->
+            var deadline = -1
+            pending[requestId] = { result ->
+                if (deadline >= 0) window.clearTimeout(deadline)
+                result.fold({ resolve(it) }, { reject(it) })
+            }
+            val msg = js("({})")
+            msg.type = requestType
+            msg.requestId = requestId
+            fill(msg)
+            vscodeApi.postMessage(msg)
+            deadline = window.setTimeout({
+                settle(requestId, Result.failure(RuntimeException("The editor did not answer.")))
+            }, timeoutMs)
+        }
+    }
+
+    fun complete(data: dynamic) {
+        val requestId = (data.requestId as? String) ?: return
+        val error = (data.error as? String)?.takeIf { it.isNotBlank() }
+        settle(requestId, if (error != null) Result.failure(RuntimeException(error)) else runCatching { decode(data) })
+    }
+
+    private fun settle(requestId: String, result: Result<T>) {
+        pending.remove(requestId)?.invoke(result)
+    }
+}
+
+internal val byteRangeReads = HostRequests("read-byte-range", 30_000) { data ->
+    messageBytesOrNull(data.data) ?: throw RuntimeException("The editor sent no bytes.")
+}
+
+internal val byteSearches = HostRequests("search-bytes", 600_000) { data ->
+    (data.offset as? Number)?.toDouble()?.toLong() ?: -1L
+}
+
+/** [length] bytes of the open document's file from [offset]. */
+fun readByteRangeFromHost(offset: Long, length: Int): Promise<ByteArray> = byteRangeReads.request { msg ->
+    msg.offset = offset.toDouble()
+    msg.length = length
+}
+
+/** Where [pattern] next occurs in the open document's file from [from] (backward when [reverse]), or -1. */
+fun searchFileOnHost(pattern: ByteArray, from: Long, reverse: Boolean): Promise<Long> = byteSearches.request { msg ->
+    val jsPattern = js("[]").unsafeCast<dynamic>()
+    for (b in pattern) jsPattern.push(b.toInt() and 0xFF)
+    msg.pattern = jsPattern
+    msg.from = from.toDouble()
+    msg.reverse = reverse
+}
+
 /** Longer than the host's own 60-second replay timeout. */
 private const val HTTP_REPLAY_TIMEOUT_MS = 75_000
 
@@ -993,6 +1059,10 @@ fun VscodeMessageListener(onMessage: (VscodeMessage) -> Unit) {
                 // Answers a promise rather than changing UI state, so it never
                 // needs to reach the composable message handler.
                 HttpReplaySends.complete(data)
+            } else if (data != null && data.type == "byte-range-content") {
+                byteRangeReads.complete(data)
+            } else if (data != null && data.type == "search-bytes-result") {
+                byteSearches.complete(data)
             } else if (data != null && data.type != undefined) {
                 val type = data.type as String
                 // A message whose payload we did not expect can fail to

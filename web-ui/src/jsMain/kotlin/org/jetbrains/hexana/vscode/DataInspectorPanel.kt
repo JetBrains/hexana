@@ -5,7 +5,6 @@ import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
 import org.jetbrains.compose.web.dom.Span
 import org.jetbrains.compose.web.dom.Text
-import org.jetbrains.hexana.io.CommonByteBuffer
 
 /**
  * Data Inspector side panel for the VS Code hex viewer.
@@ -14,11 +13,14 @@ import org.jetbrains.hexana.io.CommonByteBuffer
  */
 @Composable
 fun DataInspectorPanel(
-    bytes: CommonByteBuffer,
+    bytes: HexBytes,
     selection: HexSelectionState,
 ) {
     val offset = selection.cursorIndex
     val totalBytes = bytes.size
+    // Re-render when the bytes under the cursor arrive from the host.
+    @Suppress("UNUSED_VARIABLE")
+    val loadStamp = bytes.loadStamp
 
     var littleEndian by remember { mutableStateOf(true) }
 
@@ -58,11 +60,13 @@ fun DataInspectorPanel(
         }
 
         // Read up to 8 bytes starting at cursor
-        val available = (totalBytes - offset).coerceAtMost(8)
-        val raw = ByteArray(available)
-        for (i in 0 until available) {
-            raw[i] = bytes[offset + i]
+        val available = (totalBytes - offset).coerceAtMost(8).toInt()
+        val loaded = (0 until available).map { bytes.byteOrNull(offset + it) }
+        if (loaded.any { it == null }) {
+            Div({ style { property("opacity", "0.6") } }) { Text("Loading\u2026") }
+            return@Div
         }
+        val raw = ByteArray(available) { loaded[it]!! }
 
         // Numeric types
         inspectorRows(raw, littleEndian)
@@ -79,11 +83,10 @@ fun DataInspectorPanel(
         InspectorRow("ASCII", asciiChar)
 
         // UTF-8 string
-        val maxUtf8 = (totalBytes - offset).coerceAtMost(64)
-        val utf8Raw = ByteArray(maxUtf8)
-        for (i in 0 until maxUtf8) {
-            utf8Raw[i] = bytes[offset + i]
-        }
+        val maxUtf8 = (totalBytes - offset).coerceAtMost(64).toInt()
+        // Only the loaded prefix: a page boundary still being fetched ends the string early.
+        val utf8Raw = (0 until maxUtf8).asSequence().map { bytes.byteOrNull(offset + it) }.takeWhile { it != null }
+            .map { it!! }.toList().toByteArray()
         val utf8Str = decodeUtf8Prefix(utf8Raw)
         if (utf8Str.isNotEmpty()) {
             InspectorRow("UTF-8", utf8Str)

@@ -137,3 +137,56 @@ function clearModuleCache(): void {
         if (key.includes('largeFiles')) delete require.cache[key];
     }
 }
+
+describe('large file ranges and search', function () {
+    let vscode: VscodeMock;
+    let dir: string;
+
+    beforeEach(function () {
+        vscode = installVscodeMock();
+        clearModuleCache();
+        dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hexana-range-'));
+    });
+
+    afterEach(function () {
+        vscode.restore();
+        clearModuleCache();
+        fs.rmSync(dir, {recursive: true, force: true});
+    });
+
+    const fileUri = (fsPath: string): any => ({fsPath, path: fsPath, scheme: 'file', toString: () => fsPath});
+
+    function sparse(marks: Array<[number, string]>, size: number): string {
+        const file = path.join(dir, 'big.bin');
+        fs.writeFileSync(file, Buffer.alloc(0));
+        fs.truncateSync(file, size);
+        const fd = fs.openSync(file, 'r+');
+        for (const [offset, text] of marks) fs.writeSync(fd, Buffer.from(text, 'binary'), 0, text.length, offset);
+        fs.closeSync(fd);
+        return file;
+    }
+
+    it('reads a range past 2 GiB and stops at the end of the file', async function () {
+        const {readRange} = requireLargeFiles();
+        const far = 2.5 * 1024 * 1024 * 1024;
+        const file = sparse([[far, 'PAST-2GB']], far + 8);
+
+        expect(Buffer.from(await readRange(fileUri(file), far, 8)).toString('binary')).to.equal('PAST-2GB');
+        expect((await readRange(fileUri(file), far + 4, 100)).byteLength).to.equal(4);
+        expect((await readRange(fileUri(file), far + 100, 10)).byteLength).to.equal(0);
+    });
+
+    it('finds matches forward and backward, across search chunks and past 2 GiB', async function () {
+        const {searchFile} = requireLargeFiles();
+        const far = 2.5 * 1024 * 1024 * 1024;
+        const chunkEdge = 8 * 1024 * 1024 - 3; // straddles the first search chunk boundary
+        const file = sparse([[chunkEdge, 'NEEDLE'], [far, 'NEEDLE']], far + 4096);
+        const needle = new Uint8Array(Buffer.from('NEEDLE'));
+
+        expect(await searchFile(fileUri(file), needle, 0, false)).to.equal(chunkEdge);
+        expect(await searchFile(fileUri(file), needle, chunkEdge + 1, false)).to.equal(far);
+        expect(await searchFile(fileUri(file), needle, far + 4096, true)).to.equal(far);
+        expect(await searchFile(fileUri(file), needle, far - 1, true)).to.equal(chunkEdge);
+        expect(await searchFile(fileUri(file), needle, far + 1, false)).to.equal(-1);
+    });
+});

@@ -59,7 +59,7 @@ Ids: `BinaryParser` `gguf` / `safetensors`; `binary.format` `gguf` / `safetensor
 
 ## Large files
 
-Files over the load limit open as a partial view — see [[entities/partial-views]]. The parsers take
+Files over the load limit: see [[entities/partial-views]] (the hex view shows them whole). The parsers take
 `fileSize` separately from the buffer and read only the head, so a GGUF/safetensors model of any size
 still lists every tensor with its true offset; selections fall back to the info record / JSON header
 for data past the loaded bytes, and the size tree is omitted.
