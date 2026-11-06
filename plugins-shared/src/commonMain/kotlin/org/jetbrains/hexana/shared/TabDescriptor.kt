@@ -64,8 +64,13 @@ sealed class ColumnWidth {
 /**
  * Binary offset and size of a row's data in the original binary.
  * Used by the UI layer to scroll the hex view to the selected record.
+ *
+ * [Long] because a record of a file over 2 GiB (an ELF section, a ZIP64 entry) can lie past what
+ * an `Int` addresses. The `Int` constructor serves the formats that never get that large.
  */
-class RowSelectionData(val offset: Int, val size: Int)
+class RowSelectionData(val offset: Long, val size: Long) {
+    constructor(offset: Int, size: Int) : this(offset.toLong(), size.toLong())
+}
 
 /**
  * Bytes belonging to a single row that exist nowhere in the file being viewed,

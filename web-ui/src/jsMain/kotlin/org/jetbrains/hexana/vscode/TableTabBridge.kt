@@ -398,8 +398,8 @@ fun TableTabContent(
         if (pinnedRow != null) return index == pinnedRow.index
         val selData = descriptor.rowSelectionProvider(index) ?: return false
         return selection.hasSelection &&
-            selection.selectionStart == selData.offset &&
-            selection.selectionEnd == selData.offset + selData.size - 1
+            selection.selectionStart == selData.start &&
+            selection.selectionEnd == selData.start + selData.length - 1
     }
     // The key listener below is registered once, so it reads the row through this state.
     val highlightedRowText by rememberUpdatedState {
@@ -434,10 +434,10 @@ fun TableTabContent(
         if (highlightProvider != null) {
             applyHighlightRangesVsc(highlightProvider(index), selection)
         } else if (selData != null) {
-            selection.anchorIndex = selData.offset
-            selection.activeIndex = selData.offset + selData.size - 1
-            selection.cursorIndex = selData.offset
-            scrollHexViewerTo(selData.offset)
+            selection.anchorIndex = selData.start
+            selection.activeIndex = selData.start + selData.length - 1
+            selection.cursorIndex = selData.start
+            scrollHexViewerTo(selData.start)
         }
         clickedRow = ClickedRow(index, selection.anchorIndex, selection.activeIndex)
         wrapper.scrollTop = maxOf(0.0, position * rowHeight - (wrapper.clientHeight - rowHeight) / 2.0)
@@ -605,10 +605,10 @@ fun TableTabContent(
                                         // bounding span covering all returned ranges.
                                         applyHighlightRangesVsc(highlightProvider(index), selection)
                                     } else if (selData != null) {
-                                        selection.anchorIndex = selData.offset
-                                        selection.activeIndex = selData.offset + selData.size - 1
-                                        selection.cursorIndex = selData.offset
-                                        scrollHexViewerTo(selData.offset)
+                                        selection.anchorIndex = selData.start
+                                        selection.activeIndex = selData.start + selData.length - 1
+                                        selection.cursorIndex = selData.start
+                                        scrollHexViewerTo(selData.start)
                                     }
                                 }
                                 // Snapshot taken after the handlers above updated the hex selection.
@@ -1285,10 +1285,10 @@ private fun TreeTableTabContent(
         if (highlightProvider != null && row.depth == 0) {
             applyHighlightRangesVsc(highlightProvider(row.index), selection)
         } else if (selData != null) {
-            selection.anchorIndex = selData.offset
-            selection.activeIndex = selData.offset + selData.size - 1
-            selection.cursorIndex = selData.offset
-            scrollHexViewerTo(selData.offset)
+            selection.anchorIndex = selData.start
+            selection.activeIndex = selData.start + selData.length - 1
+            selection.cursorIndex = selData.start
+            scrollHexViewerTo(selData.start)
         }
     }
 
@@ -1937,8 +1937,8 @@ private fun TreeTableBody(
                             flatIndex == focusedFlatIndex
                         } else {
                             selData != null && selection.hasSelection &&
-                                selection.selectionStart == selData.offset &&
-                                selection.selectionEnd == selData.offset + selData.size - 1
+                                selection.selectionStart == selData.start &&
+                                selection.selectionEnd == selData.start + selData.length - 1
                         }
 
                         PanelTableRow(
@@ -1953,10 +1953,10 @@ private fun TreeTableBody(
                                 if (highlightProvider != null && row.depth == 0) {
                                     applyHighlightRangesVsc(highlightProvider(row.index), selection)
                                 } else if (selData != null) {
-                                    selection.anchorIndex = selData.offset
-                                    selection.activeIndex = selData.offset + selData.size - 1
-                                    selection.cursorIndex = selData.offset
-                                    scrollHexViewerTo(selData.offset)
+                                    selection.anchorIndex = selData.start
+                                    selection.activeIndex = selData.start + selData.length - 1
+                                    selection.cursorIndex = selData.start
+                                    scrollHexViewerTo(selData.start)
                                 }
                             },
                             onDoubleClick = if (row.hasChildren) {
@@ -1969,10 +1969,10 @@ private fun TreeTableBody(
                                 if (highlightProvider != null && row.depth == 0) {
                                     applyHighlightRangesVsc(highlightProvider(row.index), selection)
                                 } else if (selData != null) {
-                                    selection.anchorIndex = selData.offset
-                                    selection.activeIndex = selData.offset + selData.size - 1
-                                    selection.cursorIndex = selData.offset
-                                    scrollHexViewerTo(selData.offset)
+                                    selection.anchorIndex = selData.start
+                                    selection.activeIndex = selData.start + selData.length - 1
+                                    selection.cursorIndex = selData.start
+                                    scrollHexViewerTo(selData.start)
                                 }
                             },
                             onActivate = {
@@ -2055,3 +2055,10 @@ private fun TreeTableBody(
         }
     }
 }
+
+/*
+ * The web hosts parse only what they hold in memory (at most the loaded head of a large file), so
+ * the rows they select describe bytes an Int addresses — the coordinates [HexSelectionState] uses.
+ */
+internal val RowSelectionData.start: Int get() = offset.toInt()
+internal val RowSelectionData.length: Int get() = size.toInt()

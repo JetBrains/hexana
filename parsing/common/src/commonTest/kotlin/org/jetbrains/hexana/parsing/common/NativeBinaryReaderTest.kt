@@ -62,8 +62,17 @@ class NativeBinaryReaderTest {
         assertNull(reader.rangeOrNull(6uL, 4uL))
         assertNull(reader.rangeOrNull(UInt.MAX_VALUE.toULong() + 1uL, 1uL))
         assertNull(reader.rangeOrNull(Int.MAX_VALUE.toULong(), 1uL))
-        assertFailsWith<IllegalArgumentException> {
-            NativeByteRange(Int.MAX_VALUE, 1)
-        }
+    }
+
+    @Test
+    fun `ranges past 2 GiB are 64-bit and refuse their Int views`() {
+        val range = NativeByteRange(Int.MAX_VALUE, 1)
+        assertEquals(Int.MAX_VALUE + 1L, range.end)
+        assertFalse(range.fitsInt)
+        assertEquals(Int.MAX_VALUE, range.offset)
+        assertFailsWith<ArithmeticException> { range.endExclusive }
+        assertFailsWith<ArithmeticException> { NativeByteRange(5L shl 30, 16).offset }
+        assertFailsWith<IllegalArgumentException> { NativeByteRange(Long.MAX_VALUE, 1L) }
+        assertFailsWith<IllegalArgumentException> { NativeByteRange(-1L, 1L) }
     }
 }

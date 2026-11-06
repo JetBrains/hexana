@@ -966,7 +966,7 @@ class HexanaFileEditor(
         val override = overrideParser()
         val overrideKind = override?.providerKindOrNull()
         if (override != null && overrideKind == null) {
-            val forced = createBinaryProvider(override, commonBuffer, sourcePath, fileSizeFor(inMemoryBuffer))
+            val forced = createBinaryProvider(override, commonBuffer, sourcePath, fileSizeFor(inMemoryBuffer), sourceFor(inMemoryBuffer))
             if (forced != null) return withVirtualFile(forced, inMemoryBuffer)
             val scripted = scriptedProvider
             parserOverrideFailure = if (scripted != null) {
@@ -1062,7 +1062,10 @@ class HexanaFileEditor(
                 }.also { initSourceLocationProvider(ref, null) }
             }
 
-            else -> withVirtualFile(createBinaryProvider(kind, commonBuffer, sourcePath, fileSizeFor(inMemoryBuffer)), inMemoryBuffer)
+            else -> withVirtualFile(
+                createBinaryProvider(kind, commonBuffer, sourcePath, fileSizeFor(inMemoryBuffer), sourceFor(inMemoryBuffer)),
+                inMemoryBuffer,
+            )
         }
     }
 
@@ -1086,6 +1089,10 @@ class HexanaFileEditor(
      */
     private fun fileSizeFor(inMemoryBuffer: CommonByteBuffer?): Long? =
         if (inMemoryBuffer == null) partialFileSize else null
+
+    /** The whole mapped file for the factory, on the same terms as [fileSizeFor]. */
+    private fun sourceFor(inMemoryBuffer: CommonByteBuffer?): LargeBytes? =
+        if (inMemoryBuffer == null) fileSource else null
 
 
 

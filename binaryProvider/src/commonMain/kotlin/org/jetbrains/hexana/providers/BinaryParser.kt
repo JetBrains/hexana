@@ -1,6 +1,8 @@
 package org.jetbrains.hexana.providers
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.LargeBytes
+import org.jetbrains.hexana.io.asLargeBytes
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormatDetector
 
@@ -104,17 +106,18 @@ fun createBinaryProvider(
     bytes: CommonByteBuffer,
     sourcePath: String? = null,
     fileSize: Long? = null,
+    source: LargeBytes? = null,
 ): BinaryProvider? {
     // Rewound once for every provider, for the reason [createBinaryProvider] gives.
     val shared = bytes.duplicate().position(0)
-    val totalSize = fileSize ?: shared.size.toLong()
+    val totalSize = source?.size ?: fileSize ?: shared.size.toLong()
     return try {
         when (parser) {
             BinaryParser.GENERIC -> GenericBinaryProvider(shared)
             BinaryParser.WASM -> WasmBinaryProvider(shared)
             BinaryParser.WASM_COMPONENT -> WasmComponentBinaryProvider(shared)
             BinaryParser.ELF -> (detectNative(shared) as? NativeBinaryFormat.Elf)
-                ?.let { ElfBinaryProvider(shared, it, sourcePath) }
+                ?.let { ElfBinaryProvider(shared, it, sourcePath, source ?: shared.asLargeBytes()) }
             BinaryParser.MACH_O -> when (val format = detectNative(shared)) {
                 is NativeBinaryFormat.MachO -> MachOBinaryProvider(shared, format, sourcePath)
                 is NativeBinaryFormat.FatMachO -> FatMachOBinaryProvider(shared, format, sourcePath)

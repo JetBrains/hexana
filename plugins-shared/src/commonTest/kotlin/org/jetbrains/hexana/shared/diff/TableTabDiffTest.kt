@@ -107,7 +107,7 @@ class TableTabDiffTest {
         val right = table("T", listOf("Name"), listOf(listOf("b")))
         var clicked: Pair<Int?, Int?>? = null
 
-        val table = TableTabDiffer.diff("T", left, right) { l, r -> clicked = l?.offset to r?.offset }.descriptor
+        val table = TableTabDiffer.diff("T", left, right) { l, r -> clicked = l?.offset?.toInt() to r?.offset?.toInt() }.descriptor
         table.rowClickAction!!(0) // "a", left only
         assertEquals(0 to null, clicked)
         table.rowClickAction!!(1) // "b", left row 1 / right row 0

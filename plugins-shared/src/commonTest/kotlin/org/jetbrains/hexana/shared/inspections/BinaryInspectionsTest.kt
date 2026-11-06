@@ -291,7 +291,7 @@ class BinaryInspectionsTest {
     // ---------------------------------------------------------------------
 
     /** [RowSelectionData] has no equality; compare it through its fields. */
-    private fun RowSelectionData?.pair(): Pair<Int, Int>? = this?.let { it.offset to it.size }
+    private fun RowSelectionData?.pair(): Pair<Int, Int>? = this?.let { it.offset.toInt() to it.size.toInt() }
 
     private companion object {
         /** Large enough for every offset the table fixtures use. */

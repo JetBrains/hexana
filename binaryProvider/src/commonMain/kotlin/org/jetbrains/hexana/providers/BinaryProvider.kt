@@ -1,5 +1,9 @@
 package org.jetbrains.hexana.providers
 
+import org.jetbrains.hexana.parsing.common.NativeByteRange
+import org.jetbrains.hexana.providers.elf.debugSectionSpan
+import org.jetbrains.hexana.io.asLargeBytes
+import org.jetbrains.hexana.io.LargeBytes
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.containsRange
 import org.jetbrains.hexana.io.toCommonByteBuffer
@@ -348,41 +352,69 @@ sealed class NativeBinaryProvider(
     open val parseDiagnostics: List<NativeParserDiagnostic>? get() = null
 }
 
+/**
+ * The whole file this native provider describes: for ELF, the 64-bit source it was parsed from
+ * (larger than [BinaryProvider.bytes] for a file past 2 GiB); for the other formats, their bytes.
+ */
+val NativeBinaryProvider.wholeFile: LargeBytes
+    get() = (this as? ElfBinaryProvider)?.source ?: bytes.asLargeBytes()
+
 class ElfBinaryProvider(
     sharedBytes: CommonByteBuffer,
     override val nativeFormat: NativeBinaryFormat.Elf,
     sourcePath: String? = null,
+    /**
+     * The whole file. Larger than [sharedBytes] for a file past 2 GiB, whose head is all a
+     * `CommonByteBuffer` holds; the ELF tables are parsed from this, so sections and segments
+     * anywhere in the file are found.
+     */
+    val source: LargeBytes = sharedBytes.asLargeBytes(),
 ) : NativeBinaryProvider(sharedBytes, sourcePath) {
 
-    val header: ElfHeader? by lazy { ElfParser.parseHeader(bytes) }
+    override val fileSize: Long get() = source.size
 
-    override val parseDiagnostics: List<NativeParserDiagnostic> by lazy { ElfParser.parse(bytes).diagnostics }
+    val header: ElfHeader? by lazy { ElfParser.parseHeader(source) }
+
+    override val parseDiagnostics: List<NativeParserDiagnostic> by lazy { ElfParser.parse(source).diagnostics }
 
     val sections: List<ElfSectionHeader>? by lazy {
-        header?.let { ElfParser.parseSectionHeaders(bytes, it) }
+        header?.let { ElfParser.parseSectionHeaders(source, it) }
     }
 
     val programHeaders: List<ElfProgramHeader>? by lazy {
-        header?.let { ElfParser.parseProgramHeaders(bytes, it) }
+        header?.let { ElfParser.parseProgramHeaders(source, it) }
     }
 
     val symbols: List<ElfSymbol>? by lazy {
         val h = header ?: return@lazy null
         val s = sections ?: return@lazy null
-        ElfParser.parseSymbols(bytes, h, s)
+        ElfParser.parseSymbols(source, h, s)
     }
 
     val relocations: List<ElfRelocation>? by lazy {
         val h = header ?: return@lazy null
         val s = sections ?: return@lazy null
         val sym = symbols ?: return@lazy null
-        ElfParser.parseRelocations(bytes, h, s, sym)
+        ElfParser.parseRelocations(source, h, s, sym)
     }
 
     val dynamicEntries: List<ElfDynamicEntry>? by lazy {
         val h = header ?: return@lazy null
         val s = sections ?: return@lazy null
-        ElfParser.parseDynamicEntries(bytes, h, s)
+        ElfParser.parseDynamicEntries(source, h, s)
+    }
+
+    /**
+     * [section]'s content in a buffer an `Int`-addressed decoder can read, with the section's
+     * range rebased onto it: the file's own buffer when the section lies inside it, else a window
+     * of the [source]. `null` for a section without content or one too large for a buffer.
+     */
+    fun sectionView(section: ElfSectionHeader): Pair<CommonByteBuffer, ElfSectionHeader>? {
+        val range = section.contentRange ?: return null
+        if (range.end <= bytes.size) return bytes to section
+        if (range.length > Int.MAX_VALUE) return null
+        val window = source.window(range.start, range.length.toInt())
+        return window to section.copy(contentRange = NativeByteRange(0, range.length.toInt()))
     }
 
     override val nativeFunctions: List<NativeFunctionRecord>? by lazy {
@@ -395,7 +427,16 @@ class ElfBinaryProvider(
     override val nativeSourceLocationProvider: NativeSourceLocationProvider? by lazy {
         val sec = sections ?: return@lazy null
         if (sec.none { it.name == ".debug_line" } || sec.none { it.name == ".debug_info" }) return@lazy null
-        NativeDwarfSourceLocationProvider(bytes, ElfDwarfAccessor(sec))
+        val span = debugSectionSpan(sec) ?: return@lazy null
+        if (span.last < bytes.size) {
+            NativeDwarfSourceLocationProvider(bytes, ElfDwarfAccessor(sec))
+        } else {
+            // The debug sections of a file past 2 GiB: one window over them, since the DWARF
+            // decoder is Int-addressed. Debug info larger than a window is not resolved.
+            val length = span.last - span.first + 1
+            if (length > Int.MAX_VALUE) return@lazy null
+            NativeDwarfSourceLocationProvider(source.window(span.first, length.toInt()), ElfDwarfAccessor(sec, base = span.first))
+        }
     }
 
     override val nativeImageInfo: NativeImageInfo? by lazy {
@@ -406,6 +447,8 @@ class ElfBinaryProvider(
     }
 
     override val sizeAnalysis: BinarySizeNode? by lazy {
+        // Size nodes are Int-sized; a file past 2 GiB has no size tree rather than a wrong one.
+        if (source.size > Int.MAX_VALUE) return@lazy null
         val secs = sections?.takeIf { it.isNotEmpty() } ?: return@lazy null
         val totalSize = bytes.size
         val children = secs.map { sec ->
@@ -426,7 +469,8 @@ class ElfBinaryProvider(
     val armProfile: Char? by lazy {
         if (nativeFormat.machine != 0x28) return@lazy null
         val sec = sections?.firstOrNull { it.name == ".ARM.attributes" } ?: return@lazy null
-        ArmAttributesParser.parseCpuArchProfile(bytes, sec)
+        val (buffer, view) = sectionView(sec) ?: return@lazy null
+        ArmAttributesParser.parseCpuArchProfile(buffer, view)
     }
 
     /**
@@ -436,7 +480,7 @@ class ElfBinaryProvider(
     val buildId: String? by lazy {
         val h = header ?: return@lazy null
         val s = sections ?: return@lazy null
-        ElfParser.parseGnuBuildId(bytes, s, h)
+        ElfParser.parseGnuBuildId(source, s, h)
     }
 
 
@@ -958,8 +1002,13 @@ fun nativeOrGenericBinaryProvider(
     sharedBytes: CommonByteBuffer,
     sourcePath: String? = null,
     fileSize: Long? = null,
+    /**
+     * The whole file when [sharedBytes] is only its head and the host can read all of it; the
+     * formats migrated to 64-bit offsets (ELF) parse from it. Implies [fileSize].
+     */
+    source: LargeBytes? = null,
 ): BinaryProvider {
-    val totalSize = fileSize ?: sharedBytes.size.toLong()
+    val totalSize = source?.size ?: fileSize ?: sharedBytes.size.toLong()
     return when {
         ZipBinaryProvider.isZip(sharedBytes) -> ZipBinaryProvider(sharedBytes)
         TarBinaryProvider.isTar(sharedBytes) -> TarBinaryProvider(sharedBytes)
@@ -977,7 +1026,7 @@ fun nativeOrGenericBinaryProvider(
         ProtobufBinaryProvider.isFileDescriptorSet(sharedBytes) -> ProtobufBinaryProvider(sharedBytes.duplicate().position(0))
         else -> {
             when (val fmt = NativeBinaryFormatDetector.detect(sharedBytes)) {
-                is NativeBinaryFormat.Elf -> ElfBinaryProvider(sharedBytes, fmt, sourcePath)
+                is NativeBinaryFormat.Elf -> ElfBinaryProvider(sharedBytes, fmt, sourcePath, source ?: sharedBytes.asLargeBytes())
                 is NativeBinaryFormat.MachO -> MachOBinaryProvider(sharedBytes, fmt, sourcePath)
                 is NativeBinaryFormat.FatMachO -> FatMachOBinaryProvider(sharedBytes, fmt, sourcePath)
                 is NativeBinaryFormat.Pe -> PeBinaryProvider(sharedBytes, fmt, sourcePath)

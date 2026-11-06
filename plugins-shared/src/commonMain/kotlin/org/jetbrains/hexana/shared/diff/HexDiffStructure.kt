@@ -44,7 +44,7 @@ object HexDiffStructure {
         rightName: String?,
         onError: (Throwable) -> Unit = {},
         between: suspend () -> Unit = {},
-        onRowClick: (leftOffset: Int?, rightOffset: Int?) -> Unit = { _, _ -> },
+        onRowClick: (leftOffset: Long?, rightOffset: Long?) -> Unit = { _, _ -> },
     ): List<TableTabDiff> {
         fun tabsOf(index: Int, provider: BinaryProvider?, name: String?): List<TableTabDescriptor> {
             provider ?: return emptyList()

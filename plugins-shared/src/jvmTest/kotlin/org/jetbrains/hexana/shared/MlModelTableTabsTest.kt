@@ -51,7 +51,7 @@ class MlModelTableTabsTest {
         assertEquals("64 × 5", tensors.cell(embd, "Shape"))
         assertEquals("340 B", tensors.cell(embd, "Size"))
         val selected = assertNotNull(tensors.rowSelectionProvider(embd))
-        assertEquals(992 to 340, selected.offset to selected.size)
+        assertEquals(992 to 340, selected.offset.toInt() to selected.size.toInt())
     }
 
     @Test
@@ -72,7 +72,7 @@ class MlModelTableTabsTest {
         assertEquals("128", tensors.cell(up, "Elements"))
         val file = safetensors.parsedSafetensors!!
         val selected = assertNotNull(tensors.rowSelectionProvider(up))
-        assertEquals((file.dataOffset + 72).toInt() to 512, selected.offset to selected.size)
+        assertEquals((file.dataOffset + 72).toInt() to 512, selected.offset.toInt() to selected.size.toInt())
     }
 
     @Test

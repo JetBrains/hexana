@@ -230,7 +230,7 @@ internal class HexDiffState(val input: BinaryDiffInput) {
                 left, right, input.leftName, input.rightName,
                 onError = { console.warn("[Hexana] A table tab failed in the hex diff:", it.message) },
                 between = { awaitAnimationFrame() },
-                onRowClick = { l, r -> listOfNotNull(l, r).minOrNull()?.let { goToOffset(it.toLong()) } },
+                onRowClick = { l, r -> listOfNotNull(l, r).minOrNull()?.let { goToOffset(it) } },
             )
             selectTab(tabs.indexOfFirst { it.changed > 0 }.coerceAtLeast(0))
             this.tabs = tabs

@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.providers
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.LargeBytes
 
 /**
  * The format a binary's bytes and name resolve to, as decided by
@@ -104,13 +105,16 @@ fun resolveBinaryProviderKind(
  *
  * [fileSize] is the size of the whole file when [bytes] is only its head, because the file is
  * larger than a host can load ([MAX_BINARY_WINDOW_BYTES]); `null` means [bytes] is the file.
+ * [source] is the whole file itself, for a host that can read all of it (the JVM maps it); the
+ * formats with 64-bit parsers read their tables from it, the rest parse [bytes].
  */
 fun createBinaryProvider(
     bytes: CommonByteBuffer,
     sourcePath: String? = null,
     fileName: String? = sourcePath,
     fileSize: Long? = null,
-): BinaryProvider = createBinaryProvider(resolveBinaryProviderKind(bytes, fileName), bytes, sourcePath, fileSize)
+    source: LargeBytes? = null,
+): BinaryProvider = createBinaryProvider(resolveBinaryProviderKind(bytes, fileName), bytes, sourcePath, fileSize, source)
 
 /**
  * Builds the provider for an already-decided [kind].
@@ -124,6 +128,7 @@ fun createBinaryProvider(
     bytes: CommonByteBuffer,
     sourcePath: String? = null,
     fileSize: Long? = null,
+    source: LargeBytes? = null,
 ): BinaryProvider {
     // Every provider below reads through `sharedBytes.duplicate()`, and a duplicate
     // inherits the source cursor — so a buffer handed over mid-read would have each
@@ -136,7 +141,7 @@ fun createBinaryProvider(
         is BinaryProviderKind.Arrow -> ArrowBinaryProvider(shared, kind.format, sourcePath)
         BinaryProviderKind.Wasm -> WasmBinaryProvider(shared)
         BinaryProviderKind.WasmComponent -> WasmComponentBinaryProvider(shared)
-        BinaryProviderKind.NativeOrGeneric -> nativeOrGenericBinaryProvider(shared, sourcePath, fileSize)
+        BinaryProviderKind.NativeOrGeneric -> nativeOrGenericBinaryProvider(shared, sourcePath, fileSize, source)
     }
 }
 

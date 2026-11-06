@@ -131,7 +131,7 @@ class NativeTableTabsProvider : TableTabsProvider {
             ),
             rowCount = rows.size,
             rowSelectionProvider = { index ->
-                rows.getOrNull(index)?.range?.let { range -> RowSelectionData(range.offset, range.size) }
+                rows.getOrNull(index)?.range?.let(::selection)
             },
             prologueText = buildDebugContextPrologueText(data.debugContext),
             emptyMessage = "No debug companion information is available.",

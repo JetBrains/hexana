@@ -38,11 +38,11 @@ class PartialViewTest {
 
         val tensors = GgufTableTabsProvider().tableTabs(provider).single { it.name == "Tensors" }
         val first = assertNotNull(tensors.rowSelectionProvider(tensors.rowWhere("Name", "token_embd.weight")))
-        assertEquals(992 to 340, first.offset to first.size)
+        assertEquals(992 to 340, first.offset.toInt() to first.size.toInt())
         // Data past the loaded head falls back to the info record, which is in the head.
         val late = assertNotNull(tensors.rowSelectionProvider(tensors.rowWhere("Name", "output_norm.weight")))
         assertTrue(late.offset + late.size <= head.size)
-        assertEquals(file.tensors.last().infoRange.offset.toInt(), late.offset)
+        assertEquals(file.tensors.last().infoRange.offset, late.offset)
     }
 
     @Test
@@ -58,7 +58,7 @@ class PartialViewTest {
         assertEquals(4, file.tensors.size)
         val tensors = SafetensorsTableTabsProvider().tableTabs(provider).single { it.name == "Tensors" }
         val late = assertNotNull(tensors.rowSelectionProvider(tensors.rowWhere("Name", "model.embed_tokens.weight")))
-        assertEquals(file.headerRange.offset.toInt() to file.headerRange.size.toInt(), late.offset to late.size)
+        assertEquals(file.headerRange.offset.toInt() to file.headerRange.size.toInt(), late.offset.toInt() to late.size.toInt())
     }
 
     @Test

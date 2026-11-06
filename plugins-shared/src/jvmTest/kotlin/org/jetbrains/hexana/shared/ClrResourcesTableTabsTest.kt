@@ -52,7 +52,7 @@ class ClrResourcesTableTabsTest {
         // Binary values select their payload, without the type code and length prefix.
         val payload = provider.parsedResources!!.resources.single { it.name == "Pixel" }.payloadRange!!
         val selected = assertNotNull(resources.rowSelectionProvider(pixel))
-        assertEquals(payload.offset to payload.size, selected.offset to selected.size)
+        assertEquals(payload.offset to payload.size, selected.offset.toInt() to selected.size.toInt())
     }
 
     @Test

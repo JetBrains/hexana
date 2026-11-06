@@ -55,7 +55,8 @@ internal fun BinaryProvider.problemNavigator(state: HexViewStateHolder): Problem
         // channel the virtualized panel uses for structural navigation.
         FileEditorManager.getInstance(project).openFile(provider.file, false)
             .filterIsInstance<HexanaFileEditor>().firstOrNull()
-            ?.requestWasmByteOffsetNav(selection.offset)
+            // A Wasm module is far below 2 GiB, so its offsets fit an Int.
+            ?.requestWasmByteOffsetNav(selection.offset.toInt())
         state.requestSelectTabByDescription("Wat")
     }
 

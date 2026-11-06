@@ -58,15 +58,16 @@ internal fun NativeFunctionRecord.kindLabel(): String =
 
 internal fun NativeFunctionRecord.selection(): RowSelectionData? {
     val offset = fileOffset
-    if (offset != null && offset in 0..Int.MAX_VALUE) {
-        val size = size?.takeIf { it <= Int.MAX_VALUE.toULong() }?.toInt()?.takeIf { it > 0 } ?: 1
-        return RowSelectionData(offset.toInt(), size)
+    if (offset != null && offset >= 0) {
+        val size = size?.takeIf { it in 1uL..Long.MAX_VALUE.toULong() }?.toLong() ?: 1L
+        return RowSelectionData(offset, size)
     }
     return selection(recordRange)
 }
 
+/** The range as a selection; 64-bit, so a record of a file past 2 GiB selects where it is. */
 internal fun selection(range: NativeByteRange): RowSelectionData =
-    RowSelectionData(range.offset, range.size)
+    RowSelectionData(range.start, range.length)
 
 internal fun col(name: String, width: ColumnWidth = ColumnWidth.MeasuredMin(name), cellProvider: (Int) -> CellValue<*>): ColumnDescriptor =
     ColumnDescriptor(name, width, cellProvider)

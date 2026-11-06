@@ -1,6 +1,10 @@
 package org.jetbrains.hexana.providers.elf
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.LargeBytes
+import org.jetbrains.hexana.io.asLargeBytes
+import org.jetbrains.hexana.io.containsRange
+import org.jetbrains.hexana.io.readBytes
 import org.jetbrains.hexana.parsing.common.NativeBinaryEndian
 import org.jetbrains.hexana.parsing.common.NativeBinaryWordSize
 import org.jetbrains.hexana.parsing.common.NativeByteRange
@@ -11,8 +15,39 @@ import org.jetbrains.hexana.parsing.common.NativeUnresolvedRecord
 import org.jetbrains.hexana.parsing.common.nativeParseFailure
 import org.jetbrains.hexana.parsing.common.nativeParseSuccess
 
+/**
+ * ELF parser. Reads through [LargeBytes] with 64-bit offsets, so a file past 2 GiB — a debug build,
+ * a core dump — is parsed whole; section and segment ranges are 64-bit ([NativeByteRange.start]).
+ * The [CommonByteBuffer] overloads serve callers holding an in-memory buffer.
+ */
 object ElfParser {
-    fun parse(bytes: CommonByteBuffer): NativeParseResult<ElfFile> {
+    fun parse(bytes: CommonByteBuffer): NativeParseResult<ElfFile> = parse(bytes.asLargeBytes())
+
+    fun parseHeader(bytes: CommonByteBuffer): ElfHeader? = parseHeader(bytes.asLargeBytes())
+
+    fun parseSectionHeaders(bytes: CommonByteBuffer, header: ElfHeader): List<ElfSectionHeader>? =
+        parseSectionHeaders(bytes.asLargeBytes(), header)
+
+    fun parseProgramHeaders(bytes: CommonByteBuffer, header: ElfHeader): List<ElfProgramHeader>? =
+        parseProgramHeaders(bytes.asLargeBytes(), header)
+
+    fun parseSymbols(bytes: CommonByteBuffer, header: ElfHeader, sections: List<ElfSectionHeader>): List<ElfSymbol>? =
+        parseSymbols(bytes.asLargeBytes(), header, sections)
+
+    fun parseRelocations(
+        bytes: CommonByteBuffer,
+        header: ElfHeader,
+        sections: List<ElfSectionHeader>,
+        symbols: List<ElfSymbol>,
+    ): List<ElfRelocation>? = parseRelocations(bytes.asLargeBytes(), header, sections, symbols)
+
+    fun parseDynamicEntries(bytes: CommonByteBuffer, header: ElfHeader, sections: List<ElfSectionHeader>): List<ElfDynamicEntry>? =
+        parseDynamicEntries(bytes.asLargeBytes(), header, sections)
+
+    fun parseGnuBuildId(bytes: CommonByteBuffer, sections: List<ElfSectionHeader>, header: ElfHeader): String? =
+        parseGnuBuildId(bytes.asLargeBytes(), sections, header)
+
+    fun parse(bytes: LargeBytes): NativeParseResult<ElfFile> {
         val header = parseHeader(bytes)
             ?: return nativeParseFailure("elf.invalid_header", "Input does not contain a valid ELF header.")
 
@@ -83,7 +118,7 @@ object ElfParser {
         return nativeParseSuccess(file, diagnostics)
     }
 
-    fun parseHeader(bytes: CommonByteBuffer): ElfHeader? {
+    fun parseHeader(bytes: LargeBytes): ElfHeader? {
         if (!bytes.hasPrefix(0x7F, 0x45, 0x4C, 0x46)) return null
 
         val wordSize = when (bytes.byteOrNull(4)) {
@@ -119,7 +154,7 @@ object ElfParser {
         }
     }
 
-    fun parseSectionHeaders(bytes: CommonByteBuffer, header: ElfHeader): List<ElfSectionHeader>? {
+    fun parseSectionHeaders(bytes: LargeBytes, header: ElfHeader): List<ElfSectionHeader>? {
         val layout = sectionHeaderLayout(bytes, header) ?: return null
         if (layout.sectionHeaderCount == 0) return emptyList()
 
@@ -128,7 +163,7 @@ object ElfParser {
 
         val rawSections = buildList {
             for (index in 0 until layout.sectionHeaderCount) {
-                val offset = layout.tableOffset + index * layout.entrySize
+                val offset = layout.tableOffset + index.toLong() * layout.entrySize
                 add(parseSectionHeader(bytes, header, index, offset, layout.entrySize) ?: return null)
             }
         }
@@ -142,11 +177,11 @@ object ElfParser {
         }
     }
 
-    fun parseProgramHeaders(bytes: CommonByteBuffer, header: ElfHeader): List<ElfProgramHeader>? {
+    fun parseProgramHeaders(bytes: LargeBytes, header: ElfHeader): List<ElfProgramHeader>? {
         val programHeaderCount = programHeaderCount(bytes, header) ?: return null
         if (programHeaderCount == 0) return emptyList()
 
-        val tableOffset = header.programHeaderOffset.toBoundedInt() ?: return null
+        val tableOffset = header.programHeaderOffset.toBoundedLong() ?: return null
         val entrySize = header.programHeaderEntrySize
         val minimumEntrySize = when (header.wordSize) {
             NativeBinaryWordSize.Bits32 -> ELF32_PROGRAM_HEADER_SIZE
@@ -160,14 +195,14 @@ object ElfParser {
 
         return buildList {
             for (index in 0 until programHeaderCount) {
-                val offset = tableOffset + index * entrySize
+                val offset = tableOffset + index.toLong() * entrySize
                 add(parseProgramHeader(bytes, header, index, offset, entrySize) ?: return null)
             }
         }
     }
 
     fun parseSymbols(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: ElfHeader,
         sections: List<ElfSectionHeader>,
     ): List<ElfSymbol>? {
@@ -181,7 +216,7 @@ object ElfParser {
     }
 
     fun parseRelocations(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: ElfHeader,
         sections: List<ElfSectionHeader>,
         symbols: List<ElfSymbol>,
@@ -196,7 +231,7 @@ object ElfParser {
     }
 
     fun parseDynamicEntries(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: ElfHeader,
         sections: List<ElfSectionHeader>,
     ): List<ElfDynamicEntry>? {
@@ -220,7 +255,7 @@ object ElfParser {
      * where name is "GNU\0" (namesz == 4) and type == 3 (NT_GNU_BUILD_ID).
      */
     fun parseGnuBuildId(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         sections: List<ElfSectionHeader>,
         header: ElfHeader,
     ): String? {
@@ -235,20 +270,21 @@ object ElfParser {
     }
 
     private fun parseGnuBuildIdFromSection(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         section: ElfSectionHeader,
         header: ElfHeader,
     ): String? {
         val range = section.contentRange ?: return null
-        var cursor = range.offset
-        val end = range.offset + range.size
+        var cursor = range.start
+        val end = range.end
         while (cursor + 12 <= end) {
             val namesz = bytes.u32OrNull(cursor, header.endian)?.toInt() ?: return null
             val descsz = bytes.u32OrNull(cursor + 4, header.endian)?.toInt() ?: return null
             val type = bytes.u32OrNull(cursor + 8, header.endian)?.toInt() ?: return null
             cursor += 12
-            val namePadded = (namesz + 3) and -4
-            val descPadded = (descsz + 3) and -4
+            if (namesz < 0 || descsz < 0) break
+            val namePadded = ((namesz.toLong() + 3) and -4L)
+            val descPadded = ((descsz.toLong() + 3) and -4L)
             if (cursor + namePadded + descPadded > end) break
             // NT_GNU_BUILD_ID: name "GNU\0" (namesz == 4), type == 3
             if (namesz == 4 && type == 3 &&
@@ -271,7 +307,7 @@ object ElfParser {
     }
 
     private fun parseElf32Header(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         endian: NativeBinaryEndian,
         headerSize: Int,
     ): ElfHeader? {
@@ -300,7 +336,7 @@ object ElfParser {
     }
 
     private fun parseElf64Header(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         endian: NativeBinaryEndian,
         headerSize: Int,
     ): ElfHeader? {
@@ -367,10 +403,10 @@ object ElfParser {
     )
 
     private fun parseSectionHeader(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: ElfHeader,
         index: Int,
-        offset: Int,
+        offset: Long,
         entrySize: Int,
     ): ElfSectionHeader? {
         val section = when (header.wordSize) {
@@ -387,7 +423,7 @@ object ElfParser {
                 info = bytes.u32OrNull(offset + 0x1C, header.endian) ?: return null,
                 addressAlignment = bytes.u32OrNull(offset + 0x20, header.endian)?.toULong() ?: return null,
                 entrySize = bytes.u32OrNull(offset + 0x24, header.endian)?.toULong() ?: return null,
-                headerRange = NativeByteRange(offset, entrySize),
+                headerRange = NativeByteRange(offset, entrySize.toLong()),
                 contentRange = null,
             )
             NativeBinaryWordSize.Bits64 -> ElfSectionHeader(
@@ -403,7 +439,7 @@ object ElfParser {
                 info = bytes.u32OrNull(offset + 0x2C, header.endian) ?: return null,
                 addressAlignment = bytes.u64OrNull(offset + 0x30, header.endian) ?: return null,
                 entrySize = bytes.u64OrNull(offset + 0x38, header.endian) ?: return null,
-                headerRange = NativeByteRange(offset, entrySize),
+                headerRange = NativeByteRange(offset, entrySize.toLong()),
                 contentRange = null,
             )
             NativeBinaryWordSize.Unknown -> return null
@@ -413,10 +449,10 @@ object ElfParser {
             return section
         }
 
-        val contentOffset = section.fileOffset.toBoundedInt() ?: return null
-        val contentSize = section.size.toBoundedInt() ?: return null
-        val contentRange = if (contentSize == 0) {
-            NativeByteRange(contentOffset.coerceAtMost(bytes.size), 0)
+        val contentOffset = section.fileOffset.toBoundedLong() ?: return null
+        val contentSize = section.size.toBoundedLong() ?: return null
+        val contentRange = if (contentSize == 0L) {
+            NativeByteRange(contentOffset.coerceAtMost(bytes.size), 0L)
         } else {
             if (!bytes.containsRange(contentOffset, contentSize)) return null
             NativeByteRange(contentOffset, contentSize)
@@ -425,8 +461,8 @@ object ElfParser {
         return section.copy(contentRange = contentRange)
     }
 
-    private fun sectionHeaderLayout(bytes: CommonByteBuffer, header: ElfHeader): ElfSectionHeaderLayout? {
-        val tableOffset = header.sectionHeaderOffset.toBoundedInt() ?: return null
+    private fun sectionHeaderLayout(bytes: LargeBytes, header: ElfHeader): ElfSectionHeaderLayout? {
+        val tableOffset = header.sectionHeaderOffset.toBoundedLong() ?: return null
         val entrySize = header.sectionHeaderEntrySize
         if (header.sectionHeaderOffset == 0uL && header.sectionHeaderCount == 0) {
             return ElfSectionHeaderLayout(
@@ -440,7 +476,7 @@ object ElfParser {
         if (entrySize < minimumEntrySize) return null
 
         val needsSectionZero = header.sectionHeaderCount == 0 || header.sectionNameStringTableIndex == SHN_XINDEX
-        val sectionZero = if (needsSectionZero && bytes.containsRange(tableOffset, entrySize)) {
+        val sectionZero = if (needsSectionZero && bytes.containsRange(tableOffset, entrySize.toLong())) {
             parseSectionHeader(bytes, header, 0, tableOffset, entrySize) ?: return null
         } else {
             null
@@ -448,7 +484,7 @@ object ElfParser {
 
         val sectionHeaderCount = when {
             header.sectionHeaderCount != 0 -> header.sectionHeaderCount
-            header.sectionHeaderOffset == 0uL || !bytes.containsRange(tableOffset, entrySize) -> 0
+            header.sectionHeaderOffset == 0uL || !bytes.containsRange(tableOffset, entrySize.toLong()) -> 0
             else -> sectionZero?.size?.toBoundedInt() ?: return null
         }
         val sectionNameStringTableIndex = if (header.sectionNameStringTableIndex == SHN_XINDEX) {
@@ -465,12 +501,12 @@ object ElfParser {
         )
     }
 
-    private fun programHeaderCount(bytes: CommonByteBuffer, header: ElfHeader): Int? {
+    private fun programHeaderCount(bytes: LargeBytes, header: ElfHeader): Int? {
         if (header.programHeaderCount != PN_XNUM) return header.programHeaderCount
-        val tableOffset = header.sectionHeaderOffset.toBoundedInt() ?: return null
+        val tableOffset = header.sectionHeaderOffset.toBoundedLong() ?: return null
         val entrySize = header.sectionHeaderEntrySize
         val minimumEntrySize = minimumSectionHeaderEntrySize(header.wordSize) ?: return null
-        if (entrySize < minimumEntrySize || !bytes.containsRange(tableOffset, entrySize)) return null
+        if (entrySize < minimumEntrySize || !bytes.containsRange(tableOffset, entrySize.toLong())) return null
         val sectionZero = parseSectionHeader(bytes, header, 0, tableOffset, entrySize) ?: return null
         return sectionZero.info.toBoundedInt()
     }
@@ -482,12 +518,10 @@ object ElfParser {
             NativeBinaryWordSize.Unknown -> null
         }
 
-    private fun readStringTable(bytes: CommonByteBuffer, range: NativeByteRange): ByteArray {
-        val result = ByteArray(range.size)
-        for (index in result.indices) {
-            result[index] = bytes[range.offset + index]
-        }
-        return result
+    /** The string table's bytes, or `null` for one too large to hold (string offsets are u32 anyway). */
+    private fun readStringTable(bytes: LargeBytes, range: NativeByteRange): ByteArray? {
+        if (range.length > Int.MAX_VALUE || !bytes.containsRange(range.start, range.length)) return null
+        return bytes.readBytes(range.start, range.length.toInt())
     }
 
     private fun readNullTerminatedString(stringTable: ByteArray?, offset: UInt): String {
@@ -503,10 +537,10 @@ object ElfParser {
     }
 
     private fun parseProgramHeader(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: ElfHeader,
         index: Int,
-        offset: Int,
+        offset: Long,
         entrySize: Int,
     ): ElfProgramHeader? {
         val programHeader = when (header.wordSize) {
@@ -520,7 +554,7 @@ object ElfParser {
                 memorySize = bytes.u32OrNull(offset + 0x14, header.endian)?.toULong() ?: return null,
                 flags = bytes.u32OrNull(offset + 0x18, header.endian) ?: return null,
                 alignment = bytes.u32OrNull(offset + 0x1C, header.endian)?.toULong() ?: return null,
-                headerRange = NativeByteRange(offset, entrySize),
+                headerRange = NativeByteRange(offset, entrySize.toLong()),
                 fileRange = null,
             )
             NativeBinaryWordSize.Bits64 -> ElfProgramHeader(
@@ -533,16 +567,16 @@ object ElfParser {
                 fileSize = bytes.u64OrNull(offset + 0x20, header.endian) ?: return null,
                 memorySize = bytes.u64OrNull(offset + 0x28, header.endian) ?: return null,
                 alignment = bytes.u64OrNull(offset + 0x30, header.endian) ?: return null,
-                headerRange = NativeByteRange(offset, entrySize),
+                headerRange = NativeByteRange(offset, entrySize.toLong()),
                 fileRange = null,
             )
             NativeBinaryWordSize.Unknown -> return null
         }
 
-        val fileOffset = programHeader.fileOffset.toBoundedInt() ?: return null
-        val fileSize = programHeader.fileSize.toBoundedInt() ?: return null
-        val fileRange = if (fileSize == 0) {
-            NativeByteRange(fileOffset.coerceAtMost(bytes.size), 0)
+        val fileOffset = programHeader.fileOffset.toBoundedLong() ?: return null
+        val fileSize = programHeader.fileSize.toBoundedLong() ?: return null
+        val fileRange = if (fileSize == 0L) {
+            NativeByteRange(fileOffset.coerceAtMost(bytes.size), 0L)
         } else {
             if (!bytes.containsRange(fileOffset, fileSize)) return null
             NativeByteRange(fileOffset, fileSize)
@@ -552,7 +586,7 @@ object ElfParser {
     }
 
     private fun parseSymbolTable(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: ElfHeader,
         sections: List<ElfSectionHeader>,
         symbolSection: ElfSectionHeader,
@@ -563,27 +597,27 @@ object ElfParser {
             ?: return null
         val minimumEntrySize = defaultSymbolEntrySize(header.wordSize) ?: return null
         if (entrySize < minimumEntrySize) return null
-        if (symbolRange.size % entrySize != 0) return null
+        if (symbolRange.length % entrySize != 0L) return null
 
         val stringTable = sections.getOrNull(symbolSection.link.toInt())
             ?.contentRange
             ?.let { readStringTable(bytes, it) }
 
         return buildList {
-            val symbolCount = symbolRange.size / entrySize
+            val symbolCount = (symbolRange.length / entrySize).toBoundedCount() ?: return null
             for (index in 0 until symbolCount) {
-                val offset = symbolRange.offset + index * entrySize
+                val offset = symbolRange.start + index.toLong() * entrySize
                 add(parseSymbol(bytes, header, symbolSection.index, index, offset, entrySize, stringTable) ?: return null)
             }
         }
     }
 
     private fun parseSymbol(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: ElfHeader,
         tableSectionIndex: Int,
         index: Int,
-        offset: Int,
+        offset: Long,
         entrySize: Int,
         stringTable: ByteArray?,
     ): ElfSymbol? {
@@ -627,7 +661,7 @@ object ElfParser {
             sectionIndex = sectionIndex,
             value = value,
             size = size,
-            recordRange = NativeByteRange(offset, entrySize),
+            recordRange = NativeByteRange(offset, entrySize.toLong()),
         )
     }
 
@@ -639,7 +673,7 @@ object ElfParser {
         }
 
     private fun parseRelocationSection(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: ElfHeader,
         section: ElfSectionHeader,
         symbols: List<ElfSymbol>,
@@ -650,27 +684,27 @@ object ElfParser {
             ?: return null
         val minimumEntrySize = defaultRelocationEntrySize(header.wordSize, section.type) ?: return null
         if (entrySize < minimumEntrySize) return null
-        if (relocationRange.size % entrySize != 0) return null
+        if (relocationRange.length % entrySize != 0L) return null
 
         val symbolsByIndex = symbols
             .filter { it.tableSectionIndex == section.link.toInt() }
             .associateBy { it.index }
 
         return buildList {
-            val relocationCount = relocationRange.size / entrySize
+            val relocationCount = (relocationRange.length / entrySize).toBoundedCount() ?: return null
             for (index in 0 until relocationCount) {
-                val offset = relocationRange.offset + index * entrySize
+                val offset = relocationRange.start + index.toLong() * entrySize
                 add(parseRelocation(bytes, header, section, index, offset, entrySize, symbolsByIndex) ?: return null)
             }
         }
     }
 
     private fun parseRelocation(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: ElfHeader,
         section: ElfSectionHeader,
         index: Int,
-        offset: Int,
+        offset: Long,
         entrySize: Int,
         symbolsByIndex: Map<Int, ElfSymbol>,
     ): ElfRelocation? {
@@ -714,7 +748,7 @@ object ElfParser {
             type = type,
             addend = addend,
             symbol = symbolsByIndex[symbolIndex.toInt()],
-            recordRange = NativeByteRange(offset, entrySize),
+            recordRange = NativeByteRange(offset, entrySize.toLong()),
         )
     }
 
@@ -740,7 +774,7 @@ object ElfParser {
         }
 
     private fun parseDynamicSection(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: ElfHeader,
         sections: List<ElfSectionHeader>,
         section: ElfSectionHeader,
@@ -751,27 +785,27 @@ object ElfParser {
             ?: return null
         val minimumEntrySize = defaultDynamicEntrySize(header.wordSize) ?: return null
         if (entrySize < minimumEntrySize) return null
-        if (dynamicRange.size % entrySize != 0) return null
+        if (dynamicRange.length % entrySize != 0L) return null
 
         val stringTable = sections.getOrNull(section.link.toInt())
             ?.contentRange
             ?.let { readStringTable(bytes, it) }
 
         return buildList {
-            val entryCount = dynamicRange.size / entrySize
+            val entryCount = (dynamicRange.length / entrySize).toBoundedCount() ?: return null
             for (index in 0 until entryCount) {
-                val offset = dynamicRange.offset + index * entrySize
+                val offset = dynamicRange.start + index.toLong() * entrySize
                 add(parseDynamicEntry(bytes, header, section, index, offset, entrySize, stringTable) ?: return null)
             }
         }
     }
 
     private fun parseDynamicEntry(
-        bytes: CommonByteBuffer,
+        bytes: LargeBytes,
         header: ElfHeader,
         section: ElfSectionHeader,
         index: Int,
-        offset: Int,
+        offset: Long,
         entrySize: Int,
         stringTable: ByteArray?,
     ): ElfDynamicEntry? {
@@ -805,7 +839,7 @@ object ElfParser {
             tag = tag,
             value = value,
             neededLibrary = neededLibrary,
-            recordRange = NativeByteRange(offset, entrySize),
+            recordRange = NativeByteRange(offset, entrySize.toLong()),
         )
     }
 
@@ -841,7 +875,7 @@ object ElfParser {
     private const val SHN_XINDEX = 0xFFFF
 
     private data class ElfSectionHeaderLayout(
-        val tableOffset: Int,
+        val tableOffset: Long,
         val entrySize: Int,
         val sectionHeaderCount: Int,
         val sectionNameStringTableIndex: Int,
@@ -855,18 +889,20 @@ private fun optionalTableDiagnostic(code: String, message: String): NativeParser
         severity = NativeParserSeverity.Warning,
     )
 
-private fun CommonByteBuffer.hasPrefix(vararg expected: Int): Boolean {
+private fun LargeBytes.hasPrefix(vararg expected: Int): Boolean {
     if (expected.size > size) return false
     for (index in expected.indices) {
-        if (byteOrNull(index) != expected[index]) return false
+        if (byteOrNull(index.toLong()) != expected[index]) return false
     }
     return true
 }
 
-private fun CommonByteBuffer.byteOrNull(offset: Int): Int? =
+private fun LargeBytes.byteOrNull(offset: Long): Int? =
     if (offset in 0 until size) get(offset).toInt() and 0xFF else null
 
-private fun CommonByteBuffer.u16OrNull(offset: Int, endian: NativeBinaryEndian): Int? {
+private fun LargeBytes.byteOrNull(offset: Int): Int? = byteOrNull(offset.toLong())
+
+private fun LargeBytes.u16OrNull(offset: Long, endian: NativeBinaryEndian): Int? {
     val b0 = byteOrNull(offset) ?: return null
     val b1 = byteOrNull(offset + 1) ?: return null
     return when (endian) {
@@ -876,7 +912,9 @@ private fun CommonByteBuffer.u16OrNull(offset: Int, endian: NativeBinaryEndian):
     }
 }
 
-private fun CommonByteBuffer.u32OrNull(offset: Int, endian: NativeBinaryEndian): UInt? {
+private fun LargeBytes.u16OrNull(offset: Int, endian: NativeBinaryEndian): Int? = u16OrNull(offset.toLong(), endian)
+
+private fun LargeBytes.u32OrNull(offset: Long, endian: NativeBinaryEndian): UInt? {
     val b0 = byteOrNull(offset) ?: return null
     val b1 = byteOrNull(offset + 1) ?: return null
     val b2 = byteOrNull(offset + 2) ?: return null
@@ -898,7 +936,9 @@ private fun CommonByteBuffer.u32OrNull(offset: Int, endian: NativeBinaryEndian):
     }
 }
 
-private fun CommonByteBuffer.u64OrNull(offset: Int, endian: NativeBinaryEndian): ULong? {
+private fun LargeBytes.u32OrNull(offset: Int, endian: NativeBinaryEndian): UInt? = u32OrNull(offset.toLong(), endian)
+
+private fun LargeBytes.u64OrNull(offset: Long, endian: NativeBinaryEndian): ULong? {
     val low = u32OrNull(offset, endian) ?: return null
     val high = u32OrNull(offset + 4, endian) ?: return null
     return when (endian) {
@@ -908,21 +948,24 @@ private fun CommonByteBuffer.u64OrNull(offset: Int, endian: NativeBinaryEndian):
     }
 }
 
+private fun LargeBytes.u64OrNull(offset: Int, endian: NativeBinaryEndian): ULong? = u64OrNull(offset.toLong(), endian)
+
+/** A 64-bit file offset or size, or `null` past what a [Long] (and so any file) can hold. */
+private fun ULong.toBoundedLong(): Long? =
+    if (this <= Long.MAX_VALUE.toULong()) toLong() else null
+
 private fun ULong.toBoundedInt(): Int? =
     if (this <= Int.MAX_VALUE.toULong()) toInt() else null
 
 private fun UInt.toBoundedInt(): Int? =
     if (this <= Int.MAX_VALUE.toUInt()) toInt() else null
 
-private fun checkedMultiply(left: Int, right: Int): Int? {
+/** A record count; tables of more than `Int.MAX_VALUE` records are rejected rather than iterated. */
+private fun Long.toBoundedCount(): Int? = if (this in 0..Int.MAX_VALUE) toInt() else null
+
+private fun checkedMultiply(left: Int, right: Int): Long? {
     if (left < 0 || right < 0) return null
-    if (left != 0 && right > Int.MAX_VALUE / left) return null
-    return left * right
+    return left.toLong() * right
 }
 
-private fun CommonByteBuffer.containsRange(offset: Int, size: Int): Boolean {
-    if (offset < 0 || size < 0) return false
-    if (offset > this.size) return false
-    if (size > this.size - offset) return false
-    return true
-}
+private fun LargeBytes.containsRange(offset: Long, size: Int): Boolean = containsRange(offset, size.toLong())

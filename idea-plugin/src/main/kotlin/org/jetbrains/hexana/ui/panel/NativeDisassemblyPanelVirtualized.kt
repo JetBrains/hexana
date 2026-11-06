@@ -39,6 +39,9 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.withContext
+import org.jetbrains.hexana.io.containsRange
+import org.jetbrains.hexana.io.LargeBytes
+import org.jetbrains.hexana.providers.wholeFile
 import org.jetbrains.hexana.HexViewStateHolder
 import org.jetbrains.hexana.disassembly.capstone.CapstoneWasmDisassembler
 import org.jetbrains.hexana.disassembly.capstone.loadFromClasspath
@@ -131,8 +134,7 @@ internal class DisasmCatalog(
     val arch: Arch,
     private val disassembler: CapstoneWasmDisassembler,
     private val formatter: AssemblyFormatter,
-    private val bytes: CommonByteBuffer,
-    private val bytesLimit: Int,
+    private val bytes: LargeBytes,
     val ranges: List<DisasmRange>,
 ) {
     val totalBytes: Long = ranges.sumOf { it.size }
@@ -219,7 +221,7 @@ internal class DisasmCatalog(
         val range = ranges.getOrNull(rangeIndex) ?: return emptyList()
         return withContext(capstoneDispatcher) {
             synchronized(cache) { cache[rangeIndex] }?.let { return@withContext it }
-            val decoded = decodeRange(disassembler, formatter, bytes, bytesLimit, range, arch)
+            val decoded = decodeRange(disassembler, formatter, bytes, range, arch)
                 ?: emptyList()
             synchronized(cache) { cache[rangeIndex] = decoded }
             decoded
@@ -263,8 +265,8 @@ internal data class DisasmRangeDiscovery(
     val arch: Arch,
     val ranges: List<DisasmRange>,
     val totalBytes: Long,
-    val bytes: CommonByteBuffer,
-    val bytesLimit: Int,
+    /** The whole file: functions of a binary past 2 GiB can lie beyond the parsers' head. */
+    val bytes: LargeBytes,
 )
 
 // ---------------------------------------------------------------------------
@@ -635,8 +637,7 @@ internal fun discoverDisasmRanges(
         arch = arch,
         ranges = ranges,
         totalBytes = ranges.sumOf { it.size },
-        bytes = provider.bytes,
-        bytesLimit = provider.bytes.size,
+        bytes = provider.wholeFile,
     )
 }
 
@@ -679,7 +680,6 @@ internal suspend fun loadCapstoneDisassembly(
         disassembler = disassembler,
         formatter = formatter,
         bytes = discovery.bytes,
-        bytesLimit = discovery.bytesLimit,
         ranges = ranges,
     )
 
@@ -805,16 +805,15 @@ private fun ULong.toLongOrNullSafe(): Long? =
 private fun decodeRange(
     disassembler: CapstoneWasmDisassembler,
     formatter: AssemblyFormatter,
-    bytes: CommonByteBuffer,
-    bytesLimit: Int,
+    bytes: LargeBytes,
     range: DisasmRange,
     arch: Arch,
 ): List<DisasmInstruction>? {
     if (range.size <= 0L || range.fileOffset < 0L) return null
-    if (range.fileOffset > Int.MAX_VALUE || range.size > Int.MAX_VALUE) return null
-    if (range.fileOffset + range.size > bytesLimit) return null
+    // One function is decoded from one buffer; its offset may lie anywhere in a large file.
+    if (range.size > Int.MAX_VALUE || !bytes.containsRange(range.fileOffset, range.size)) return null
     val effectiveArch = range.archOverride ?: arch
-    val sliced = bytes.slice(range.fileOffset.toInt(), range.size.toInt())
+    val sliced = bytes.window(range.fileOffset, range.size.toInt())
     return with(disassembler) {
         sliced.disassemble(baseAddress = range.virtualAddress, arch = effectiveArch)
     }.map { decoded ->

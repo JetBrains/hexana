@@ -185,10 +185,10 @@ internal fun problemNavigator(
         if (funcIdx != null && provider is WasmBinaryProvider) {
             onNavigateToWatFunc(funcIdx)
         } else if (bytes != null) {
-            selection.anchorIndex = bytes.offset
-            selection.activeIndex = bytes.offset + bytes.size - 1
-            selection.cursorIndex = bytes.offset
-            scrollHexViewerTo(bytes.offset)
+            selection.anchorIndex = bytes.start
+            selection.activeIndex = bytes.start + bytes.length - 1
+            selection.cursorIndex = bytes.start
+            scrollHexViewerTo(bytes.start)
         }
     },
 )

@@ -113,8 +113,8 @@ class ClrTableTabsTest {
 
         val method = managed.clrMetadata!!.methods.single { it.name == "Map" }
         val selection = assertNotNull(members.rowSelectionProvider(1))
-        assertEquals(method.body!!.range.offset, selection.offset)
-        assertEquals(method.body!!.range.size, selection.size)
+        assertEquals(method.body!!.range.offset.toLong(), selection.offset)
+        assertEquals(method.body!!.range.size.toLong(), selection.size)
     }
 
     @Test
