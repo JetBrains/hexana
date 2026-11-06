@@ -817,7 +817,7 @@ private fun selectedInstruction(
     val selection = state.selection
     if (selection.start.line < 0 || selection.start.lineOffset < 0) return null
 
-    val selectedFileOffset = selection.start.getByteOffset(state.bytesPerRow.value).toLong() + state.displayBaseOffset
+    val selectedFileOffset = selection.start.getByteOffset(state.bytesPerRow.value) + state.displayBaseOffset
     return instructions.firstOrNull { instruction ->
         val instructionOffset = instruction.address.fileOffset ?: return@firstOrNull false
         val instructionSize = instruction.bytes.size.takeIf { it > 0 } ?: 1

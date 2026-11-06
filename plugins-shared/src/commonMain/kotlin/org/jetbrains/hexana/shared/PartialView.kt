@@ -10,5 +10,13 @@ fun partialViewNotice(loadedBytes: Int, fileSize: Long): String =
         "Structures stored after that point are not shown (model tensor tables are complete), " +
         "and editing is turned off."
 
+/**
+ * The notice for a host whose hex view, search and Go to Offset read the whole file while the
+ * tabs still come from parsing only its first [parsedBytes].
+ */
+fun largeFileNotice(parsedBytes: Int, fileSize: Long): String =
+    "This ${formatSizeLong(fileSize)} file is shown in full, but some tabs only list structures in its first " +
+        "${formatSizeLong(parsedBytes.toLong())}. Editing is turned off for files this large."
+
 /** Whether a host that loaded [loadedBytes] of a [fileSize]-byte file is showing only part of it. */
 fun isPartialView(loadedBytes: Int, fileSize: Long?): Boolean = fileSize != null && fileSize > loadedBytes

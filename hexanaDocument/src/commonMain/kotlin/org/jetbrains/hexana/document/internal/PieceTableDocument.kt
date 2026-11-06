@@ -39,8 +39,11 @@ internal class PieceTableDocument(
     private val timestampProvider: () -> String = { "" },
 ) : EditableBinaryDocument {
 
-    private val originalHash: String =
+    // Only needed once an edit is persisted, so computed then rather than when the document is
+    // created: hashing a 2 GiB original on open stalled the editor for seconds.
+    private val originalHash: String by lazy {
         Journal.ORIGINAL_HASH_PREFIX + Sha256.hex(original)
+    }
 
     private val added = GrowableByteBuffer()
 

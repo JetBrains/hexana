@@ -68,6 +68,7 @@ import org.jetbrains.hexana.run.runWasmConfiguration
 import org.jetbrains.hexana.run.runWasmFile
 import org.jetbrains.hexana.shared.formatSize
 import org.jetbrains.hexana.shared.formatSizeLong
+import org.jetbrains.hexana.shared.largeFileNotice
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
 import org.jetbrains.hexana.shared.fileTypeDescription
 import org.jetbrains.hexana.ui.panel.ProgramArgsDialog
@@ -195,6 +196,8 @@ internal fun FileDescriptionBar(
                     sslKeyLogGeneration = sslKeyLogGeneration,
                     filePath = filePath,
                     parserChoice = parserChoice,
+                    fileSize = fileSize,
+                    loadedSize = size,
                 )
             }
         } else {
@@ -210,6 +213,8 @@ internal fun FileDescriptionBar(
                 sslKeyLogGeneration = sslKeyLogGeneration,
                 filePath = filePath,
                 parserChoice = parserChoice,
+                fileSize = fileSize,
+                loadedSize = size,
             )
         }
     }
@@ -293,6 +298,8 @@ private fun NormalModeContent(
     sslKeyLogGeneration: Int = 0,
     filePath: String? = null,
     parserChoice: ParserChoice? = null,
+    fileSize: Long? = null,
+    loadedSize: Int = 0,
 ) {
     val moduleType = fileTypeDescription(
         binaryProvider, fileName, (parserChoice?.chosen as? ParserRef.Builtin)?.parser,
@@ -307,6 +314,10 @@ private fun NormalModeContent(
         background = badgeBackground,
         foreground = badgeForeground,
     )
+
+    if (fileSize != null) {
+        EditingDisabledBadge(notice = largeFileNotice(loadedSize, fileSize))
+    }
 
     val nativeImage = remember(binaryProvider) {
         (binaryProvider as? NativeBinaryProvider)?.nativeImageInfo
@@ -595,6 +606,32 @@ private fun NormalModeContent(
 
 /** Most problems a badge tooltip lists before summarising the rest. */
 private const val MAX_TOOLTIP_PROBLEMS = 5
+
+/**
+ * "Editing disabled" beside the parser chooser for a file larger than the parsers read; the
+ * tooltip carries the full [largeFileNotice] (what the tabs cover and why editing is off).
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun EditingDisabledBadge(notice: String) {
+    Tooltip(tooltip = { Text(notice, style = TextStyle(fontSize = 11.sp), modifier = Modifier.widthIn(max = 360.dp)) }) {
+        Row(
+            modifier = Modifier
+                .background(warningBadgeBackground(), RoundedCornerShape(4.dp))
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                AllIconsKeys.General.Warning,
+                contentDescription = "Editing disabled",
+                iconClass = AllIcons::class.java,
+                modifier = Modifier.size(12.dp),
+            )
+            Text(text = "Editing disabled", style = TextStyle(fontSize = 11.sp, color = warningBadgeForeground()))
+        }
+    }
+}
 
 /**
  * "2 errors, 1 warning" beside the file type, coloured and iconed by the worst severity,

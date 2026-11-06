@@ -17,8 +17,12 @@ import org.jetbrains.hexana.ui.panel.WatConversionState
 
 
 class HexPosition(val line: Int, val lineOffset: Int) {
-    fun getByteOffset(bytesPerRow: Int): Int {
-        return line * bytesPerRow + lineOffset
+    /**
+     * Absolute byte offset. [Long] because a file past 2 GiB has rows whose start no longer fits
+     * an `Int` (row indices still do: 16 bytes per row reaches 32 GiB), and `-1` when unset.
+     */
+    fun getByteOffset(bytesPerRow: Int): Long {
+        return line.toLong() * bytesPerRow + lineOffset
     }
 }
 class HexSelection(val start: HexPosition, val end: HexPosition) {
@@ -190,7 +194,8 @@ class HexViewStateHolder(
     private val _bytesPerRow: MutableState<Int> = mutableStateOf(16)
     val bytesPerRow: State<Int> get() = _bytesPerRow
 
-    var displayBaseOffset: Int = 0
+    /** Offset of byte 0 within the file it was taken from (a nested module's position in its parent). */
+    var displayBaseOffset: Long = 0
 
     private val _conversionState = MutableStateFlow<WatConversionState?>(null)
     internal val conversionStateFlow = _conversionState.asStateFlow()

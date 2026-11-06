@@ -25,14 +25,14 @@ import java.awt.Cursor
 @Composable
 internal fun HexViewStatusBar(
     state: HexViewStateHolder,
-    totalBytes: Int,
+    totalBytes: Long,
 ) {
     val bytesPerRow by state.bytesPerRow
     val cursor = state.cursorPosition
     val selection = state.selection
 
     val hasCursor = cursor.line >= 0 && cursor.lineOffset >= 0
-    val cursorOffset = if (hasCursor) cursor.getByteOffset(bytesPerRow) + state.displayBaseOffset else -1
+    val cursorOffset = if (hasCursor) cursor.getByteOffset(bytesPerRow) + state.displayBaseOffset else -1L
 
     val hasSelection = selection.start.line >= 0 && selection.end.line >= 0 &&
             (selection.start.line != selection.end.line || selection.start.lineOffset != selection.end.lineOffset)
@@ -69,7 +69,7 @@ internal fun HexViewStatusBar(
             val selEnd = selection.end.getByteOffset(bytesPerRow) + state.displayBaseOffset
             val count = selEnd - selStart + 1
             Text(
-                text = "Selected: $count byte${if (count != 1) "s" else ""}",
+                text = "Selected: $count byte${if (count != 1L) "s" else ""}",
                 style = textStyle,
             )
             Text(

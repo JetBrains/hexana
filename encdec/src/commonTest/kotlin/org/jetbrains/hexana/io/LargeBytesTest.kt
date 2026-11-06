@@ -43,3 +43,42 @@ class LargeBytesTest {
         assertFailsWith<IndexOutOfBoundsException> { bytes.read(0, ByteArray(2), 0, 3) }
     }
 }
+
+class LargeBytesSearchTest {
+    private fun bytesOf(text: String) = text.encodeToByteArray().toCommonByteBuffer().asLargeBytes()
+
+    @Test
+    fun findsForwardAndBackward() {
+        val hay = bytesOf("abcabcab")
+        val needle = "ab".encodeToByteArray()
+        assertEquals(0L, hay.indexOf(needle))
+        assertEquals(3L, hay.indexOf(needle, from = 1))
+        assertEquals(6L, hay.indexOf(needle, from = 7, reverse = true))
+        assertEquals(3L, hay.indexOf(needle, from = 5, reverse = true))
+        assertEquals(-1L, hay.indexOf(needle, from = 7))
+        assertEquals(listOf(0L, 3L, 6L), hay.findAll(needle, limit = 10))
+        assertEquals(listOf(0L, 3L), hay.findAll(needle, limit = 2))
+    }
+
+    @Test
+    fun overlappingMatchesCountSeparately() {
+        assertEquals(listOf(0L, 1L), bytesOf("aaa").findAll("aa".encodeToByteArray(), limit = 10))
+    }
+
+    @Test
+    fun findsMatchesSpanningSearchChunks() {
+        val size = (1 shl 20) * 3 + 7
+        val data = ByteArray(size)
+        val at = (1 shl 20) - 2 // straddles the first 1 MiB chunk boundary
+        "NEEDLE".encodeToByteArray().copyInto(data, at)
+        val hay = data.toCommonByteBuffer().asLargeBytes()
+        assertEquals(at.toLong(), hay.indexOf("NEEDLE".encodeToByteArray()))
+        assertEquals(at.toLong(), hay.indexOf("NEEDLE".encodeToByteArray(), from = size - 1L, reverse = true))
+    }
+
+    @Test
+    fun degenerateNeedles() {
+        assertEquals(-1L, bytesOf("ab").indexOf(ByteArray(0)))
+        assertEquals(-1L, bytesOf("ab").indexOf("abc".encodeToByteArray()))
+    }
+}

@@ -40,6 +40,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.editor.ScrollType
@@ -67,7 +68,10 @@ import org.jetbrains.hexana.feedback.HexanaFeedbackOpener
 import org.jetbrains.hexana.feedback.HexanaIssueLinks
 import org.jetbrains.hexana.feedback.isInIdeFeedbackEnabled
 import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.io.toByteBuffer
+import org.jetbrains.hexana.io.LargeBytes
+import org.jetbrains.hexana.shared.formatSizeLong
+import org.jetbrains.hexana.io.asLargeBytes
+import org.jetbrains.hexana.io.readBytes
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.ui.components.ShareFeedbackButton
 import org.jetbrains.hexana.ui.components.ShareFeedbackButtonLabel
@@ -152,8 +156,15 @@ internal fun HexViewer(
      * Already bounds-checked against the file.
      */
     extraStructureRanges: List<StructureRange> = emptyList(),
+    /**
+     * The bytes to show, when they are more than [binaryProvider] holds: the whole of a file over
+     * 2 GiB, whose provider parses only its head. `null` shows the provider's own bytes.
+     */
+    source: LargeBytes? = null,
 ) {
     val buf = binaryProvider.bytes
+    // Everything the viewer displays is read through this, with Long offsets.
+    val bytes: LargeBytes = remember(binaryProvider, source) { source ?: buf.asLargeBytes() }
 
     // Snapshot of modified byte ranges from the editable document, used to
     // highlight edited cells. Recomputed whenever the live provider changes
@@ -282,8 +293,12 @@ internal fun HexViewer(
         val bytesPerRow by remember { state.bytesPerRow }
         val spacing = 8.dp
 
-        val rowCount = (buf.limit() + bytesPerRow - 1) / bytesPerRow
-        val offsetWidth = 96.dp
+        val totalBytes: Long = bytes.size
+        // Row indices stay Int — 16 bytes per row reaches 32 GiB — while byte offsets are Long.
+        val rowCount = ((totalBytes + bytesPerRow - 1) / bytesPerRow).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        // Eight hex digits cover 4 GiB; a larger file (or a nested one deep in it) needs more.
+        val offsetDigits = maxOf(8, (state.displayBaseOffset + totalBytes).toString(16).length)
+        val offsetWidth = 96.dp + (10 * (offsetDigits - 8)).dp
 
         val showFloatingShareFeedbackButton = !feedbackPromptDisabled && shouldShowFloatingShareFeedbackButtonInHexViewer(
             availableWidth = maxWidth,
@@ -310,8 +325,6 @@ internal fun HexViewer(
         var selectionAreaHeight by remember { mutableFloatStateOf(0f) }
         var selectionAreaWidth by remember { mutableFloatStateOf(0f) }
 
-        val totalBytes = buf.limit()
-
         val textMeasurer = rememberTextMeasurer()
         val monoCharWidthPx = remember(textMeasurer) {
             textMeasurer.measure(
@@ -332,27 +345,27 @@ internal fun HexViewer(
             val newCol: Int
             when (key) {
                 Key.DirectionRight -> {
-                    val nextAbsolute = startLine * bytesPerRow + startCol + 1
+                    val nextAbsolute = startLine.toLong() * bytesPerRow + startCol + 1
                     if (nextAbsolute >= totalBytes) {
                         newLine = startLine
                         newCol = startCol
                     } else {
-                        newLine = nextAbsolute / bytesPerRow
-                        newCol = nextAbsolute % bytesPerRow
+                        newLine = (nextAbsolute / bytesPerRow).toInt()
+                        newCol = (nextAbsolute % bytesPerRow).toInt()
                     }
                 }
                 Key.DirectionLeft -> {
-                    val prevAbsolute = startLine * bytesPerRow + startCol - 1
+                    val prevAbsolute = startLine.toLong() * bytesPerRow + startCol - 1
                     if (prevAbsolute < 0) {
                         newLine = 0
                         newCol = 0
                     } else {
-                        newLine = prevAbsolute / bytesPerRow
-                        newCol = prevAbsolute % bytesPerRow
+                        newLine = (prevAbsolute / bytesPerRow).toInt()
+                        newCol = (prevAbsolute % bytesPerRow).toInt()
                     }
                 }
                 Key.DirectionDown -> {
-                    val nextAbsolute = (startLine + 1) * bytesPerRow + startCol
+                    val nextAbsolute = (startLine + 1).toLong() * bytesPerRow + startCol
                     if (nextAbsolute >= totalBytes) {
                         newLine = startLine
                         newCol = startCol
@@ -677,7 +690,7 @@ internal fun HexViewer(
                 }
             }
             ContextMenuArea(items = {
-                getContextActions(buf, state, binaryProvider)
+                getContextActions(bytes, state, binaryProvider)
             }) {
                 Row {
                     Box {
@@ -697,7 +710,7 @@ internal fun HexViewer(
                                     contentAlignment = Alignment.CenterEnd
                                 ) {
                                     Text(
-                                        (state.displayBaseOffset + rowIndex * bytesPerRow).asHexString(padStart = 8),
+                                        (state.displayBaseOffset + rowIndex.toLong() * bytesPerRow).asHexString(padStart = offsetDigits),
                                         softWrap = false,
                                         style = TextStyle(fontFamily = FontFamily.Monospace)
                                     )
@@ -760,7 +773,7 @@ internal fun HexViewer(
                                                 drawRect(flashColor.copy(alpha = rowFlashAlpha))
                                             }
                                             drawStructureRowBackground(
-                                                rowIndex, bytesPerRow, buf.limit(),
+                                                rowIndex, bytesPerRow, totalBytes,
                                                 structureLookup, structureColors,
                                             )
                                         }
@@ -769,12 +782,11 @@ internal fun HexViewer(
                                     Row(
                                         horizontalArrangement = Arrangement.spacedBy(spacing),
                                     ) {
-                                        val start = rowIndex * bytesPerRow
-                                        val end = min(start + bytesPerRow, buf.limit())
+                                        val start = rowIndex.toLong() * bytesPerRow
+                                        val rowBytes = readRow(bytes, start, bytesPerRow)
 
-                                        (start until end).forEachIndexed { byteIndex, absoluteIndex ->
-                                            buf.position(absoluteIndex)
-                                            val byte = buf.get()
+                                        rowBytes.forEachIndexed { byteIndex, byte ->
+                                            val absoluteIndex = start + byteIndex
                                             val originalText = (byte.toInt() and 0xFF).asHexString()
                                             val isUnderCursor = byteIndex == state.cursorPosition.lineOffset &&
                                                     rowIndex == state.cursorPosition.line
@@ -788,16 +800,14 @@ internal fun HexViewer(
                                             val isHover =
                                                 byteIndex == state.hoverPosition.lineOffset && rowIndex == state.hoverPosition.line
 
-                                            val isSearchResult = state.searchResults.value.any { range ->
-                                                absoluteIndex.toLong() in range
-                                            }
+                                            val isSearchResult = isInSearchResult(state.searchResults.value, absoluteIndex)
 
                                             val highlightRange = state.highlightRanges.firstOrNull { range ->
-                                                absoluteIndex.toLong() in range.offset until (range.offset + range.size)
+                                                absoluteIndex in range.offset until (range.offset + range.size)
                                             }
 
                                             val isEdited = modifiedRanges.any { range ->
-                                                absoluteIndex.toLong() in range.offset until (range.offset + range.length)
+                                                absoluteIndex in range.offset until (range.offset + range.length)
                                             }
 
                                             val backgroundColor = if (isUnderCursor) {
@@ -899,33 +909,30 @@ internal fun HexViewer(
                                                 drawRect(flashColor.copy(alpha = rowFlashAlpha))
                                             }
                                             drawStructureRowBackground(
-                                                rowIndex, bytesPerRow, buf.limit(),
+                                                rowIndex, bytesPerRow, totalBytes,
                                                 structureLookup, structureColors,
                                             )
                                         }
                                         .padding(horizontal = 8.dp),
                                     horizontalArrangement = Arrangement.Start
                                 ) {
-                                    val start = rowIndex * bytesPerRow
-                                    val end = min(start + bytesPerRow, buf.limit())
-                                    (start until end).forEachIndexed { byteIndex, _ ->
-                                        buf.position(start + byteIndex)
+                                    val start = rowIndex.toLong() * bytesPerRow
+                                    val rowBytes = readRow(bytes, start, bytesPerRow)
+                                    rowBytes.forEachIndexed { byteIndex, byte ->
+                                        val absoluteIndex = start + byteIndex
                                         val isHover =
                                             byteIndex == state.hoverPosition.lineOffset && rowIndex == state.hoverPosition.line
                                         val isUnderCursor = byteIndex == state.cursorPosition.lineOffset &&
                                                 rowIndex == state.cursorPosition.line
 
-                                        val isSearchResult = state.searchResults.value.any { range ->
-                                            (rowIndex * bytesPerRow + byteIndex).toLong() in range
-                                        }
+                                        val isSearchResult = isInSearchResult(state.searchResults.value, absoluteIndex)
 
                                         val highlightRange = state.highlightRanges.firstOrNull { range ->
-                                            (rowIndex * bytesPerRow + byteIndex).toLong() in range.offset until (range.offset + range.size)
+                                            absoluteIndex in range.offset until (range.offset + range.size)
                                         }
 
-                                        val absoluteIndex = rowIndex * bytesPerRow + byteIndex
                                         val isEdited = modifiedRanges.any { range ->
-                                            absoluteIndex.toLong() in range.offset until (range.offset + range.length)
+                                            absoluteIndex in range.offset until (range.offset + range.length)
                                         }
 
                                         val backgroundColor = if (isUnderCursor) {
@@ -948,9 +955,9 @@ internal fun HexViewer(
                                             }
 
                                         val text = if (state.showAscii) {
-                                            buf.get().asASCII()
+                                            byte.asASCII()
                                         } else {
-                                            getUtf8CharacterAtIndex(buf, start + byteIndex)
+                                            getUtf8CharacterAtIndex(bytes, absoluteIndex)
                                         }
 
                                         val textForeground = if (isEdited) {
@@ -1157,7 +1164,7 @@ private fun BoxWithConstraintsScope.shouldShowFloatingShareFeedbackButtonInHexVi
 }
 
 private fun getContextActions(
-    buf: CommonByteBuffer,
+    bytes: LargeBytes,
     state: HexViewStateHolder,
     binaryProvider: BinaryProvider,
 ): List<ContextMenuItem> {
@@ -1168,11 +1175,14 @@ private fun getContextActions(
     val dataSectionRange = dataSection?.contentRange ?: IntRange.EMPTY
     val bytesPerRow = state.bytesPerRow.value
     val position = state.hoverPosition
-    val byteOffset = position.line * bytesPerRow + position.lineOffset
+    val absoluteOffset = position.line.toLong() * bytesPerRow + position.lineOffset
+    // Wasm ranges and source maps are Int; a Wasm module never reaches 2 GiB, so an offset past
+    // that simply matches none of them.
+    val byteOffset = absoluteOffset.takeIf { it in 0..Int.MAX_VALUE }?.toInt() ?: -1
 
     val result = mutableListOf<ContextMenuItem>()
-    result.add(ContextMenuItem("Copy as ASCII") { copySelection(buf, state, ::selectedAsASCII) })
-    result.add(ContextMenuItem("Copy as Kotlin::listOf") { copySelection(buf, state, ::selectAsKotlinList) })
+    result.add(ContextMenuItem("Copy as ASCII") { copySelection(bytes, state, ::selectedAsASCII) })
+    result.add(ContextMenuItem("Copy as Kotlin::listOf") { copySelection(bytes, state, ::selectAsKotlinList) })
 
     if (binaryProvider is WasmBinaryProvider && state.editor != null) {
         when (byteOffset) {
@@ -1282,6 +1292,34 @@ private fun handleHexDigit(
 }
 
 private fun Int.asHexString(padStart: Int = 2) = toString(16).padStart(padStart, '0').uppercase()
+private fun Long.asHexString(padStart: Int = 2) = toString(16).padStart(padStart, '0').uppercase()
+
+/** The bytes of the row starting at [start]: [bytesPerRow] of them, fewer on the last row. */
+private fun readRow(bytes: LargeBytes, start: Long, bytesPerRow: Int): ByteArray {
+    val length = minOf(bytesPerRow.toLong(), bytes.size - start).coerceAtLeast(0).toInt()
+    return ByteArray(length).also { if (length > 0) bytes.read(start, it, 0, length) }
+}
+
+/**
+ * Whether [offset] is inside one of [results] — sorted by start, as search produces them — by
+ * binary search: a search over a large file can match millions of times, and this runs per cell.
+ */
+internal fun isInSearchResult(results: List<LongRange>, offset: Long): Boolean {
+    if (results.isEmpty()) return false
+    var low = 0
+    var high = results.size - 1
+    while (low <= high) {
+        val mid = (low + high) ushr 1
+        val range = results[mid]
+        when {
+            offset < range.first -> high = mid - 1
+            offset > range.last -> low = mid + 1
+            else -> return true
+        }
+    }
+    // Overlapping matches ("aa" in "aaa") can put a hit just before where the search ended.
+    return results.getOrNull(low - 1)?.let { offset in it } == true
+}
 private fun Byte.asHexString(padStart: Int = 2) = toString(16).padStart(padStart, '0').uppercase()
 private fun UByte.asHexString(padStart: Int = 2) = toString(16).padStart(padStart, '0').uppercase()
 
@@ -1326,13 +1364,13 @@ private fun structureColorForOffset(
 private fun DrawScope.drawStructureRowBackground(
     rowIndex: Int,
     bytesPerRow: Int,
-    totalBytes: Int,
+    totalBytes: Long,
     lookup: StructureRangeLookup,
     palette: List<Color>,
 ) {
     if (lookup.isEmpty || palette.isEmpty()) return
     val rowStart = rowIndex.toLong() * bytesPerRow
-    val rowEnd = min(rowStart + bytesPerRow, totalBytes.toLong())
+    val rowEnd = min(rowStart + bytesPerRow, totalBytes)
     if (rowStart >= rowEnd) return
 
     // Collect contiguous color spans within this row.
@@ -1361,53 +1399,43 @@ private fun DrawScope.drawStructureRowBackground(
     }
 }
 
-private fun selectedAsASCII(buf: CommonByteBuffer, state: HexViewStateHolder): String? {
+/** Most bytes one copy puts on the clipboard: a selection over a large file can span gigabytes. */
+internal const val MAX_COPY_BYTES: Int = 16 * 1024 * 1024
+
+/** The selection as an offset range clamped to [bytes], or `null` when there is none. */
+private fun selectedRange(bytes: LargeBytes, state: HexViewStateHolder): LongRange? {
     val sel = state.selection
     if (sel.start.line < 0 || sel.end.line < 0) return null
-
     val bytesPerRow = state.bytesPerRow.value
-
-    val startOffset = sel.start.line * bytesPerRow + sel.start.lineOffset
-    val endOffset = sel.end.line * bytesPerRow + sel.end.lineOffset
-
-    if (startOffset < 0 || endOffset < 0 || startOffset >= buf.limit()) return null
-    val last = min(endOffset, buf.lastIndex)
-    if (last < startOffset) return null
-
-    buf.position(startOffset)
-    return (startOffset..last).joinToString("") { buf.get().asASCII() ?: "." }
+    val startOffset = sel.start.getByteOffset(bytesPerRow)
+    val endOffset = sel.end.getByteOffset(bytesPerRow)
+    if (startOffset < 0 || endOffset < 0 || startOffset >= bytes.size) return null
+    val last = min(endOffset, bytes.size - 1)
+    return if (last < startOffset) null else startOffset..last
 }
 
-private fun selectAsKotlinList(buf: CommonByteBuffer, state: HexViewStateHolder): String? {
-    val sel = state.selection
-    if (sel.start.line < 0 || sel.end.line < 0) return null
+private fun selectedAsASCII(bytes: ByteArray): String = bytes.joinToString("") { it.asASCII() ?: "." }
 
-    val bytesPerRow = state.bytesPerRow.value
-
-    val startOffset = sel.start.line * bytesPerRow + sel.start.lineOffset
-    val endOffset = sel.end.line * bytesPerRow + sel.end.lineOffset
-
-    if (startOffset < 0 || endOffset < 0 || startOffset >= buf.limit()) return null
-    val last = min(endOffset, buf.lastIndex)
-    if (last < startOffset) return null
-
-    buf.position(startOffset)
-    val contents = (startOffset..last).joinToString { "0x" + buf.get().toUByte().asHexString() + "u" }
-    return "listOf(${contents})"
-}
+private fun selectAsKotlinList(bytes: ByteArray): String =
+    "listOf(${bytes.joinToString { "0x" + it.toUByte().asHexString() + "u" }})"
 
 fun copySelection(
-    buf: CommonByteBuffer,
+    bytes: LargeBytes,
     state: HexViewStateHolder,
-    selectionBuilder: (CommonByteBuffer, HexViewStateHolder) -> String?
+    format: (ByteArray) -> String,
 ) {
-    val position = buf.position()
-    val text = try {
-        selectionBuilder(buf, state)
-    } finally {
-        buf.position(position)
+    val range = selectedRange(bytes, state) ?: return
+    val count = range.last - range.first + 1
+    if (count > MAX_COPY_BYTES) {
+        Messages.showWarningDialog(
+            state.project,
+            "The selection is ${formatSizeLong(count)}; Hexana copies at most ${formatSizeLong(MAX_COPY_BYTES.toLong())} at a time.",
+            "Copy Selection",
+        )
+        return
     }
-    if (!text.isNullOrEmpty()) {
+    val text = format(bytes.readBytes(range.first, count.toInt()))
+    if (text.isNotEmpty()) {
         CopyPasteManager.getInstance().setContents(StringSelection(text))
     }
 }
@@ -1429,49 +1457,37 @@ fun openInWat(state: HexViewStateHolder, findElement: (file: PsiFile) -> PsiElem
     }
 }
 
-fun getUtf8CharacterAtIndex(buf: CommonByteBuffer, index: Int): String? {
-    val bufferPosition = buf.position()
-    buf.position(index)
-    try {
-        val firstByte = buf.get().toInt()
-        val length: Int = when {
-            (firstByte and 0b10000000) == 0b00000000 -> 1
-            (firstByte and 0b11100000) == 0b11000000 -> 2
-            (firstByte and 0b11110000) == 0b11100000 -> 3
-            (firstByte and 0b11111000) == 0b11110000 -> 4
-            else -> return null
-        }
-
-        if (index + length > buf.limit()) {
-            return null // Incomplete sequence
-        }
-
-        try {
-            val out = CharBuffer.allocate(2)
-            // Max size is 1 char for 1-3 byte sequences, and 2 chars (surrogate pair)
-            // for 4-byte sequences (Code Points U+10000 to U+10FFFF).
-            val decoder: CharsetDecoder = StandardCharsets.UTF_8.newDecoder()
-            buf.position(index)
-            decoder.decode(buf.toByteBuffer().slice(index, length), out, true)
-            decoder.flush(out)
-
-            if (out.position() == 1) { // don't show surrogate pairs
-                out.flip()
-                val char = out.get(0)
-                return when {
-                    Character.isISOControl(char) -> null
-                    Character.isDefined(char) -> char.toString()
-                    else -> null
-                }
-            }
-        } catch (_: Exception) {
-            // Decoding failed
-            return null
-        }
-
-        return null
-
-    } finally {
-        buf.position(bufferPosition)
+fun getUtf8CharacterAtIndex(bytes: LargeBytes, index: Long): String? {
+    if (index < 0 || index >= bytes.size) return null
+    val firstByte = bytes[index].toInt()
+    val length: Int = when {
+        (firstByte and 0b10000000) == 0b00000000 -> 1
+        (firstByte and 0b11100000) == 0b11000000 -> 2
+        (firstByte and 0b11110000) == 0b11100000 -> 3
+        (firstByte and 0b11111000) == 0b11110000 -> 4
+        else -> return null
     }
+    if (index > bytes.size - length) {
+        return null // Incomplete sequence
+    }
+    try {
+        val out = CharBuffer.allocate(2)
+        // Max size is 1 char for 1-3 byte sequences, and 2 chars (surrogate pair)
+        // for 4-byte sequences (Code Points U+10000 to U+10FFFF).
+        val decoder: CharsetDecoder = StandardCharsets.UTF_8.newDecoder()
+        decoder.decode(java.nio.ByteBuffer.wrap(bytes.readBytes(index, length)), out, true)
+        decoder.flush(out)
+        if (out.position() == 1) { // don't show surrogate pairs
+            out.flip()
+            val char = out.get(0)
+            return when {
+                Character.isISOControl(char) -> null
+                Character.isDefined(char) -> char.toString()
+                else -> null
+            }
+        }
+    } catch (_: Exception) {
+        // Decoding failed
+    }
+    return null
 }

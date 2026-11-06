@@ -61,6 +61,7 @@ import org.jetbrains.hexana.shared.DEX_CLASSES_TAB_NAME
 import org.jetbrains.hexana.ui.panel.GutterMarksModel
 import org.jetbrains.annotations.Nls
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.LargeBytes
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.sourcemap.parseSourceMap
@@ -332,6 +333,13 @@ class HexanaFileEditor(
     var partialFileSize: Long? = null
         private set
 
+    /**
+     * The whole file, for the hex view, search and inspector, when it is larger than the buffer
+     * the parsers read ([partialFileSize] is set); `null` when the provider's bytes are the file.
+     */
+    var fileSource: LargeBytes? = null
+        private set
+
     fun initPanel() {
         // A diff compares two binaries; it has no single-file hex/edit surface, so it
         // short-circuits the normal binary-editor wiring.
@@ -343,12 +351,15 @@ class HexanaFileEditor(
 
         val inMemoryBuffer = myFile.getUserData(HexanaBinaryVirtualFile.BUFFER_KEY)
         val commonBuffer = if (inMemoryBuffer != null) {
-            stateHolder.displayBaseOffset = myFile.getUserData(HexanaBinaryVirtualFile.BASE_OFFSET_KEY) ?: 0
+            stateHolder.displayBaseOffset = myFile.getUserData(HexanaBinaryVirtualFile.BASE_OFFSET_KEY)?.toLong() ?: 0L
             inMemoryBuffer
         } else {
             // A file over the window limit opens as its head; see [partialFileSize].
             val window = file.toBinaryWindow() ?: return
-            if (window.isPartial) partialFileSize = window.fileSize
+            if (window.isPartial) {
+                partialFileSize = window.fileSize
+                fileSource = window.source
+            }
             window.buffer
         }
 
@@ -528,7 +539,7 @@ class HexanaFileEditor(
             val currentProvider = providerState.value
             Column {
                 if (stateHolder.showSearchDialog.value) {
-                    HexSearchField(currentProvider, stateHolder, hexFocusRequester)
+                    HexSearchField(currentProvider, stateHolder, hexFocusRequester, source = fileSource)
                 }
                 val editor = this@HexanaFileEditor
                 BinaryEditorView(
@@ -536,6 +547,7 @@ class HexanaFileEditor(
                     fileName = myFile.name,
                     filePath = binarySourcePath,
                     partialFileSize = partialFileSize,
+                    fileSource = fileSource,
                     parserChoice = parserChoiceState.value,
                     scriptTabs = scriptBindingsState.value.tabs,
                     scriptStructureRanges = scriptBindingsState.value.overlay?.ranges.orEmpty(),

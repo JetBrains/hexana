@@ -1201,7 +1201,8 @@ object HexanaEditorUiTestProbe {
     private fun HexanaFileEditor.cursorOffset(): Int? {
         val cursor = stateHolder.cursorPosition
         if (cursor.line >= 0 && cursor.lineOffset >= 0) {
-            return cursor.getByteOffset(stateHolder.bytesPerRow.value) + stateHolder.displayBaseOffset
+            // UI tests open small fixtures, so the offset fits the probe's Int contract.
+            return (cursor.getByteOffset(stateHolder.bytesPerRow.value) + stateHolder.displayBaseOffset).toInt()
         }
         return stateHolder.editor?.caretModel?.offset
     }

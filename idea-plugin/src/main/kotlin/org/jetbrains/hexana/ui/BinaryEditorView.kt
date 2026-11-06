@@ -34,6 +34,8 @@ import org.jetbrains.hexana.document.journal.JournalPersister
 import org.jetbrains.hexana.dwarf.ui.dwarfOutlineSectionsOf
 import org.jetbrains.hexana.shared.DWARF_GROUP_TAB_NAME
 import org.jetbrains.hexana.dwarf.ui.dwarfPanels
+import org.jetbrains.hexana.io.LargeBytes
+import org.jetbrains.hexana.io.asLargeBytes
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
 import com.intellij.openapi.application.EDT
@@ -121,6 +123,11 @@ internal fun BinaryEditorView(
      * `MAX_BINARY_WINDOW_BYTES`), else `null`. Such a view is read-only.
      */
     partialFileSize: Long? = null,
+    /**
+     * The whole file when [partialFileSize] is set: the hex view, search, inspector and status bar
+     * read it, while the tabs come from [binaryProvider], which parses the head.
+     */
+    fileSource: LargeBytes? = null,
     /** Turns the format badge into a parser picker; see [ParserChoice]. */
     parserChoice: ParserChoice? = null,
     /** Tabs `hexana.defineTab` attached to this file, shown after the built-in ones. */
@@ -241,6 +248,9 @@ internal fun BinaryEditorView(
     var liveProvider by remember(binaryProvider, editableDoc) {
         mutableStateOf<BinaryProvider>(binaryProvider)
     }
+    // What the hex view, inspector and status bar show: the whole file when the provider parses
+    // only its head, else the live (possibly edited) provider's bytes.
+    val shownBytes: LargeBytes = remember(fileSource, liveProvider) { fileSource ?: liveProvider.bytes.asLargeBytes() }
     DisposableEffect(editableDoc, binaryProvider) {
         val listener = DocumentListener {
             val newBytes = editableDoc.read(0L, editableDoc.length.toInt())
@@ -805,6 +815,7 @@ internal fun BinaryEditorView(
                                 val idx = panels.indexOfTabLink(tabName)
                                 if (idx >= 0) state.setSelectedTab(idx)
                             },
+                            source = fileSource,
                         )
                     }
                     if (state.showDataInspector) {
@@ -815,7 +826,7 @@ internal fun BinaryEditorView(
                         )
                         DataInspectorPanel(
                             state = state,
-                            bytes = liveProvider.bytes,
+                            bytes = shownBytes,
                         )
                     }
                     // A second, independent column: the row detail panel shows
@@ -831,7 +842,7 @@ internal fun BinaryEditorView(
                         RowDetailPanel(state = state)
                     }
                 }
-                HexViewStatusBar(state = state, totalBytes = liveProvider.bytes.limit())
+                HexViewStatusBar(state = state, totalBytes = shownBytes.size)
             }
         }, southPanel = {
             TabsPanel(panels, state.currentState.value, scriptTabIndices = scriptTabIndices, onExpand = { expanded ->

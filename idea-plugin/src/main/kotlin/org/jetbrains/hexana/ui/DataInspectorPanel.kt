@@ -17,7 +17,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.jetbrains.hexana.HexViewStateHolder
-import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.LargeBytes
+import org.jetbrains.hexana.io.readBytes
 import org.jetbrains.jewel.ui.component.Text
 import java.awt.Cursor
 import java.nio.ByteBuffer
@@ -31,13 +32,13 @@ import java.nio.ByteOrder
 @Composable
 internal fun DataInspectorPanel(
     state: HexViewStateHolder,
-    bytes: CommonByteBuffer,
+    bytes: LargeBytes,
 ) {
     val bytesPerRow by state.bytesPerRow
     val cursor = state.cursorPosition
     val hasCursor = cursor.line >= 0 && cursor.lineOffset >= 0
-    val offset = if (hasCursor) cursor.getByteOffset(bytesPerRow) else -1
-    val totalBytes = bytes.limit()
+    val offset = if (hasCursor) cursor.getByteOffset(bytesPerRow) else -1L
+    val totalBytes = bytes.size
 
     var littleEndian by remember { mutableStateOf(true) }
 
@@ -78,11 +79,7 @@ internal fun DataInspectorPanel(
         }
 
         // Read up to 8 bytes starting at cursor for the widest type (Double/Long).
-        val available = (totalBytes - offset).coerceAtMost(8)
-        val raw = ByteArray(available)
-        for (i in 0 until available) {
-            raw[i] = bytes[offset + i]
-        }
+        val raw = bytes.readBytes(offset, (totalBytes - offset).coerceAtMost(8).toInt())
 
         val order = if (littleEndian) ByteOrder.LITTLE_ENDIAN else ByteOrder.BIG_ENDIAN
         inspectorRows(raw, order, labelStyle, valueStyle)
@@ -99,11 +96,7 @@ internal fun DataInspectorPanel(
         InspectorRow("ASCII", asciiChar, labelStyle, valueStyle)
 
         // UTF-8 string starting at cursor until a non-UTF-8 sequence
-        val maxUtf8 = (totalBytes - offset).coerceAtMost(64)
-        val utf8Raw = ByteArray(maxUtf8)
-        for (i in 0 until maxUtf8) {
-            utf8Raw[i] = bytes[offset + i]
-        }
+        val utf8Raw = bytes.readBytes(offset, (totalBytes - offset).coerceAtMost(64).toInt())
         val utf8Str = decodeUtf8Prefix(utf8Raw)
         if (utf8Str.isNotEmpty()) {
             InspectorRow("UTF-8", utf8Str, labelStyle, valueStyle)

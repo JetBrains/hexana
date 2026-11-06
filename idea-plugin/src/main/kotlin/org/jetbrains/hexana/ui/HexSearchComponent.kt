@@ -6,6 +6,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import org.jetbrains.hexana.io.indexOf
+import org.jetbrains.hexana.io.findAll
+import org.jetbrains.hexana.io.asLargeBytes
+import org.jetbrains.hexana.io.LargeBytes
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.focus.FocusRequester
@@ -37,8 +50,14 @@ fun HexSearchField(
     binaryProvider: BinaryProvider,
     state: HexViewStateHolder,
     hexFocusRequester: FocusRequester,
+    /** What to search: the whole file when the provider holds only its head. */
+    source: LargeBytes? = null,
 ) {
     val closeFlow = remember { MutableStateFlow<Unit?>(null) }
+    val bytes = remember(binaryProvider, source) { source ?: binaryProvider.bytes.asLargeBytes() }
+    val scope = rememberCoroutineScope()
+    // One search at a time: a new submit cancels the one still scanning.
+    var running by remember { mutableStateOf<Job?>(null) }
     SwingSearchComponent(
         state,
         onClose = {
@@ -49,7 +68,8 @@ fun HexSearchField(
             closeFlow.tryEmit(Unit)
         },
         onSubmit = { text, reverse ->
-            performSearch(text, reverse, state, binaryProvider)
+            running?.cancel()
+            running = scope.launch { performSearch(text, reverse, state, bytes) }
         }
     )
 
@@ -62,55 +82,51 @@ fun HexSearchField(
     }
 }
 
-fun performSearch(
+/** Most matches highlighted at once; finding the next one scans from the cursor and is not capped. */
+internal const val MAX_SEARCH_HIGHLIGHTS: Int = 100_000
+
+/**
+ * Finds [text] in [bytes] off the UI thread and moves the selection to the next match after the
+ * current one (before it when [reverse]), wrapping around. Reads in chunks, so it works on files of
+ * any size; highlights the first [MAX_SEARCH_HIGHLIGHTS] matches.
+ */
+suspend fun performSearch(
     text: String,
     reverse: Boolean,
     state: HexViewStateHolder,
-    binaryProvider: BinaryProvider
+    bytes: LargeBytes,
 ) {
     state.searchText.value = text
     val bytesPerRow = state.bytesPerRow.value
     val needle = convertSearchTextToBytes(text, state.searchBinaryMode)
-    val hay = binaryProvider.bytes
-
-    if (needle.isNotEmpty()) {
-        val results = mutableListOf<LongRange>()
-        var current = 0
-        while (true) {
-            val idx = find(needle, hay, current)
-            if (idx == -1) break
-            results.add(idx.toLong() until (idx.toLong() + needle.size))
-            current = idx + 1
-        }
-        state.searchResults.value = results
-
-        val lastMatch = state.selection.start.getByteOffset(bytesPerRow)
-        val startIndex = if (lastMatch >= 0) {
-            when {
-                reverse -> lastMatch - 1
-                else -> lastMatch + 1
-            }.coerceIn(hay.indices)
-        } else {
-            val cursor = state.hoverPosition.getByteOffset(bytesPerRow)
-            cursor.coerceIn(hay.indices)
-        }
-        var index = find(needle, hay, startIndex, reverse)
-        if (index == -1) {
-            index = find(needle, hay, if (reverse) hay.lastIndex else 0, reverse)
-        }
-        if (index >= 0) {
-            state.scrollHexViewTo(index.toLong())
-            state.setCursorPosition(index.toLong(), bytesPerRow)
-            val range = index.toLong() until index.toLong() + needle.size
-            state.setSelection(range)
-
-            // Update current search index
-            state.currentSearchIndex.value = results.indexOf(range)
-        } else {
-            state.currentSearchIndex.value = -1
-        }
-    } else {
+    if (needle.isEmpty() || bytes.size == 0L) {
         state.searchResults.value = emptyList()
+        state.currentSearchIndex.value = -1
+        return
+    }
+    val lastMatch = state.selection.start.getByteOffset(bytesPerRow)
+    val from = if (lastMatch >= 0) {
+        if (reverse) lastMatch - 1 else lastMatch + 1
+    } else {
+        state.hoverPosition.getByteOffset(bytesPerRow)
+    }.coerceIn(0, bytes.size - 1)
+
+    val (results, index) = withContext(Dispatchers.Default) {
+        val checkCanceled = { ensureActive() }
+        val all = bytes.findAll(needle, MAX_SEARCH_HIGHLIGHTS, checkCanceled)
+            .map { it until it + needle.size }
+        var found = bytes.indexOf(needle, from, reverse, checkCanceled)
+        if (found < 0) found = bytes.indexOf(needle, if (reverse) bytes.size - 1 else 0, reverse, checkCanceled)
+        all to found
+    }
+    state.searchResults.value = results
+    if (index >= 0) {
+        state.scrollHexViewTo(index)
+        state.setCursorPosition(index, bytesPerRow)
+        val range = index until index + needle.size
+        state.setSelection(range)
+        state.currentSearchIndex.value = results.indexOf(range)
+    } else {
         state.currentSearchIndex.value = -1
     }
 }
