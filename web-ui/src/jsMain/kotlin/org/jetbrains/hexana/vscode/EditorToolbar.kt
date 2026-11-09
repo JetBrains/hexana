@@ -19,7 +19,8 @@ import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.shared.fileTypeDescription
 import org.jetbrains.hexana.shared.formatSize
-import org.jetbrains.hexana.shared.formatSizeLong
+import org.jetbrains.hexana.shared.largeFileSizeLabel
+import org.jetbrains.hexana.providers.ParseCoverage
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
 import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.jetbrains.hexana.shared.features.ProposalCompatibility
@@ -107,6 +108,8 @@ fun EditorToolbar(
      * disabled" badge beside the format badge, with this text as its tooltip. `null` hides it.
      */
     editingDisabledNotice: String? = null,
+    /** What the tabs cover of the [fileSize]-byte file; marks the size with what was parsed when it is a prefix. */
+    parseCoverage: ParseCoverage? = null,
 ) {
     val isSubmodule = parentFileName != null || isSubmoduleFileName(fileName)
 
@@ -204,7 +207,7 @@ fun EditorToolbar(
             if (onSizeClick != null) onClick { onSizeClick() }
         }) {
             Span({ style { property("opacity", "0.7") } }) {
-                Text(if (fileSize != null) "${formatSizeLong(fileSize)} (first ${formatSize(size)} parsed)" else formatSize(size))
+                Text(if (fileSize != null && parseCoverage != null) largeFileSizeLabel(fileSize, parseCoverage) else formatSize(size))
             }
             if (sizeTooltip != null && sizeHovered) {
                 Div({

@@ -37,7 +37,6 @@ import org.jetbrains.hexana.providers.StructureRange
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
-import org.jetbrains.hexana.providers.classifyArchiveMember
 import org.jetbrains.hexana.providers.createBinaryProvider
 import org.jetbrains.hexana.pcap.PcapDissector
 import org.jetbrains.hexana.providers.NativeImageInfo
@@ -772,7 +771,7 @@ private fun workerRowActions(
     }
     provider is ArchiveBinaryProvider && tableId == "Members" -> {
         val member = provider.members.filterNot { it.isBookkeeping }.getOrNull(rowIndex) ?: return emptyList()
-        val range = boundedInputRange(member.contentRange.offset.toLong(), member.contentRange.size.toLong(), inputBytes)
+        val range = boundedInputRange(member.contentRange.start, member.contentRange.length, inputBytes)
             ?: return emptyList()
         listOf(
             ParserWorkerAction(
@@ -781,7 +780,7 @@ private fun workerRowActions(
                 name = member.name,
                 offset = range.first,
                 size = range.second,
-                openable = classifyArchiveMember(provider.bytes, member.contentRange).openable,
+                openable = provider.classifyMember(member).openable,
             ),
         )
     }

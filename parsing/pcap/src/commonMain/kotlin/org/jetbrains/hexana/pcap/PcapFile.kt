@@ -1,6 +1,12 @@
 package org.jetbrains.hexana.pcap
 
 /**
+ * Most packets [PcapParser] and [PcapNgParser] list. Large captures can hold millions;
+ * parsing them all eagerly would freeze the IDE, and this is enough for a summary.
+ */
+const val MAX_CAPTURE_PACKETS: Int = 10_000
+
+/**
  * Parsed PCAP capture file. See
  * [PCAP format](https://www.tcpdump.org/manpages/pcap-savefile.5.txt).
  */

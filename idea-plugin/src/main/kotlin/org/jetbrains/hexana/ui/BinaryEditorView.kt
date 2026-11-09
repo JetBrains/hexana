@@ -1644,7 +1644,7 @@ private fun ArchiveBinaryProvider.enrichArchiveMembersTab(
     val members = provider.members.filterNot { it.isBookkeeping }
     val ambiguousBaseNames = members.groupingBy { archiveMemberBaseName(it.name) }
         .eachCount().filterValues { it > 1 }.keys
-    val classifications = members.map { classifyArchiveMember(provider.bytes, it.contentRange) }
+    val classifications = members.map { provider.classifyMember(it) }
     val tempDir = AtomicReference<Path?>(null)
     val scope = HexanaService.getInstance().coroutineScope
 
@@ -1675,9 +1675,7 @@ private fun ArchiveBinaryProvider.enrichArchiveMembersTab(
                             "hexana-archive-",
                         ).also { it.toFile().deleteOnExit() }
                     }!!
-                    val bytes = provider.bytes
-                        .slice(member.contentRange.offset, member.contentRange.size)
-                        .toByteArray()
+                    val bytes = provider.memberBytes(member)?.toByteArray() ?: return@launch
                     val fileName = "${member.index}-${sanitizeArchiveMemberName(member.name)}${archiveMemberExtension(cls.kind)}"
                     val path = dir.resolve(fileName)
                     Files.write(path, bytes)

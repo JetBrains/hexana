@@ -128,7 +128,7 @@ fun createBinaryProvider(
             BinaryParser.COFF -> (detectNative(shared) as? NativeBinaryFormat.Coff)
                 ?.let { CoffBinaryProvider(shared, it, sourcePath) }
             BinaryParser.AR_ARCHIVE -> if (detectNative(shared) == NativeBinaryFormat.Archive) {
-                ArchiveBinaryProvider(shared, sourcePath)
+                ArchiveBinaryProvider(shared, sourcePath, source ?: shared.asLargeBytes())
             } else {
                 null
             }

@@ -49,7 +49,8 @@ data class PeArchiveMember(
     val ownerId: String,
     val groupId: String,
     val mode: String,
-    val size: UInt,
+    /** The size field of the member header; up to ten decimal digits, so past `UInt`. */
+    val size: ULong,
     val headerRange: NativeByteRange,
     val contentRange: NativeByteRange,
     /**

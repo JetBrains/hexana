@@ -271,7 +271,7 @@ object PcapNgParser {
         }
     }
 
-    private const val MAX_PACKETS = 10_000
+    private const val MAX_PACKETS = MAX_CAPTURE_PACKETS
 
     // ---- low-level readers ----
 

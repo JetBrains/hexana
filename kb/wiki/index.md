@@ -26,7 +26,7 @@ consult-first / write-back rules.
   `generic_ext` / `detected_format` / `generic_header` breakdown, and supported formats misreported as `generic`.
 - [[entities/partial-views]] — files of any size: `LargeBytes` + chunked mmap, 64-bit ranges/selections
   (`NativeByteRange` Int views throw past 2 GiB), which parsers read the whole file, VS Code paged hex
-  view and scaled scroll model, read-only rule, sparse-file tests.
+  view and scaled scroll model, `ParseCoverage` (when a large file warns), read-only rule, sparse-file tests.
 - [[entities/ml-model-formats]] — GGUF and safetensors: `parsing/mlmodel` parsers, content detection
   and host routing, reference-writer fixtures, why `GgufValue` is flat, and the >2 GB limitation.
 

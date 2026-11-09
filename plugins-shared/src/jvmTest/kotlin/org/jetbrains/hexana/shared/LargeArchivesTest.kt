@@ -2,6 +2,9 @@ package org.jetbrains.hexana.shared
 
 import org.jetbrains.hexana.io.MappedFileBytes
 import org.jetbrains.hexana.io.readBytes
+import org.jetbrains.hexana.providers.ArchiveBinaryProvider
+import org.jetbrains.hexana.providers.ArchiveMemberKind
+import org.jetbrains.hexana.providers.ParseCoverage
 import org.jetbrains.hexana.providers.TarBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.providers.createBinaryProvider
@@ -14,7 +17,9 @@ import java.util.zip.CRC32
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 
 /**
  * Archives past 2 GiB whose second entry, and (for ZIP64) whole central directory, lie beyond what
@@ -119,5 +124,40 @@ class LargeArchivesTest {
         val after = provider.tarEntries[1]
         assertEquals(512 + bigSize + 512, after.dataOffset)
         assertEquals("after", source.readBytes(after.dataOffset, 5).decodeToString())
+    }
+
+    private fun arHeader(name: String, size: Long): ByteArray =
+        (name.padEnd(16) + "0".padEnd(12) + "0".padEnd(6) + "0".padEnd(6) + "644".padEnd(8) + size.toString().padEnd(10) + "`\n")
+            .encodeToByteArray()
+            .also { check(it.size == 60) }
+
+    @Test
+    fun `ar member after a 2_5 GiB member`() {
+        val bigSize = farOffset + 1 // odd, so the padding byte is read past 2 GiB too
+        val elf = java.io.File("../parsing/native-fixtures/test-data/elf/sample.o").readBytes()
+        val file = dir.resolve("big.a")
+        RandomAccessFile(file.toFile(), "rw").use { raf ->
+            raf.write("!<arch>\n".encodeToByteArray())
+            raf.write(arHeader("big.bin/", bigSize))
+            raf.seek(8 + 60 + bigSize)
+            raf.write('\n'.code)
+            raf.write(arHeader("tail.o/", elf.size.toLong()))
+            raf.write(elf)
+            if (elf.size % 2 != 0) raf.write('\n'.code)
+        }
+        val source = MappedFileBytes.open(file)
+        val provider = assertIs<ArchiveBinaryProvider>(createBinaryProvider(source.window(0, 4096), "big.a", source = source))
+
+        assertEquals(listOf("big.bin", "tail.o"), provider.members.map { it.name })
+        val (big, tail) = provider.members
+        assertEquals(bigSize.toULong(), big.size)
+        assertEquals(8 + 60 + bigSize + 1 + 60, tail.contentRange.start)
+        assertEquals(elf.toList(), provider.memberBytes(tail)!!.toByteArray().toList())
+        assertEquals(ArchiveMemberKind.ELF, provider.classifyMember(tail).kind)
+        // Too large to extract into one buffer, so not offered for opening.
+        assertNull(provider.memberBytes(big))
+        assertFalse(provider.classifyMember(big).openable)
+        assertEquals(8 + 60 + bigSize + 1, provider.structureRanges.single { it.label == "tail.o" }.offset)
+        assertEquals(ParseCoverage.WholeFile, provider.parseCoverage(source.size))
     }
 }

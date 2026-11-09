@@ -75,7 +75,7 @@ object PcapParser {
      * eagerly would freeze the IDE. We keep a generous but bounded limit that
      * is sufficient for summary display while staying responsive.
      */
-    private const val MAX_PACKETS = 10_000
+    private const val MAX_PACKETS = MAX_CAPTURE_PACKETS
 
     private fun parsePackets(buffer: CommonByteBuffer, header: PcapGlobalHeader): List<PcapPacketRecord> {
         val bigEndian = header.bigEndian

@@ -2,6 +2,7 @@ package org.jetbrains.hexana.shared
 
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.GgufBinaryProvider
+import org.jetbrains.hexana.providers.ParseCoverage
 import org.jetbrains.hexana.providers.SafetensorsBinaryProvider
 import org.jetbrains.hexana.providers.createBinaryProvider
 import java.io.File
@@ -73,10 +74,35 @@ class PartialViewTest {
         assertTrue(isPartialView(512, 1024L))
         assertFalse(isPartialView(512, 512L))
         assertFalse(isPartialView(512, null))
+        val gb5 = 5L * 1024 * 1024 * 1024
+        val mb512 = 512 * 1024 * 1024
+        val prefix = ParseCoverage.Prefix(mb512.toLong(), "packets")
         assertEquals(
-            "Showing the first 512.0 MB of this 5.0 GB file. Structures stored after that point are not shown " +
-                "(model tensor tables are complete), and editing is turned off.",
-            partialViewNotice(512 * 1024 * 1024, 5L * 1024 * 1024 * 1024),
+            "Showing the first 512.0 MB of this 5.0 GB file. Tabs leave out packets past the first 512.0 MB. " +
+                "Editing is turned off.",
+            partialViewNotice(mb512, gb5, prefix),
         )
+        assertEquals(
+            "Showing the first 512.0 MB of this 5.0 GB file. The tabs list every structure. Editing is turned off.",
+            partialViewNotice(mb512, gb5, ParseCoverage.WholeFile),
+        )
+        assertEquals(
+            "This 5.0 GB file is shown in full. Tabs leave out packets past the first 512.0 MB. " +
+                "Editing is turned off for files this large.",
+            largeFileNotice(gb5, prefix),
+        )
+        assertEquals(
+            "This 5.0 GB file is shown and parsed in full. Editing is turned off for files this large.",
+            largeFileNotice(gb5, ParseCoverage.WholeFile),
+        )
+        assertEquals("5.0 GB (first 512.0 MB parsed)", largeFileSizeLabel(gb5, prefix))
+        assertEquals("5.0 GB", largeFileSizeLabel(gb5, ParseCoverage.WholeFile))
+    }
+
+    @Test
+    fun `a model head covers the whole file`() {
+        val full = bytes("tiny.gguf")
+        val provider = createBinaryProvider(full.copyOf(1500).toCommonByteBuffer(), "tiny.gguf", fileSize = full.size.toLong())
+        assertEquals(ParseCoverage.WholeFile, provider.parseCoverage(full.size.toLong()))
     }
 }

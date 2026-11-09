@@ -765,9 +765,7 @@ private fun enrichArchiveMembersTab(
     host: Host,
 ): TableTabDescriptor {
     val members = provider.members.filterNot { it.isBookkeeping }
-    val classifications = members.map {
-        org.jetbrains.hexana.providers.classifyArchiveMember(provider.bytes, it.contentRange)
-    }
+    val classifications = members.map { provider.classifyMember(it) }
     return TableTabDescriptor(
         name = tab.name,
         columns = tab.columns,
@@ -780,10 +778,8 @@ private fun enrichArchiveMembersTab(
         rowClickAction = { index ->
             val member = members[index]
             val cls = classifications[index]
-            if (cls.openable) {
-                val bytes = provider.bytes
-                    .slice(member.contentRange.offset, member.contentRange.size)
-                    .toByteArray()
+            val bytes = if (cls.openable) provider.memberBytes(member)?.toByteArray() else null
+            if (bytes != null) {
                 val baseName = member.name.substringAfterLast('/').substringAfterLast('\\').ifEmpty { member.name }
                 host.openModule(member.index, baseName, bytes)
             }

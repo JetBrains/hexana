@@ -3,7 +3,6 @@ package org.jetbrains.hexana.shared
 import org.jetbrains.hexana.providers.ArchiveBinaryProvider
 import org.jetbrains.hexana.providers.ArchiveMemberClassification
 import org.jetbrains.hexana.providers.BinaryProvider
-import org.jetbrains.hexana.providers.classifyArchiveMember
 import org.jetbrains.hexana.providers.pe.PeArchiveMember
 
 /**
@@ -84,7 +83,7 @@ class ArchiveTableTabsProvider : TableTabsProvider {
         val rows = members.map { member ->
             ArchiveMemberRow(
                 member = member,
-                classification = classifyArchiveMember(provider.bytes, member.contentRange),
+                classification = provider.classifyMember(member),
             )
         }
         return listOf(archiveMembersDescriptor(rows = rows))

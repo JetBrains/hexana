@@ -35,7 +35,6 @@ import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryVirtualFileProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryVirtualFileProvider
-import org.jetbrains.hexana.providers.classifyArchiveMember
 import org.jetbrains.hexana.shared.BinaryAnchor
 import com.intellij.notification.Notification
 import com.intellij.notification.NotificationsManager
@@ -881,7 +880,7 @@ object HexanaEditorUiTestProbe {
             is ArchiveBinaryProvider -> provider.members
                 .filterNot { it.isBookkeeping }
                 .mapIndexed { index, member ->
-                    val classification = classifyArchiveMember(provider.bytes, member.contentRange)
+                    val classification = provider.classifyMember(member)
                     "member=$index|${member.name}|${classification.displayName}|${member.size}|openable=${classification.openable}" to classification.openable
                 }
             is ZipBinaryProvider -> provider.displayEntries.mapIndexed { index, entry ->

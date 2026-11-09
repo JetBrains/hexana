@@ -67,8 +67,9 @@ import org.jetbrains.hexana.run.WasmRunMode
 import org.jetbrains.hexana.run.runWasmConfiguration
 import org.jetbrains.hexana.run.runWasmFile
 import org.jetbrains.hexana.shared.formatSize
-import org.jetbrains.hexana.shared.formatSizeLong
 import org.jetbrains.hexana.shared.largeFileNotice
+import org.jetbrains.hexana.shared.largeFileSizeLabel
+import org.jetbrains.hexana.providers.ParseCoverage
 import org.jetbrains.hexana.shared.hasWasiCliRunExport
 import org.jetbrains.hexana.shared.fileTypeDescription
 import org.jetbrains.hexana.ui.panel.ProgramArgsDialog
@@ -132,6 +133,8 @@ internal fun FileDescriptionBar(
     fileSize: Long? = null,
 ) {
     val size = binaryProvider.bytes.limit()
+    // Whether the tabs miss anything of a file larger than the parsers' buffer; see ParseCoverage.
+    val coverage = remember(binaryProvider, fileSize) { fileSize?.let { binaryProvider.parseCoverage(it) } }
 
     val editModeContent = if (editableDoc != null && originalBinaryProvider != null && onOverwriteShadowRangesChanged != null) {
         editModeToolbarContent(
@@ -165,7 +168,7 @@ internal fun FileDescriptionBar(
             ),
         )
 
-        SizeLabel(size = size, binaryProvider = binaryProvider, onSizeClick = onSizeClick, fileSize = fileSize)
+        SizeLabel(size = size, binaryProvider = binaryProvider, onSizeClick = onSizeClick, fileSize = fileSize, coverage = coverage)
 
         if (editModeContent != null) {
             val editBg = if (JewelTheme.isDark) Color(0xFF3D3223) else Color(0xFFFFF3E0)
@@ -197,7 +200,7 @@ internal fun FileDescriptionBar(
                     filePath = filePath,
                     parserChoice = parserChoice,
                     fileSize = fileSize,
-                    loadedSize = size,
+                    coverage = coverage,
                 )
             }
         } else {
@@ -214,7 +217,7 @@ internal fun FileDescriptionBar(
                 filePath = filePath,
                 parserChoice = parserChoice,
                 fileSize = fileSize,
-                loadedSize = size,
+                coverage = coverage,
             )
         }
     }
@@ -229,6 +232,7 @@ private fun SizeLabel(
     binaryProvider: BinaryProvider,
     onSizeClick: (() -> Unit)?,
     fileSize: Long? = null,
+    coverage: ParseCoverage? = null,
 ) {
     val sizeTooltip = remember(binaryProvider) {
         try {
@@ -238,9 +242,9 @@ private fun SizeLabel(
         }
     }
 
-    // A partial view shows the file's real size, marked so it does not read as what is loaded.
-    // The hex view shows all of a large file; only the tabs come from parsing its head.
-    val sizeText = if (fileSize != null) "${formatSizeLong(fileSize)} (first ${formatSize(size)} parsed)" else formatSize(size)
+    // A large file shows its real size, marked with what was parsed only when the tabs miss
+    // something past it; the hex view always shows all of it.
+    val sizeText = if (fileSize != null && coverage != null) largeFileSizeLabel(fileSize, coverage) else formatSize(size)
     val sizeModifier = if (onSizeClick != null) {
         Modifier
             .pointerHoverIcon(PointerIcon(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)))
@@ -300,7 +304,7 @@ private fun NormalModeContent(
     filePath: String? = null,
     parserChoice: ParserChoice? = null,
     fileSize: Long? = null,
-    loadedSize: Int = 0,
+    coverage: ParseCoverage? = null,
 ) {
     val moduleType = fileTypeDescription(
         binaryProvider, fileName, (parserChoice?.chosen as? ParserRef.Builtin)?.parser,
@@ -316,8 +320,8 @@ private fun NormalModeContent(
         foreground = badgeForeground,
     )
 
-    if (fileSize != null) {
-        EditingDisabledBadge(notice = largeFileNotice(loadedSize, fileSize))
+    if (fileSize != null && coverage != null) {
+        EditingDisabledBadge(notice = largeFileNotice(fileSize, coverage))
     }
 
     val nativeImage = remember(binaryProvider) {
@@ -609,8 +613,9 @@ private fun NormalModeContent(
 private const val MAX_TOOLTIP_PROBLEMS = 5
 
 /**
- * "Editing disabled" beside the parser chooser for a file larger than the parsers read; the
- * tooltip carries the full [largeFileNotice] (what the tabs cover and why editing is off).
+ * "Editing disabled" beside the parser chooser for a file too large to edit; the tooltip carries
+ * the full [largeFileNotice]: whether the tabs miss anything past what was parsed, and why
+ * editing is off.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

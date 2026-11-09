@@ -1,6 +1,10 @@
 package org.jetbrains.hexana.providers.pe
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.LargeBytes
+import org.jetbrains.hexana.io.asLargeBytes
+import org.jetbrains.hexana.io.containsRange
+import org.jetbrains.hexana.io.readBytes
 import org.jetbrains.hexana.parsing.common.NativeBinaryWordSize
 import org.jetbrains.hexana.parsing.common.NativeByteRange
 import org.jetbrains.hexana.parsing.common.NativeParseResult
@@ -153,40 +157,58 @@ object PeParser {
         return header.takeIf { isPlausibleCoffObjectHeader(bytes, it) }
     }
 
-    fun parseArchive(bytes: CommonByteBuffer): PeArchiveFile? {
-        if (!bytes.hasPrefix(0, '!'.code, '<'.code, 'a'.code, 'r'.code, 'c'.code, 'h'.code, '>'.code, '\n'.code)) {
+    fun parseArchive(bytes: CommonByteBuffer): PeArchiveFile? = parseArchive(bytes.asLargeBytes())
+
+    /**
+     * Walks the `ar` member headers of [bytes] with 64-bit offsets, so an archive past 2 GiB —
+     * a large static library — lists every member. Member bodies are never read, except the
+     * long-names table and BSD inline names, which the names come from.
+     */
+    fun parseArchive(bytes: LargeBytes): PeArchiveFile? {
+        if (!bytes.containsRange(0, ARCHIVE_MAGIC_SIZE.toLong())) return null
+        if (!bytes.window(0, ARCHIVE_MAGIC_SIZE).hasPrefix(0, '!'.code, '<'.code, 'a'.code, 'r'.code, 'c'.code, 'h'.code, '>'.code, '\n'.code)) {
             return null
         }
 
         val rawMembers = mutableListOf<RawArchiveMember>()
-        var offset = ARCHIVE_MAGIC_SIZE
+        val diagnostics = mutableListOf<NativeParserDiagnostic>()
+        var offset = ARCHIVE_MAGIC_SIZE.toLong()
         var index = 0
         while (offset < bytes.size) {
-            if (!bytes.containsRange(offset, ARCHIVE_MEMBER_HEADER_SIZE)) return null
-            if (!bytes.hasPrefix(offset + 58, '`'.code, '\n'.code)) return null
+            // A member cut off by the end of [bytes] ends the listing rather than the parse: a
+            // host that holds only the head of a large archive still lists the members in it.
+            if (!bytes.containsRange(offset, ARCHIVE_MEMBER_HEADER_SIZE.toLong())) {
+                diagnostics += archiveTruncatedDiagnostic(index)
+                break
+            }
+            val header = bytes.window(offset, ARCHIVE_MEMBER_HEADER_SIZE)
+            if (!header.hasPrefix(58, '`'.code, '\n'.code)) return null
 
-            val size = bytes.decimalString(offset + 48, 10).toUIntOrNull() ?: return null
-            val sizeInt = size.toBoundedInt() ?: return null
+            // Ten decimal digits: up to ~9.3 GB per member, more than an Int holds.
+            val size = header.decimalString(48, 10).toULongOrNull() ?: return null
             val contentOffset = offset + ARCHIVE_MEMBER_HEADER_SIZE
-            if (!bytes.containsRange(contentOffset, sizeInt)) return null
+            if (!bytes.containsRange(contentOffset, size.toLong())) {
+                diagnostics += archiveTruncatedDiagnostic(index)
+                break
+            }
 
             rawMembers.add(
                 RawArchiveMember(
                     index = index,
-                    rawName = bytes.fixedString(offset, 16).trim(),
-                    timestamp = bytes.fixedString(offset + 16, 12).trim(),
-                    ownerId = bytes.fixedString(offset + 28, 6).trim(),
-                    groupId = bytes.fixedString(offset + 34, 6).trim(),
-                    mode = bytes.fixedString(offset + 40, 8).trim(),
+                    rawName = header.fixedString(0, 16).trim(),
+                    timestamp = header.fixedString(16, 12).trim(),
+                    ownerId = header.fixedString(28, 6).trim(),
+                    groupId = header.fixedString(34, 6).trim(),
+                    mode = header.fixedString(40, 8).trim(),
                     size = size,
-                    headerRange = NativeByteRange(offset, ARCHIVE_MEMBER_HEADER_SIZE),
-                    contentRange = NativeByteRange(contentOffset, sizeInt),
+                    headerRange = NativeByteRange(offset, ARCHIVE_MEMBER_HEADER_SIZE.toLong()),
+                    contentRange = NativeByteRange(contentOffset, size.toLong()),
                 )
             )
 
-            offset = contentOffset + sizeInt
-            if (offset % 2 != 0) {
-                if (offset >= bytes.size || bytes.byteOrNull(offset) != '\n'.code) return null
+            offset = contentOffset + size.toLong()
+            if (offset % 2 != 0L) {
+                if (offset >= bytes.size || bytes[offset] != '\n'.code.toByte()) return null
                 offset++
             }
             index++
@@ -213,7 +235,7 @@ object PeParser {
             magicRange = NativeByteRange(0, ARCHIVE_MAGIC_SIZE),
             members = members,
             unresolvedRecords = emptyList(),
-            diagnostics = emptyList(),
+            diagnostics = diagnostics,
         )
     }
 
@@ -914,6 +936,9 @@ private val COFF_MACHINE_TYPES = setOf(
     0xAA64, // IMAGE_FILE_MACHINE_ARM64
 )
 
+private fun archiveTruncatedDiagnostic(memberIndex: Int): NativeParserDiagnostic =
+    optionalPeDiagnostic("archive.truncated", "Archive member $memberIndex runs past the end of the bytes; members from it on are not listed.")
+
 private fun optionalPeDiagnostic(code: String, message: String): NativeParserDiagnostic =
     NativeParserDiagnostic(
         code = code,
@@ -1069,20 +1094,22 @@ private fun archiveMemberName(rawName: String): String {
 }
 
 private fun resolveArchiveMemberNameAndContent(
-    bytes: CommonByteBuffer,
+    bytes: LargeBytes,
     member: RawArchiveMember,
     longNameTable: NativeByteRange?,
 ): ArchiveMemberNameAndContent? {
     val rawName = member.rawName
     if (rawName.startsWith("#1/")) {
         val inlineNameSize = rawName.drop(3).toIntOrNull() ?: return null
-        if (inlineNameSize < 0 || inlineNameSize > member.contentRange.size) return null
-        val name = bytes.archiveNameString(member.contentRange.offset, inlineNameSize)
+        if (inlineNameSize < 0 || inlineNameSize > member.contentRange.length) return null
+        val name = bytes.readBytes(member.contentRange.start, inlineNameSize)
+            .decodeToString()
+            .trimEnd('\u0000', '/', '\n', '\r')
         return ArchiveMemberNameAndContent(
             name = name,
             contentRange = NativeByteRange(
-                offset = member.contentRange.offset + inlineNameSize,
-                size = member.contentRange.size - inlineNameSize,
+                start = member.contentRange.start + inlineNameSize,
+                length = member.contentRange.length - inlineNameSize,
             ),
         )
     }
@@ -1098,26 +1125,26 @@ private fun resolveArchiveMemberNameAndContent(
     return ArchiveMemberNameAndContent(name = archiveMemberName(rawName), contentRange = member.contentRange)
 }
 
-private fun CommonByteBuffer.archiveNameString(offset: Int, size: Int): String =
-    ByteArray(size) { index -> get(offset + index) }
-        .decodeToString()
-        .trimEnd('\u0000', '/', '\n', '\r')
-
-private fun CommonByteBuffer.archiveLongName(tableRange: NativeByteRange, nameOffset: Int): String? {
-    if (nameOffset < 0 || nameOffset >= tableRange.size) return null
-    val absoluteOffset = tableRange.offset + nameOffset
-    val tableEnd = tableRange.offset + tableRange.size
+private fun LargeBytes.archiveLongName(tableRange: NativeByteRange, nameOffset: Int): String? {
+    if (nameOffset < 0 || nameOffset >= tableRange.length) return null
+    val absoluteOffset = tableRange.start + nameOffset
+    val tableEnd = tableRange.end
     var end = absoluteOffset
     while (end < tableEnd) {
-        val byte = byteOrNull(end) ?: return null
+        val byte = get(end).toInt()
         if (byte == '\n'.code || byte == 0) break
         end++
     }
     if (end == absoluteOffset) return ""
-    return ByteArray(end - absoluteOffset) { index -> get(absoluteOffset + index) }
+    val length = end - absoluteOffset
+    if (length > MAX_ARCHIVE_LONG_NAME) return null
+    return readBytes(absoluteOffset, length.toInt())
         .decodeToString()
         .trimEnd('/', '\r')
 }
+
+/** Longest name read from a long-names table; a longer run has no terminator and is not a name. */
+private const val MAX_ARCHIVE_LONG_NAME = 64 * 1024
 
 private data class RawArchiveMember(
     val index: Int,
@@ -1126,7 +1153,7 @@ private data class RawArchiveMember(
     val ownerId: String,
     val groupId: String,
     val mode: String,
-    val size: UInt,
+    val size: ULong,
     val headerRange: NativeByteRange,
     val contentRange: NativeByteRange,
 )

@@ -22,7 +22,6 @@ import org.jetbrains.hexana.providers.NativeImageInfo
 import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.WasmComponentBinaryProvider
-import org.jetbrains.hexana.providers.classifyArchiveMember
 import org.jetbrains.hexana.providers.nativeOrGenericBinaryProvider
 import org.jetbrains.hexana.providers.elf.ElfSectionHeader
 import org.jetbrains.hexana.providers.elf.ElfSymbol
@@ -603,10 +602,10 @@ private fun ArchiveBinaryProvider.archiveNestedSymbolRecords(
         return emptyList()
     }
     return archive.members.filterNot { it.isBookkeeping }.flatMap { member ->
-        val classification = classifyArchiveMember(bytes, member.contentRange)
+        val classification = classifyMember(member)
         if (!classification.openable) return@flatMap emptyList()
 
-        val memberBytes = bytes.slice(member.contentRange.offset, member.contentRange.size)
+        val memberBytes = memberBytes(member) ?: return@flatMap emptyList()
         val memberProvider = nativeOrGenericBinaryProvider(memberBytes, "${sourcePath ?: "<archive>"}::${member.name}")
         memberProvider.symbolRecords(detail, warnings).map { record ->
             record.copy(
@@ -773,7 +772,7 @@ private fun org.jetbrains.hexana.providers.BinaryProvider.archiveMemberRecords(
                 return emptyList()
             }
             archive.members.filterNot { it.isBookkeeping }.map { member ->
-                val classification = classifyArchiveMember(bytes, member.contentRange)
+                val classification = classifyMember(member)
                 BinaryRecordResult(
                     kind = "archive_member",
                     name = member.name,

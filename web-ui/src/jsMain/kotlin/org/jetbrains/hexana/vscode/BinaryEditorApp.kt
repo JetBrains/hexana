@@ -65,9 +65,7 @@ fun extractNestedModuleBytes(parentData: ByteArray, moduleIndex: Int): ByteArray
             .filterNot { it.isBookkeeping }
             .find { it.index == moduleIndex }
             ?: return null
-        return nativeProvider.bytes
-            .slice(member.contentRange.offset, member.contentRange.size)
-            .toByteArray()
+        return nativeProvider.memberBytes(member)?.toByteArray()
     }
 
     return null
@@ -294,6 +292,10 @@ fun BinaryEditorContent(
     // Edit state: tracks in-memory byte modifications. None for a partial view: overwriting the
     // file with its edited head would truncate it, and the state copies every loaded byte.
     val isPartial = isPartialView(buffer.size, partialFileSize)
+    // Whether the tabs miss anything past the loaded head; see ParseCoverage.
+    val parseCoverage = remember(provider, partialFileSize, isPartial) {
+        partialFileSize?.takeIf { isPartial }?.let { provider.parseCoverage(it) }
+    }
     val shownBytes: HexBytes = hexBytes ?: remember(buffer) { BufferHexBytes(buffer) }
     val editState: HexEditState? = remember(provider, isPartial) {
         if (isPartial) null else HexEditState(buffer.toByteArray())
@@ -411,12 +413,17 @@ fun BinaryEditorContent(
             isDecompressed = isDecompressed,
             sslKeyLogSessionCount = sslKeyLogSessionCount,
             parserChoice = parserChoice,
-            editingDisabledNotice = if (isPartial && partialFileSize != null) {
-                // With the whole file in the hex view only the tabs are limited to the head.
-                if (hexBytes != null) largeFileNotice(buffer.size, partialFileSize) else partialViewNotice(buffer.size, partialFileSize)
+            editingDisabledNotice = if (isPartial && partialFileSize != null && parseCoverage != null) {
+                // A paged hex view shows the whole file; otherwise it shows the loaded head too.
+                if (hexBytes != null) {
+                    largeFileNotice(partialFileSize, parseCoverage)
+                } else {
+                    partialViewNotice(buffer.size, partialFileSize, parseCoverage)
+                }
             } else {
                 null
             },
+            parseCoverage = parseCoverage,
         )
         Div({
             style {

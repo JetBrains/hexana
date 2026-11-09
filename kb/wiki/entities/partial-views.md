@@ -50,9 +50,34 @@ source for ELF / Mach-O / fat Mach-O (else `bytes`).
 | Windows PDB | `MsfStream` (block × size as Long) | — (companion PDBs next to a PE stay capped by `MAX_AUTOMATIC_PDB_SIZE`) |
 | Parquet, Arrow file | footer read from the end of `source` | preview chunk / first batch through a window with rebased page offsets; **value provenance shifted back by the window base** |
 | GGUF, safetensors | header only; tensor ranges validated against `fileSize` | — |
-| PE, COFF, ar, DEX, class, Wasm, pcap (10k-packet cap), Arrow stream | head only | — |
+| `ar` (static libraries) | `PeParser.parseArchive(LargeBytes)` (10-digit sizes → `ULong`; a member cut off by the end of the bytes ends the listing with an `archive.truncated` diagnostic instead of failing) | members via `ArchiveBinaryProvider.memberBytes`/`classifyMember` (a member > `MAX_BINARY_WINDOW_BYTES` is classified from its head and not openable) |
+| PE, COFF, DEX, class, Wasm, pcap (10k-packet cap), Arrow stream | head only | — |
 
 Virtualized native disassembly decodes each function from `wholeFile.window(...)`.
+
+## Parse coverage — when to warn
+
+`BinaryProvider.parseCoverage(fileLength): ParseCoverage` (`binaryProvider/.../ParseCoverage.kt`) says
+whether the tabs miss anything of the file on disk: `WholeFile`, or `Prefix(parsedBytes, missing)` where
+`missing` reads after "Tabs leave out" ("Wasm sections", "packets", "archive members", "structures").
+Hosts show the "(first X parsed)" size label only for `Prefix`; the "Editing disabled" badge still shows
+for every large file (editing large files is not done), its tooltip from `largeFileNotice(fileSize,
+coverage)` / `partialViewNotice(loaded, fileSize, coverage)` and the label from `largeFileSizeLabel`
+(plugins-shared `PartialView.kt`).
+
+- Default `prefixCoverage`: `WholeFile` iff `fileSize >= fileLength` — so whole-file parsers (ELF,
+  Mach-O, ZIP, tar, ar, PDB, Parquet, Arrow file) and model headers (GGUF, safetensors, told the real
+  size) are covered with no override. In VS Code those parsers get only the head, so they are `Prefix`.
+- `GenericBinaryProvider` itself (unknown format; not its many format subclasses): `WholeFile`.
+- PE: `WholeFile` when the last section's raw data, the certificate table (its "RVA" is a file
+  offset), debug raw data and the COFF symbol table end within the parsed bytes — an installer's
+  overlay past 2 GiB is a blob. COFF objects: sections + relocations + symbol table.
+- pcap: `WholeFile` once `MAX_CAPTURE_PACKETS` (10k, `parsing/pcap` `PcapFile.kt`) were found in the
+  head — a small capture is capped the same way, so reading further would list nothing more. This is
+  why pcap was not migrated to `LargeBytes` (its dissectors all read `provider.bytes`).
+- Wasm module/component: always `Prefix("Wasm sections")` when cut (sections run to the end of file).
+- Tests: plugins-shared `ParseCoverageTest`, `LargeArchivesTest` (ar member after 2.5 GiB),
+  `PartialViewTest` (texts).
 
 ## IntelliJ host
 
@@ -69,8 +94,8 @@ Virtualized native disassembly decodes each function from `wholeFile.window(...)
 - Read-only: `hexEditDoc = null` for partial views; `PieceTableDocument.originalHash` is now lazy (it
   hashed the whole original on open).
 - No editor notification bar: `FileDescriptionBar` shows an "Editing disabled" badge after the parser
-  chooser when `fileSize != null`, with `largeFileNotice` as its tooltip (2026-11-09; replaced the
-  former `PartialViewNotification`).
+  chooser when `fileSize != null`, with `largeFileNotice(fileSize, coverage)` as its tooltip
+  (2026-11-09; replaced the former `PartialViewNotification`). See *Parse coverage* above.
 
 ## VS Code host
 

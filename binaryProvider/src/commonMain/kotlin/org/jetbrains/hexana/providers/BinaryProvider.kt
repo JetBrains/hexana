@@ -139,6 +139,14 @@ sealed interface BinaryProvider {
      * use it to place structures beyond the loaded bytes. Everything else describes [bytes].
      */
     val fileSize: Long get() = bytes.size.toLong()
+
+    /**
+     * How much of the [fileLength]-byte file on disk this provider's structures describe; see
+     * [ParseCoverage]. By default the provider covers the file when it parsed all of it
+     * ([fileSize]); formats that can tell their structures ended inside the bytes they read
+     * (PE headers ahead of an overlay, a capture that hit its packet cap) say so.
+     */
+    fun parseCoverage(fileLength: Long): ParseCoverage = prefixCoverage(fileLength)
 }
 
 /**
@@ -220,6 +228,10 @@ sealed class BinaryProviderType {
 
 open class GenericBinaryProvider(private val sharedBytes: CommonByteBuffer) : BinaryProvider {
     override val bytes: CommonByteBuffer get() = sharedBytes.duplicate()
+
+    // A file of no known format has no structures to miss; the subclasses are formats.
+    override fun parseCoverage(fileLength: Long): ParseCoverage =
+        if (this::class == GenericBinaryProvider::class) ParseCoverage.WholeFile else prefixCoverage(fileLength)
 
     val nativeFormat: NativeBinaryFormat? by lazy {
         NativeBinaryFormatDetector.detect(bytes)
@@ -379,7 +391,7 @@ sealed class NativeBinaryProvider(
 }
 
 /**
- * The whole file this native provider describes: for ELF and (universal) Mach-O, the 64-bit source
+ * The whole file this native provider describes: for ELF, (universal) Mach-O and `ar`, the 64-bit source
  * it was parsed from (larger than [BinaryProvider.bytes] for a file past 2 GiB); for the other
  * formats, their bytes.
  */
@@ -388,6 +400,7 @@ val NativeBinaryProvider.wholeFile: LargeBytes
         is ElfBinaryProvider -> source
         is MachOBinaryProvider -> source
         is FatMachOBinaryProvider -> source
+        is ArchiveBinaryProvider -> source
         else -> bytes.asLargeBytes()
     }
 
@@ -949,6 +962,29 @@ class PeBinaryProvider(
         BinarySizeNode(name = "PE", size = bytes.size, offset = 0, children = children)
     }
 
+    /**
+     * A PE file's tables all sit in its headers and sections, so when the last section, the
+     * certificate table and the debug data end within the parsed bytes, what follows — an
+     * installer's overlay, say — is a blob the tabs would not list anyway.
+     */
+    override fun parseCoverage(fileLength: Long): ParseCoverage {
+        val secs = sections
+        val header = coffHeader
+        val end = if (secs == null || header == null) {
+            null
+        } else {
+            val certificates = optionalHeader?.dataDirectories?.getOrNull(PE_CERTIFICATE_DIRECTORY_INDEX)
+                // The certificate table's "RVA" is a file offset.
+                ?.takeIf { it.rva != 0u && it.size != 0u }
+                ?.let { it.rva.toLong() + it.size.toLong() } ?: 0L
+            val debugData = debugEntries.orEmpty()
+                .filter { it.pointerToRawData != 0u }
+                .maxOfOrNull { it.pointerToRawData.toLong() + it.sizeOfData.toLong() } ?: 0L
+            maxOf(peSectionsEnd(secs, withRelocations = false), certificates, debugData, coffSymbolTableEnd(header))
+        }
+        return coverageByStructuresEnd(fileLength, end, "PE sections and tables")
+    }
+
     override val structureRanges: List<StructureRange> by lazy {
         val secs = sections?.takeIf { it.isNotEmpty() } ?: return@lazy emptyList()
         secs.filter { it.rawDataSize > 0u }.map { sec ->
@@ -999,23 +1035,67 @@ class CoffBinaryProvider(
             )
         }
     }
+
+    // An object file's tables are placed by its headers: section data, relocations, and the
+    // symbol table followed by its string table.
+    override fun parseCoverage(fileLength: Long): ParseCoverage {
+        val header = coffHeader
+        val secs = sections
+        val end = if (header == null || secs == null) {
+            null
+        } else {
+            maxOf(peSectionsEnd(secs, withRelocations = true), coffSymbolTableEnd(header))
+        }
+        return coverageByStructuresEnd(fileLength, end, "COFF sections and symbols")
+    }
 }
 
 class ArchiveBinaryProvider(
     sharedBytes: CommonByteBuffer,
     sourcePath: String? = null,
+    /**
+     * The whole archive; larger than [bytes] for a static library past 2 GiB. Members are
+     * listed, classified and extracted from it.
+     */
+    val source: LargeBytes = sharedBytes.asLargeBytes(),
 ) : NativeBinaryProvider(sharedBytes, sourcePath) {
     override val nativeFormat: NativeBinaryFormat get() = NativeBinaryFormat.Archive
+
+    override val fileSize: Long get() = source.size
+
+    override fun parseCoverage(fileLength: Long): ParseCoverage = prefixCoverage(fileLength, "archive members")
 
     /**
      * Lazily enumerated archive (Unix `ar` / Windows COFF import library).
      * Header-only walk — member bodies are never read here; [PeArchiveMember.contentRange]
      * records each member's byte range so a single member can be sliced on demand.
      */
-    val archiveFile: PeArchiveFile? by lazy { PeParser.parseArchive(bytes) }
+    val archiveFile: PeArchiveFile? by lazy { PeParser.parseArchive(source) }
 
     /** All parsed members, including bookkeeping entries (see [PeArchiveMember.isBookkeeping]). */
     val members: List<PeArchiveMember> get() = archiveFile?.members.orEmpty()
+
+    /**
+     * The payload of [member], or `null` when it is too large for one buffer (past 2 GiB);
+     * a view where the source allows, so classifying or opening a member copies nothing.
+     */
+    fun memberBytes(member: PeArchiveMember): CommonByteBuffer? {
+        val range = member.contentRange
+        if (range.length > MAX_BINARY_WINDOW_BYTES || !source.containsRange(range.start, range.length)) return null
+        return source.window(range.start, range.length.toInt())
+    }
+
+    /** What [member] is, read from its leading bytes; see [classifyArchiveMember]. */
+    fun classifyMember(member: PeArchiveMember): ArchiveMemberClassification {
+        val range = member.contentRange
+        if (range.length < 4 || !source.containsRange(range.start, range.length)) return ArchiveMemberClassification.UNKNOWN
+        // A member too large to view whole is classified from its head; it cannot be opened.
+        val view = memberBytes(member) ?: return classifyArchiveMember(
+            source.window(range.start, MAX_BINARY_WINDOW_BYTES),
+            NativeByteRange(0, MAX_BINARY_WINDOW_BYTES),
+        ).copy(openable = false)
+        return classifyArchiveMember(view, NativeByteRange(0, view.size))
+    }
 
     /**
      * One range per member, spanning its `ar` header and its payload — the two are
@@ -1023,11 +1103,11 @@ class ArchiveBinaryProvider(
      * members are kept: they occupy real bytes the user can see.
      */
     override val structureRanges: List<StructureRange> by lazy {
-        val total = bytes.size
+        val total = source.size
         members.mapNotNull { member ->
             structureRangeOrNull(
-                offset = member.headerRange.offset.toLong(),
-                size = (member.headerRange.size + member.contentRange.size).toLong(),
+                offset = member.headerRange.start,
+                size = member.headerRange.length + member.contentRange.length,
                 label = member.name,
                 fileSize = total,
                 tabName = "Members",
@@ -1053,7 +1133,11 @@ data class ArchiveMemberClassification(
     val displayName: String,
     /** Whether extracting this member yields a file Hexana can open in a binary view. */
     val openable: Boolean,
-)
+) {
+    companion object {
+        val UNKNOWN: ArchiveMemberClassification = ArchiveMemberClassification(ArchiveMemberKind.UNKNOWN, "unknown", openable = false)
+    }
+}
 
 /**
  * Classifies a single archive member by its own format, reading only the member's leading
@@ -1094,6 +1178,34 @@ fun classifyArchiveMember(
     }
 }
 
+/** Index of the certificate table among a PE image's data directories. */
+private const val PE_CERTIFICATE_DIRECTORY_INDEX = 4
+
+private const val COFF_RELOCATION_SIZE = 10L
+private const val COFF_SYMBOL_SIZE = 18L
+
+/** Where the last section's raw data (and, for object files, its relocations) ends. */
+private fun peSectionsEnd(sections: List<PeSection>, withRelocations: Boolean): Long = sections.maxOfOrNull { sec ->
+    val data = if (sec.rawDataSize != 0u) sec.rawDataPointer.toLong() + sec.rawDataSize.toLong() else 0L
+    val relocations = if (withRelocations && sec.relocationCount > 0 && sec.relocationPointer != 0u) {
+        sec.relocationPointer.toLong() + sec.relocationCount * COFF_RELOCATION_SIZE
+    } else {
+        0L
+    }
+    maxOf(data, relocations)
+} ?: 0L
+
+/**
+ * Where the COFF symbol table ends, counting the 4-byte size of the string table after it
+ * (its contents are only known once that size is read, which needs it to be within the bytes).
+ */
+private fun coffSymbolTableEnd(header: PeCoffHeader): Long =
+    if (header.symbolTableOffset == 0u || header.symbolCount == 0u) {
+        0L
+    } else {
+        header.symbolTableOffset.toLong() + header.symbolCount.toLong() * COFF_SYMBOL_SIZE + 4
+    }
+
 /**
  * Resolves what magic bytes alone can identify. [fileSize] is the size of the whole file when
  * [sharedBytes] is only its head (a file too large to load); the model providers, whose
@@ -1132,7 +1244,7 @@ fun nativeOrGenericBinaryProvider(
                 is NativeBinaryFormat.FatMachO -> FatMachOBinaryProvider(sharedBytes, fmt, sourcePath, source ?: sharedBytes.asLargeBytes())
                 is NativeBinaryFormat.Pe -> PeBinaryProvider(sharedBytes, fmt, sourcePath)
                 is NativeBinaryFormat.Coff -> CoffBinaryProvider(sharedBytes, fmt, sourcePath)
-                NativeBinaryFormat.Archive -> ArchiveBinaryProvider(sharedBytes, sourcePath)
+                NativeBinaryFormat.Archive -> ArchiveBinaryProvider(sharedBytes, sourcePath, source ?: sharedBytes.asLargeBytes())
                 null -> GenericBinaryProvider(sharedBytes)
             }
         }
@@ -1141,6 +1253,9 @@ fun nativeOrGenericBinaryProvider(
 
 open class WasmComponentBinaryProvider(private val sharedBytes: CommonByteBuffer): BinaryProvider {
     override val bytes: CommonByteBuffer get() = sharedBytes.duplicate()
+
+    // Sections run back to back up to the end of the file, so any cut can hide more of them.
+    override fun parseCoverage(fileLength: Long): ParseCoverage = prefixCoverage(fileLength, "Wasm sections")
 
     private val parseResult = WasmParser().parse(bytes)
 
@@ -1432,6 +1547,9 @@ private fun SectionScanFailure.toParseProblemKind() = when (kind) {
 
 open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : BinaryProvider {
     override val bytes: CommonByteBuffer get() = sharedBytes.duplicate()
+
+    // Sections run back to back up to the end of the file, so any cut can hide more of them.
+    override fun parseCoverage(fileLength: Long): ParseCoverage = prefixCoverage(fileLength, "Wasm sections")
 
     private val parseResult = WasmParser().parse(bytes)
 

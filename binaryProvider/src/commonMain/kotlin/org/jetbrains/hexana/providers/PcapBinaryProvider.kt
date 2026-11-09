@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.providers
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.pcap.MAX_CAPTURE_PACKETS
 import org.jetbrains.hexana.pcap.PcapFile
 import org.jetbrains.hexana.pcap.PcapGlobalHeader
 import org.jetbrains.hexana.pcap.PcapNgFile
@@ -91,6 +92,16 @@ class PcapBinaryProvider(
                 )?.let { add(it) }
             }
         }
+    }
+
+    /**
+     * A capture lists at most [MAX_CAPTURE_PACKETS] packets whatever its size, so when they
+     * were all found within the parsed bytes, reading further would list nothing more: the
+     * file is covered as well as a small one is.
+     */
+    override fun parseCoverage(fileLength: Long): ParseCoverage {
+        val packets = parsedPcapFile?.packets.orEmpty()
+        return if (packets.size >= MAX_CAPTURE_PACKETS) ParseCoverage.WholeFile else prefixCoverage(fileLength, "packets")
     }
 
     /**
