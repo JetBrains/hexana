@@ -3,6 +3,7 @@ package org.jetbrains.hexana.vscode
 import org.jetbrains.hexana.shared.PROBLEMS_TAB_NAME
 import org.jetbrains.hexana.shared.isPartialView
 import org.jetbrains.hexana.shared.largeFileNotice
+import org.jetbrains.hexana.providers.ParseCoverage
 import org.jetbrains.hexana.shared.partialViewNotice
 import org.jetbrains.hexana.shared.inspections.BinaryProblem
 import org.jetbrains.hexana.shared.inspections.InspectionContext
@@ -178,6 +179,17 @@ fun BinaryEditorContent(
      * fetch bytes beyond [provider]'s head ([PagedHexBytes]); `null` shows the provider's bytes.
      */
     hexBytes: HexBytes? = null,
+    /**
+     * What the tabs cover while the host is still fetching the structures [provider] reads past
+     * its head ([StructureBytesFetcher.coverageOverride]); `null` leaves it to the provider.
+     */
+    coverageOverride: ParseCoverage? = null,
+    /**
+     * Keys the state that outlives a rebuilt [provider] — the selected tab — when the caller
+     * rebuilds it for the same file, as each [StructureBytesFetcher] round does. `null` keys it
+     * on the provider.
+     */
+    tabStateKey: Any? = null,
     /** Searches the whole file on the host; used with a paged [hexBytes]. */
     onSearchFile: ((pattern: ByteArray, from: Long, reverse: Boolean) -> kotlin.js.Promise<Long>)? = null,
     /** Text of a key log the host just picked, or blank. */
@@ -282,7 +294,7 @@ fun BinaryEditorContent(
         }
     }
     var panelHeight by remember { mutableStateOf(DEFAULT_PANEL_HEIGHT) }
-    var activeTab by remember(provider, initialActiveTab) { mutableStateOf(initialActiveTab) }
+    var activeTab by remember(tabStateKey ?: provider, initialActiveTab) { mutableStateOf(initialActiveTab) }
     var showDataInspector by remember { mutableStateOf(false) }
 
     val hasTopTab = remember(provider, extraTabs) {
@@ -293,8 +305,13 @@ fun BinaryEditorContent(
     // file with its edited head would truncate it, and the state copies every loaded byte.
     val isPartial = isPartialView(buffer.size, partialFileSize)
     // Whether the tabs miss anything past the loaded head; see ParseCoverage.
-    val parseCoverage = remember(provider, partialFileSize, isPartial) {
-        partialFileSize?.takeIf { isPartial }?.let { provider.parseCoverage(it) }
+    val parseCoverage = remember(provider, partialFileSize, isPartial, coverageOverride) {
+        partialFileSize?.takeIf { isPartial }?.let { size ->
+            // A provider that knows it read only a prefix says best what it misses; one that
+            // reads the whole file is only as complete as what has been fetched for it.
+            val own = provider.parseCoverage(size)
+            if (own is ParseCoverage.Prefix) own else coverageOverride ?: own
+        }
     }
     val shownBytes: HexBytes = hexBytes ?: remember(buffer) { BufferHexBytes(buffer) }
     val editState: HexEditState? = remember(provider, isPartial) {

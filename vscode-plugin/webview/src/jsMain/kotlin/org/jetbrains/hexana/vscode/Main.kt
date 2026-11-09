@@ -236,6 +236,13 @@ fun BinaryEditorApp() {
             val pagedBytes = remember(buffer, partialFileSize) {
                 partialFileSize?.takeIf { it > buffer.size }?.let { size -> PagedHexBytes(buffer, size, ::readByteRangeFromHost) }
             }
+            // The parsers that read the whole file (ELF, Mach-O, ZIP, tar, ar, PDB, Parquet, Arrow)
+            // get all of it too: what they read past the head is fetched from the host in rounds,
+            // each rebuilding the provider below over more of the file.
+            val structureFetcher = remember(buffer, partialFileSize) {
+                partialFileSize?.takeIf { it > buffer.size }?.let { size -> StructureBytesFetcher(buffer, size, ::readByteRangeFromHost) }
+            }
+            val wholeFile = structureFetcher?.bytes
 
             // `fileName` rather than `filePath` drives the extension-based half of the
             // format decision: the host inflates a `.gz` before pushing it and reports
@@ -260,11 +267,13 @@ fun BinaryEditorApp() {
                 is ParserRef.Scripted -> scripted?.base
                 null -> null
             }
-            val forcedProvider = remember(bytes, filePath, overrideParser) {
-                overrideParser?.let { createBinaryProvider(it, buffer, sourcePath = filePath, fileSize = partialFileSize) }
+            val forcedProvider = remember(bytes, filePath, overrideParser, wholeFile) {
+                overrideParser?.let { createBinaryProvider(it, buffer, sourcePath = filePath, fileSize = partialFileSize, source = wholeFile) }
             }
-            val provider = remember(bytes, filePath, fileName, forcedProvider) {
-                forcedProvider ?: createBinaryProvider(buffer, sourcePath = filePath, fileName = fileName, fileSize = partialFileSize)
+            val provider = remember(bytes, filePath, fileName, forcedProvider, wholeFile) {
+                forcedProvider ?: createBinaryProvider(
+                    buffer, sourcePath = filePath, fileName = fileName, fileSize = partialFileSize, source = wholeFile,
+                )
             }
             val overrideFailure = when {
                 chosenParser is ParserRef.Scripted && scripted == null ->
@@ -363,6 +372,9 @@ fun BinaryEditorApp() {
                 // The hex view covers the whole of a file the webview holds only the head of,
                 // fetching pages from the host as they scroll into view.
                 hexBytes = pagedBytes,
+                coverageOverride = structureFetcher?.coverageOverride,
+                // Each fetch round rebuilds the provider; the selected tab stays.
+                tabStateKey = if (structureFetcher != null) buffer else null,
                 onSearchFile = if (pagedBytes != null) ::searchFileOnHost else null,
                 extraTabs = extraTabs,
                 capabilities = capabilities,

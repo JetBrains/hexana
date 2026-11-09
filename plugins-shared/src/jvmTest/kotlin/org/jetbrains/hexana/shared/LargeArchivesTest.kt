@@ -1,9 +1,15 @@
 package org.jetbrains.hexana.shared
 
+import org.jetbrains.hexana.io.LargeBytes
 import org.jetbrains.hexana.io.MappedFileBytes
+import org.jetbrains.hexana.io.SparseLargeBytes
+import org.jetbrains.hexana.io.asLargeBytes
+import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.io.readBytes
 import org.jetbrains.hexana.providers.ArchiveBinaryProvider
 import org.jetbrains.hexana.providers.ArchiveMemberKind
+import org.jetbrains.hexana.providers.BinaryProvider
+import org.jetbrains.hexana.providers.ElfBinaryProvider
 import org.jetbrains.hexana.providers.ParseCoverage
 import org.jetbrains.hexana.providers.TarBinaryProvider
 import org.jetbrains.hexana.providers.ZipBinaryProvider
@@ -20,6 +26,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * Archives past 2 GiB whose second entry, and (for ZIP64) whole central directory, lie beyond what
@@ -32,6 +39,42 @@ class LargeArchivesTest {
     @AfterTest
     fun cleanUp() {
         dir.toFile().deleteRecursively()
+    }
+
+    /**
+     * Parses [whole] the way the VS Code webview does (`StructureBytesFetcher`): over a
+     * [SparseLargeBytes] holding only [headSize] bytes, fetching what each round missed (plus the
+     * tail, in the first round that misses anything) until a round misses nothing. Returns the
+     * last provider, the rounds it took and the bytes fetched past the head.
+     */
+    private fun <P : BinaryProvider> converge(
+        whole: LargeBytes,
+        name: String,
+        touch: (P) -> Unit,
+        headSize: Int = 4096,
+    ): Triple<P, Int, Long> {
+        var sparse = SparseLargeBytes.of(whole.window(0, headSize), whole.size)
+        var fetched = 0L
+        var tailFetched = false
+        repeat(64) { round ->
+            @Suppress("UNCHECKED_CAST")
+            val provider = createBinaryProvider(sparse.window(0, headSize), name, fileSize = whole.size, source = sparse) as P
+            touch(provider)
+            val wanted = sparse.misses.toMutableList()
+            if (wanted.isEmpty()) return Triple(provider, round, fetched)
+            if (!tailFetched) {
+                tailFetched = true
+                wanted += maxOf(headSize.toLong(), whole.size - 1024 * 1024) until whole.size
+            }
+            sparse = sparse.withChunks(
+                wanted.map { range ->
+                    val length = (range.last - range.first + 1).toInt()
+                    fetched += length
+                    SparseLargeBytes.Chunk(range.first, whole.readBytes(range.first, length))
+                },
+            )
+        }
+        error("no convergence")
     }
 
     private fun le(capacity: Int, fill: ByteBuffer.() -> Unit): ByteArray =
@@ -89,6 +132,11 @@ class LargeArchivesTest {
         assertEquals(farOffset, far.localHeaderOffset)
         assertEquals("from 2.5 GiB", source.readBytes(far.dataOffset, far.uncompressedSize.toInt()).decodeToString())
         assertEquals(farOffset, provider.structureRanges.single { it.label == "far/away.txt" }.offset)
+
+        val (sparse, rounds, fetched) = converge<ZipBinaryProvider>(source, "big.zip", { it.zipEntries })
+        assertEquals(provider.zipEntries, sparse.zipEntries)
+        assertTrue(rounds <= 3, "$rounds rounds")
+        assertTrue(fetched <= 2L * 1024 * 1024, "$fetched bytes fetched")
     }
 
     private fun tarHeader(name: String, size: Long): ByteArray {
@@ -124,6 +172,11 @@ class LargeArchivesTest {
         val after = provider.tarEntries[1]
         assertEquals(512 + bigSize + 512, after.dataOffset)
         assertEquals("after", source.readBytes(after.dataOffset, 5).decodeToString())
+
+        val (sparse, rounds, fetched) = converge<TarBinaryProvider>(source, "big.tar", { it.tarEntries })
+        assertEquals(provider.tarEntries, sparse.tarEntries)
+        assertTrue(rounds <= 3, "$rounds rounds")
+        assertTrue(fetched <= 2L * 1024 * 1024, "$fetched bytes fetched")
     }
 
     private fun arHeader(name: String, size: Long): ByteArray =
@@ -159,5 +212,27 @@ class LargeArchivesTest {
         assertFalse(provider.classifyMember(big).openable)
         assertEquals(8 + 60 + bigSize + 1, provider.structureRanges.single { it.label == "tail.o" }.offset)
         assertEquals(ParseCoverage.WholeFile, provider.parseCoverage(source.size))
+
+        val (sparse, rounds, fetched) = converge<ArchiveBinaryProvider>(source, "big.a", { p ->
+            p.members.forEach { p.classifyMember(it) }
+        })
+        assertEquals(provider.members, sparse.members)
+        assertEquals(ArchiveMemberKind.ELF, sparse.classifyMember(sparse.members[1]).kind)
+        assertTrue(rounds <= 4, "$rounds rounds")
+        assertTrue(fetched <= 2L * 1024 * 1024, "$fetched bytes fetched")
+    }
+
+    @Test
+    fun `ELF tables at the end of the file converge from a head`() {
+        val elf = java.io.File("../parsing/native-fixtures/test-data/elf/sample.elf").readBytes()
+        val whole = elf.toCommonByteBuffer().asLargeBytes()
+        val full = assertIs<ElfBinaryProvider>(createBinaryProvider(elf.toCommonByteBuffer(), "sample.elf"))
+        val (sparse, rounds, _) = converge<ElfBinaryProvider>(whole, "sample.elf", { p ->
+            p.sections; p.symbols; p.programHeaders; p.structureRanges
+        }, headSize = 256)
+        assertEquals(full.sections!!.map { it.name }, sparse.sections!!.map { it.name })
+        assertEquals(full.symbols!!.map { it.name }, sparse.symbols!!.map { it.name })
+        assertEquals(full.structureRanges, sparse.structureRanges)
+        assertTrue(rounds in 1..8, "$rounds rounds")
     }
 }

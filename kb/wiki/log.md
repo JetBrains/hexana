@@ -179,3 +179,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-06 — `entities/partial-views` — rewritten: whole-file hex views (IntelliJ mmap, VS Code paged + scaled scroll), 64-bit ranges/selections, ELF/Mach-O/ZIP64/tar/PDB/Parquet/Arrow parse files over 2 GiB; large files read-only.
 - 2026-11-09 — `entities/partial-views` — large-file notice moved from the IntelliJ notification bar and VS Code strip into an "Editing disabled" toolbar badge with the full notice as tooltip.
 - 2026-11-09 — `entities/partial-views` — `ParseCoverage`: large-file warnings only when the parser missed structures (PE overlay, pcap cap, unknown formats covered); `ar` archives parse past 2 GiB.
+- 2026-11-09 — `entities/partial-views` — VS Code: whole-file parsers run over `SparseLargeBytes` (zero-filled misses, fetched in rounds by `StructureBytesFetcher`, 256 MiB / 64-round caps).

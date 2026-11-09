@@ -6,6 +6,8 @@ import org.jetbrains.hexana.providers.macho.machODebugSectionSpan
 import org.jetbrains.hexana.io.readBytes
 import org.jetbrains.hexana.io.asLargeBytes
 import org.jetbrains.hexana.io.LargeBytes
+import org.jetbrains.hexana.io.BytesNotLoadedException
+import org.jetbrains.hexana.io.isFullyLoaded
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.io.containsRange
 import org.jetbrains.hexana.io.toCommonByteBuffer
@@ -458,7 +460,12 @@ class ElfBinaryProvider(
         val range = section.contentRange ?: return null
         if (range.end <= bytes.size) return bytes to section
         if (range.length > Int.MAX_VALUE) return null
-        val window = source.window(range.start, range.length.toInt())
+        // A host still fetching the file (see SparseLargeBytes) may not have a large section yet.
+        val window = try {
+            source.window(range.start, range.length.toInt())
+        } catch (_: BytesNotLoadedException) {
+            return null
+        }
         return window to section.copy(contentRange = NativeByteRange(0, range.length.toInt()))
     }
 
@@ -480,7 +487,13 @@ class ElfBinaryProvider(
             // decoder is Int-addressed. Debug info larger than a window is not resolved.
             val length = span.last - span.first + 1
             if (length > Int.MAX_VALUE) return@lazy null
-            NativeDwarfSourceLocationProvider(source.window(span.first, length.toInt()), ElfDwarfAccessor(sec, base = span.first))
+            // A host still fetching the file (see SparseLargeBytes) may not have them yet.
+            val window = try {
+                source.window(span.first, length.toInt())
+            } catch (_: BytesNotLoadedException) {
+                return@lazy null
+            }
+            NativeDwarfSourceLocationProvider(window, ElfDwarfAccessor(sec, base = span.first))
         }
     }
 
@@ -492,8 +505,8 @@ class ElfBinaryProvider(
     }
 
     override val sizeAnalysis: BinarySizeNode? by lazy {
-        // Size nodes are Int-sized; a file past 2 GiB has no size tree rather than a wrong one.
-        if (source.size > Int.MAX_VALUE) return@lazy null
+        // Size nodes describe [bytes]; a file larger than them has no size tree rather than a wrong one.
+        if (source.size > bytes.size) return@lazy null
         val secs = sections?.takeIf { it.isNotEmpty() } ?: return@lazy null
         val totalSize = bytes.size
         val children = secs.map { sec ->
@@ -623,7 +636,13 @@ class MachOBinaryProvider(
             // decoder is Int-addressed. Debug info larger than a window is not resolved.
             val length = span.last - span.first + 1
             if (length > Int.MAX_VALUE) return@lazy null
-            NativeDwarfSourceLocationProvider(source.window(span.first, length.toInt()), MachODwarfAccessor(sec, base = span.first))
+            // A host still fetching the file (see SparseLargeBytes) may not have them yet.
+            val window = try {
+                source.window(span.first, length.toInt())
+            } catch (_: BytesNotLoadedException) {
+                return@lazy null
+            }
+            NativeDwarfSourceLocationProvider(window, MachODwarfAccessor(sec, base = span.first))
         }
     }
 
@@ -650,8 +669,8 @@ class MachOBinaryProvider(
     }
 
     override val sizeAnalysis: BinarySizeNode? by lazy {
-        // Size nodes are Int-sized; a file past 2 GiB has no size tree rather than a wrong one.
-        if (source.size > Int.MAX_VALUE) return@lazy null
+        // Size nodes describe [bytes]; a file larger than them has no size tree rather than a wrong one.
+        if (source.size > bytes.size) return@lazy null
         val segs = segments?.takeIf { it.isNotEmpty() } ?: return@lazy null
         val totalSize = bytes.size
         val children = segs.map { seg ->
@@ -714,12 +733,19 @@ class FatMachOBinaryProvider(
 
     /**
      * [arch]'s slice as a buffer, read from the whole file, for opening it on its own; `null`
-     * for a slice without a valid range or one larger than a buffer holds.
+     * for a slice without a valid range, one larger than a buffer holds, or one a host that is
+     * still fetching the file does not have.
      */
     fun sliceBytes(arch: MachOFatArch): CommonByteBuffer? {
         val range = arch.sliceRange ?: return null
         if (range.length > Int.MAX_VALUE) return null
-        return source.window(range.start, range.length.toInt())
+        // A host still fetching the file (see SparseLargeBytes) may not have the slice.
+        if (!source.isFullyLoaded(range.start, range.end)) return null
+        return try {
+            source.window(range.start, range.length.toInt())
+        } catch (_: BytesNotLoadedException) {
+            null
+        }
     }
 
     /**
@@ -744,8 +770,8 @@ class FatMachOBinaryProvider(
     }
 
     override val sizeAnalysis: BinarySizeNode? by lazy {
-        // Size nodes are Int-sized; a file past 2 GiB has no size tree rather than a wrong one.
-        if (source.size > Int.MAX_VALUE) return@lazy null
+        // Size nodes describe [bytes]; a file larger than them has no size tree rather than a wrong one.
+        if (source.size > bytes.size) return@lazy null
         val archs = architectures?.takeIf { it.isNotEmpty() } ?: return@lazy null
         val totalSize = bytes.size
         val children = archs.map { arch ->
@@ -1076,12 +1102,14 @@ class ArchiveBinaryProvider(
     val members: List<PeArchiveMember> get() = archiveFile?.members.orEmpty()
 
     /**
-     * The payload of [member], or `null` when it is too large for one buffer (past 2 GiB);
-     * a view where the source allows, so classifying or opening a member copies nothing.
+     * The payload of [member], or `null` when it is too large for one buffer (past 2 GiB) or the
+     * host has not fetched it ([isFullyLoaded]; VS Code then has its extension read it from disk).
+     * A view where the source allows, so classifying or opening a member copies nothing.
      */
     fun memberBytes(member: PeArchiveMember): CommonByteBuffer? {
         val range = member.contentRange
         if (range.length > MAX_BINARY_WINDOW_BYTES || !source.containsRange(range.start, range.length)) return null
+        if (!source.isFullyLoaded(range.start, range.end)) return null
         return source.window(range.start, range.length.toInt())
     }
 
@@ -1089,12 +1117,13 @@ class ArchiveBinaryProvider(
     fun classifyMember(member: PeArchiveMember): ArchiveMemberClassification {
         val range = member.contentRange
         if (range.length < 4 || !source.containsRange(range.start, range.length)) return ArchiveMemberClassification.UNKNOWN
-        // A member too large to view whole is classified from its head; it cannot be opened.
-        val view = memberBytes(member) ?: return classifyArchiveMember(
-            source.window(range.start, MAX_BINARY_WINDOW_BYTES),
-            NativeByteRange(0, MAX_BINARY_WINDOW_BYTES),
-        ).copy(openable = false)
-        return classifyArchiveMember(view, NativeByteRange(0, view.size))
+        memberBytes(member)?.let { return classifyArchiveMember(it, NativeByteRange(0, it.size)) }
+        // Too large to view whole, or not fetched: classified from its head, which is all the
+        // ELF, Mach-O and PE headers need (COFF objects, checked against their size, may not be
+        // recognized). A member over the buffer limit cannot be opened.
+        val prefix = minOf(range.length, MAX_CLASSIFIED_PREFIX).toInt()
+        val classification = classifyArchiveMember(source.window(range.start, prefix), NativeByteRange(0, prefix))
+        return if (range.length > MAX_BINARY_WINDOW_BYTES) classification.copy(openable = false) else classification
     }
 
     /**
@@ -1115,6 +1144,9 @@ class ArchiveBinaryProvider(
         }
     }
 }
+
+/** How much of a member [ArchiveBinaryProvider.classifyMember] reads when it cannot view all of it. */
+private const val MAX_CLASSIFIED_PREFIX = 64L * 1024
 
 /** Coarse classification of a static-library member, derived from its leading magic bytes. */
 enum class ArchiveMemberKind {

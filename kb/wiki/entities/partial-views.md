@@ -67,7 +67,8 @@ coverage)` / `partialViewNotice(loaded, fileSize, coverage)` and the label from 
 
 - Default `prefixCoverage`: `WholeFile` iff `fileSize >= fileLength` — so whole-file parsers (ELF,
   Mach-O, ZIP, tar, ar, PDB, Parquet, Arrow file) and model headers (GGUF, safetensors, told the real
-  size) are covered with no override. In VS Code those parsers get only the head, so they are `Prefix`.
+  size) are covered with no override. In VS Code they read the whole file through fetched bytes (see
+  below) and are covered once the fetch rounds finish.
 - `GenericBinaryProvider` itself (unknown format; not its many format subclasses): `WholeFile`.
 - PE: `WholeFile` when the last section's raw data, the certificate table (its "RVA" is a file
   offset), debug raw data and the COFF symbol table end within the parsed bytes — an installer's
@@ -121,6 +122,37 @@ coverage)` / `partialViewNotice(loaded, fileSize, coverage)` and the label from 
   (`editingDisabledNotice`: `largeFileNotice` with a paged hex view, else `partialViewNotice`, as the
   `title` tooltip); no notice strip above the hex view.
 
+## VS Code: whole-file parsers over fetched bytes (`SparseLargeBytes`)
+
+The webview holds only the head (`hexana.maxLoadedFileSizeMB`) and cannot read the file
+synchronously, so the 64-bit parsers get a `SparseLargeBytes` (encdec) as their `source`: the head
+plus fetched chunks. A read of bytes not held **returns zeros** and records a page-aligned miss
+(widened by the run it follows, ≤ 4 MiB, so sequential walks double instead of costing a round per
+page; one record for a byte-by-byte walk). Zeros, not an exception, because provider lazies such as
+`ElfBinaryProvider.sections` do not catch and would crash composition; zero counts/sizes come out as
+empty tables. Only a `window` > 64 MiB over missing bytes throws `BytesNotLoadedException` (DWARF
+spans, `sectionView`, fat slices catch it → `null`).
+
+`web-ui` `StructureBytesFetcher` runs the rounds: `onMiss` schedules a round (setTimeout, never a
+state write in composition) → fetch the misses (+ the last 1 MiB in the first round that misses
+anything; a head-only provider misses nothing and is never rebuilt) in ≤ 16 MiB requests
+(`readByteRangeFromHost`, the extension's `MAX_RANGE_BYTES`) → `bytes = current.withChunks(...)`
+(state) → `Main.kt` rebuilds the provider keyed on it. Caps: 256 MiB fetched, 64 rounds; past them,
+or on a failed read, ranges are declined (not retried) and `isIncomplete`. `coverageOverride` is a
+`Prefix` while fetching or incomplete; `BinaryEditorContent` prefers a provider's own `Prefix`.
+`tabStateKey = buffer` keeps the selected tab across rebuilds.
+
+Zero-filled bytes must never reach the user: `LargeBytes.isFullyLoaded(start, end)` guards
+`ArchiveBinaryProvider.memberBytes` (VS Code then opens the member via `host.openTarEntry`, a raw range
+read by the extension) and `FatMachOBinaryProvider.sliceBytes`; `classifyMember` classifies a member
+it cannot view from a 64 KiB prefix. ZIP/tar entries were already extracted by the extension from disk.
+Invariant change: in VS Code `source.size` can be ≤ 2 GiB while `bytes` is only the head, so the size
+trees check `source.size > bytes.size` (not `> Int.MAX_VALUE`).
+
+Tests: encdec `SparseLargeBytesTest` (all targets); plugins-shared `LargeArchivesTest` runs ZIP64, tar,
+`ar` and an ELF through the rounds from a 4 KiB / 256-byte head and compares with the full parse;
+web-ui `StructureBytesFetcherTest`.
+
 ## Tests (all sparse files — nothing big is written)
 
 encdec `MappedFileBytesTest` (3 GiB, chunk boundaries, large windows), `LargeBytesSearchTest`;
@@ -135,4 +167,5 @@ compiled by `:webapp:compileParserWorkerKotlinJs`, not `compileKotlinJs`.
 ## Not done
 
 Editing large files; MCP/CLI (own caps); scripting `binary.size` is the parsed size; webapp (50 MB);
+VS Code opening a fat Mach-O slice past the head (no raw-range fallback yet);
 DWARF larger than one 2 GiB window; native-image detection past the head.

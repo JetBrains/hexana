@@ -778,10 +778,16 @@ private fun enrichArchiveMembersTab(
         rowClickAction = { index ->
             val member = members[index]
             val cls = classifications[index]
-            val bytes = if (cls.openable) provider.memberBytes(member)?.toByteArray() else null
-            if (bytes != null) {
+            if (cls.openable) {
                 val baseName = member.name.substringAfterLast('/').substringAfterLast('\\').ifEmpty { member.name }
-                host.openModule(member.index, baseName, bytes)
+                val bytes = provider.memberBytes(member)?.toByteArray()
+                if (bytes != null) {
+                    host.openModule(member.index, baseName, bytes)
+                } else {
+                    // A member of a large archive the webview holds only part of: stored raw,
+                    // so the extension reads it from disk like a tar entry.
+                    host.openTarEntry(baseName, member.contentRange.start, member.contentRange.length)
+                }
             }
         },
         dynamicContextMenuProvider = tab.dynamicContextMenuProvider,
