@@ -411,23 +411,13 @@ fun BinaryEditorContent(
             isDecompressed = isDecompressed,
             sslKeyLogSessionCount = sslKeyLogSessionCount,
             parserChoice = parserChoice,
+            editingDisabledNotice = if (isPartial && partialFileSize != null) {
+                // With the whole file in the hex view only the tabs are limited to the head.
+                if (hexBytes != null) largeFileNotice(buffer.size, partialFileSize) else partialViewNotice(buffer.size, partialFileSize)
+            } else {
+                null
+            },
         )
-        if (isPartial && partialFileSize != null) {
-            Div({
-                classes("hexana-partial-view-notice")
-                style {
-                    property("padding", "4px 8px")
-                    property("font-size", "12px")
-                    property("background", "var(--vscode-inputValidation-warningBackground, #5A4A2A)")
-                    property("color", "var(--vscode-editorWarning-foreground, #E0C070)")
-                }
-            }) {
-                Text(
-                    // With the whole file in the hex view only the tabs are limited to the head.
-                    if (hexBytes != null) largeFileNotice(buffer.size, partialFileSize) else partialViewNotice(buffer.size, partialFileSize),
-                )
-            }
-        }
         Div({
             style {
                 display(DisplayStyle.Flex)

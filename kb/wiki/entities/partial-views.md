@@ -68,7 +68,9 @@ Virtualized native disassembly decodes each function from `wholeFile.window(...)
   for paths that need the whole file in one buffer (running Wasm, diff); the structural diff shows it.
 - Read-only: `hexEditDoc = null` for partial views; `PieceTableDocument.originalHash` is now lazy (it
   hashed the whole original on open).
-- `PartialViewNotification` (decided from `file.length`) shows `largeFileNotice`.
+- No editor notification bar: `FileDescriptionBar` shows an "Editing disabled" badge after the parser
+  chooser when `fileSize != null`, with `largeFileNotice` as its tooltip (2026-11-09; replaced the
+  former `PartialViewNotification`).
 
 ## VS Code host
 
@@ -90,6 +92,9 @@ Virtualized native disassembly decodes each function from `wholeFile.window(...)
 - `messageBytesOrNull` views a posted `Uint8Array` in place; test the type on an expression
   (`payload.unsafeCast<Any>() is Uint8Array`) — a smart cast on the `dynamic` broke the array path.
 - Webapp parser-worker wire protocol stays `Int` (50 MB cap); it narrows bounded offsets.
+- `EditorToolbar` shows the same "Editing disabled" badge after the format badge
+  (`editingDisabledNotice`: `largeFileNotice` with a paged hex view, else `partialViewNotice`, as the
+  `title` tooltip); no notice strip above the hex view.
 
 ## Tests (all sparse files — nothing big is written)
 

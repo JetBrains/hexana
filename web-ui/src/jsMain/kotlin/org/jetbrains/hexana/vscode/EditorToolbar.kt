@@ -102,6 +102,11 @@ fun EditorToolbar(
     sslKeyLogSessionCount: Int = 0,
     /** Turns the format badge into a parser picker; see [ParserChoice]. */
     parserChoice: ParserChoice? = null,
+    /**
+     * Why editing is off for a file larger than what is loaded or parsed; shown as an "Editing
+     * disabled" badge beside the format badge, with this text as its tooltip. `null` hides it.
+     */
+    editingDisabledNotice: String? = null,
 ) {
     val isSubmodule = parentFileName != null || isSubmoduleFileName(fileName)
 
@@ -330,6 +335,10 @@ fun EditorToolbar(
                 ),
                 choice = parserChoice,
             )
+
+            if (editingDisabledNotice != null) {
+                EditingDisabledBadge(editingDisabledNotice)
+            }
 
             if (isSubmodule) {
                 val parentName = parentFileName ?: parentFileNameOf(fileName) ?: "component"
@@ -669,6 +678,29 @@ private fun ProposalTooltipPopover(lines: List<ProposalTooltipLine>) {
                 Text(line.text)
             }
         }
+    }
+}
+
+/**
+ * "Editing disabled" for a file larger than the editor loads or parses, the full [notice] in
+ * its tooltip. Mirrors `EditingDisabledBadge` in `FileDescriptionBar.kt`.
+ */
+@Composable
+private fun EditingDisabledBadge(notice: String) {
+    Span({
+        classes("hexana-editing-disabled-badge")
+        attr("title", notice)
+        style {
+            property("padding", "2px 8px")
+            property("border-radius", "4px")
+            property("font-size", "11px")
+            property("white-space", "nowrap")
+            property("background", "var(--vscode-inputValidation-warningBackground, #5A4A2A)")
+            property("color", "var(--vscode-editorWarning-foreground, #E0C070)")
+        }
+    }) {
+        Span({ style { property("margin-right", "4px") } }) { Text("\u26A0") }
+        Text("Editing disabled")
     }
 }
 
