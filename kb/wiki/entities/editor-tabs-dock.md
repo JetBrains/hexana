@@ -20,5 +20,13 @@ The analysis tabs of the IntelliJ single-file editor (`ui/BinaryEditorView.kt`) 
   title / 12 chars after the weight split); below it, header and rows scroll sideways together (`horizontalScroll`
   on one column holding both), with the scrollbars outside the scrolled content. Header titles are single-line with
   ellipsis. Applies to every table (flat and tree), not just docked ones.
+- **Virtualized listings** (`ui/panel/VirtualizedChunkPanel.kt`: IL, Smali, class files, WAT, native disassembly)
+  had the same problem: header and body rows wrapped to the pane width (type headers letter by letter). Rows now keep
+  their natural width: the `LazyColumn` sits in a `horizontalScroll` and is `max(viewport, widest row)` wide. Every
+  item, including those the panels' `elementContent` emits, goes through `WidthTrackingLazyListScope`, which wraps it
+  in `naturalWidthRow` — reads the row's max intrinsic width into `ChunkRowWidthTracker.widest` (grows only, reset
+  with the chunk tree) and lays it out at the list's width so backgrounds span it. Rows that cannot answer intrinsics
+  (subcompose/lazy content) throw `IllegalStateException`, which is caught: they just take the list width. Cost: one
+  intrinsic measurement per composed row.
 - Not covered: the diff editor (`BinaryDiffEditorView`) and VS Code keep their bottom layout.
 - Manual QA: `idea-plugin/QA/04-analysis-tabs.md` 4.17.

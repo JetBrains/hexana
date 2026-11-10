@@ -1,6 +1,16 @@
 package org.jetbrains.hexana.ui.panel
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyItemScope
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Constraints
+import org.jetbrains.jewel.ui.component.HorizontalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -322,8 +332,21 @@ internal fun VirtualizedChunkPanel(
         }
         toolbar?.invoke()
         SelectionContainer(modifier = Modifier.fillMaxWidth().weight(1f)) {
-          Box(modifier = Modifier.fillMaxSize()) {
-            LazyColumn(state = effectiveListState, modifier = Modifier.fillMaxSize()) {
+          // Rows keep their natural width and the listing scrolls sideways when it is wider than
+          // the pane (e.g. tabs docked beside the hex view), instead of wrapping each row into a
+          // narrow column. The list is as wide as the widest row laid out so far.
+          val rowWidths = remember(chunkTree) { ChunkRowWidthTracker() }
+          val horizontalScroll = rememberScrollState()
+          BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val viewportPx = constraints.maxWidth
+            val contentPx = maxOf(viewportPx, rowWidths.widest)
+            val density = LocalDensity.current
+            Box(modifier = Modifier.fillMaxSize().horizontalScroll(horizontalScroll)) {
+            LazyColumn(
+                state = effectiveListState,
+                modifier = Modifier.width(with(density) { contentPx.toDp() }).fillMaxHeight(),
+            ) {
+            with(WidthTrackingLazyListScope(this, rowWidths)) {
                 // `hidden` tracks the nearest section header's fold state (flat).
                 // `ancestorHidden` is set when a parent-level header (per
                 // sectionParent) is folded, hiding all child headers + elements.
@@ -373,7 +396,7 @@ internal fun VirtualizedChunkPanel(
                         is BinaryChunk.Element -> {
                             if (!hidden && !ancestorHidden) {
                                 if (elementContent != null) {
-                                    with(this@LazyColumn) { elementContent(chunk, navigator) }
+                                    elementContent(chunk, navigator)
                                 } else {
                                     item(key = chunk.id) {
                                         DefaultElementRow(chunk, config.colorForToken)
@@ -383,8 +406,14 @@ internal fun VirtualizedChunkPanel(
                         }
                     }
                 }
-            }
+            } // with
+            } // LazyColumn
+            } // horizontal scroll
+            // Outside the scrolled content, so they stay on the visible edges.
             VerticalScrollbar(effectiveListState, modifier = Modifier.align(Alignment.CenterEnd))
+            if (contentPx > viewportPx) {
+                HorizontalScrollbar(horizontalScroll, modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth())
+            }
           }
         }
         ChunkPanelStatusBar(
@@ -396,6 +425,77 @@ internal fun VirtualizedChunkPanel(
         )
     }
     } // CompositionLocalProvider
+}
+
+// ---------------------------------------------------------------------------
+// Row widths (horizontal scrolling)
+// ---------------------------------------------------------------------------
+
+/** The widest natural row width, in px, of a listing; only grows, reset with the chunk tree. */
+private class ChunkRowWidthTracker {
+    var widest by mutableIntStateOf(0)
+}
+
+/**
+ * Lays a row out at the listing's width (so backgrounds and `fillMaxWidth` rows span it) and
+ * reports the row's natural, unwrapped width — its max intrinsic width — so the listing can
+ * grow to fit it. A row whose content cannot answer intrinsics (a lazy or subcompose layout)
+ * just takes the listing's width.
+ */
+private fun Modifier.naturalWidthRow(tracker: ChunkRowWidthTracker): Modifier = layout { measurable, constraints ->
+    val natural = try {
+        measurable.maxIntrinsicWidth(constraints.maxHeight)
+    } catch (_: IllegalStateException) {
+        0
+    }
+    if (natural > tracker.widest) tracker.widest = natural
+    val width = if (constraints.hasBoundedWidth) constraints.maxWidth else maxOf(natural, constraints.minWidth)
+    val placeable = measurable.measure(
+        Constraints(minWidth = width, maxWidth = width, minHeight = constraints.minHeight, maxHeight = constraints.maxHeight),
+    )
+    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+}
+
+/**
+ * A [LazyListScope] that wraps every item — including those the panels' `elementContent`
+ * emits — in [naturalWidthRow], so the listing learns how wide its rows are.
+ */
+private class WidthTrackingLazyListScope(
+    private val delegate: LazyListScope,
+    tracker: ChunkRowWidthTracker,
+) : LazyListScope {
+    /** Built once; item lambdas must not reach this scope's members (the lazy DSL marker forbids it). */
+    private val rowModifier: Modifier = Modifier.naturalWidthRow(tracker)
+
+    override fun item(key: Any?, contentType: Any?, content: @Composable LazyItemScope.() -> Unit) {
+        val modifier = rowModifier
+        delegate.item(key, contentType) {
+            val itemScope = this
+            Box(modifier = modifier) { itemScope.content() }
+        }
+    }
+
+    override fun items(
+        count: Int,
+        key: ((index: Int) -> Any)?,
+        contentType: (index: Int) -> Any?,
+        itemContent: @Composable LazyItemScope.(index: Int) -> Unit,
+    ) {
+        val modifier = rowModifier
+        delegate.items(count, key, contentType) { index ->
+            val itemScope = this
+            Box(modifier = modifier) { itemScope.itemContent(index) }
+        }
+    }
+
+    @ExperimentalFoundationApi
+    override fun stickyHeader(key: Any?, contentType: Any?, content: @Composable LazyItemScope.(Int) -> Unit) {
+        val modifier = rowModifier
+        delegate.stickyHeader(key, contentType) { index ->
+            val itemScope = this
+            Box(modifier = modifier) { itemScope.content(index) }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

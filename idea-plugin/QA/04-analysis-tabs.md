@@ -77,5 +77,7 @@ binary, then restart the IDE.
 ellipsized, the list scrolls when it does not fit). The divider resizes the two sides; expand/collapse still works. The
 second file and the restarted IDE open with the tabs on the right too. With the panel narrow, tables (e.g. a .NET
 assembly's **Methods**) keep readable single-line headers and scroll horizontally, header and rows together, instead of
-squeezing or overlapping columns. Clicking the button again (**Move tabs below the
+squeezing or overlapping columns. Virtualized listings (**IL Disassembly**, **WAT (virtualized)**, Smali, native
+**Disassembly**) keep each header and line on one row and scroll horizontally too; fold/unfold, search navigation and
+text selection still work. Clicking the button again (**Move tabs below the
 hex view**) restores the bottom layout with the horizontal tab strip, in every open editor.

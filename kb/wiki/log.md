@@ -188,3 +188,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-10 — `entities/binary-diff-provider` — .NET diff review fixes: qualified-name resolver (`ClrMetadata.qualifiedTokens`) for pairing/fingerprints, token-kind masking, cross-type moves mark both types.
 - 2026-11-10 — `entities/editor-tabs-dock` — IntelliJ editor tabs panel can dock right of the hex view with a vertical tab list (`HexanaSettings.tabsPanelOnRight`, `HorizontalSplitPanel`).
 - 2026-11-10 — `entities/editor-tabs-dock` — IntelliJ `Table` gets a minimum content width and horizontal scrolling in narrow panes; single-line header titles.
+- 2026-11-10 — `entities/editor-tabs-dock` — `VirtualizedChunkPanel` rows keep natural width; listing scrolls horizontally (`WidthTrackingLazyListScope`, `naturalWidthRow`).
