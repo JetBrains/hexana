@@ -85,4 +85,25 @@ class StructureBytesFetcherTest {
             afterReplies { assertEquals(2, host.requests.size, "the page and the tail, once") }
         }.then { }
     }
+
+    @Test
+    fun aMissInTheTailIsFetchedAndCountedOnce(): Promise<Unit> {
+        val host = FakeHost()
+        val fetcher = fetcher(host)
+        // ELF keeps its section headers at the end: the first miss is already in the tail.
+        fetcher.bytes[size - 100]
+        val tail = 1024 * 1024
+        assertEquals(listOf(size - tail to tail), host.requests)
+        assertEquals(tail.toLong(), fetcher.fetchedBytes)
+        return afterReplies { assertEquals((size - 100).toByte(), fetcher.bytes[size - 100]) }
+    }
+
+    @Test
+    fun aFailedReadGivesItsBudgetBack(): Promise<Unit> {
+        val host = FakeHost(fail = true)
+        val fetcher = fetcher(host)
+        fetcher.bytes[page * 100]
+        assertTrue(fetcher.fetchedBytes > 0, "reserved while in flight")
+        return afterReplies { assertEquals(0L, fetcher.fetchedBytes, "nothing was fetched") }
+    }
 }

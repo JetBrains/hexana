@@ -1006,7 +1006,7 @@ class PeBinaryProvider(
             val debugData = debugEntries.orEmpty()
                 .filter { it.pointerToRawData != 0u }
                 .maxOfOrNull { it.pointerToRawData.toLong() + it.sizeOfData.toLong() } ?: 0L
-            maxOf(peSectionsEnd(secs, withRelocations = false), certificates, debugData, coffSymbolTableEnd(header))
+            maxOf(peSectionsEnd(secs, withRelocations = false), certificates, debugData, coffSymbolTableEnd(header, bytes))
         }
         return coverageByStructuresEnd(fileLength, end, "PE sections and tables")
     }
@@ -1070,7 +1070,7 @@ class CoffBinaryProvider(
         val end = if (header == null || secs == null) {
             null
         } else {
-            maxOf(peSectionsEnd(secs, withRelocations = true), coffSymbolTableEnd(header))
+            maxOf(peSectionsEnd(secs, withRelocations = true), coffSymbolTableEnd(header, bytes))
         }
         return coverageByStructuresEnd(fileLength, end, "COFF sections and symbols")
     }
@@ -1228,15 +1228,19 @@ private fun peSectionsEnd(sections: List<PeSection>, withRelocations: Boolean): 
 } ?: 0L
 
 /**
- * Where the COFF symbol table ends, counting the 4-byte size of the string table after it
- * (its contents are only known once that size is read, which needs it to be within the bytes).
+ * Where the COFF symbol table and the string table after it end. The string table starts with its
+ * own size (which counts those 4 bytes); when that field lies within [bytes] its contents are
+ * counted too, else the table ends past the field, which is already past what [bytes] cover.
  */
-private fun coffSymbolTableEnd(header: PeCoffHeader): Long =
-    if (header.symbolTableOffset == 0u || header.symbolCount == 0u) {
-        0L
-    } else {
-        header.symbolTableOffset.toLong() + header.symbolCount.toLong() * COFF_SYMBOL_SIZE + 4
-    }
+private fun coffSymbolTableEnd(header: PeCoffHeader, bytes: CommonByteBuffer): Long {
+    if (header.symbolTableOffset == 0u || header.symbolCount == 0u) return 0L
+    val stringTable = header.symbolTableOffset.toLong() + header.symbolCount.toLong() * COFF_SYMBOL_SIZE
+    if (stringTable + 4 > bytes.size) return stringTable + 4
+    val at = stringTable.toInt()
+    val declared = (0 until 4).fold(0L) { acc, i -> acc or ((bytes[at + i].toLong() and 0xFF) shl (8 * i)) }
+    // A size below 4 is malformed; the field itself is still there.
+    return stringTable + maxOf(declared, 4L)
+}
 
 /**
  * Resolves what magic bytes alone can identify. [fileSize] is the size of the whole file when
@@ -1254,6 +1258,8 @@ fun nativeOrGenericBinaryProvider(
     source: LargeBytes? = null,
 ): BinaryProvider {
     val totalSize = source?.size ?: fileSize ?: sharedBytes.size.toLong()
+    // Only computed when the formats checked before it did not match.
+    val safetensorsHeader = lazy { SafetensorsBinaryProvider.headerBytes(sharedBytes, source) }
     return when {
         ZipBinaryProvider.isZip(sharedBytes) -> ZipBinaryProvider(sharedBytes, source ?: sharedBytes.asLargeBytes())
         TarBinaryProvider.isTar(sharedBytes) -> TarBinaryProvider(sharedBytes, source ?: sharedBytes.asLargeBytes())
@@ -1262,8 +1268,8 @@ fun nativeOrGenericBinaryProvider(
         ArscBinaryProvider.isArscFile(sharedBytes) -> ArscBinaryProvider(sharedBytes.duplicate().position(0))
         ClrResourcesBinaryProvider.isResourcesFile(sharedBytes) -> ClrResourcesBinaryProvider(sharedBytes.duplicate().position(0))
         GgufBinaryProvider.isGgufFile(sharedBytes) -> GgufBinaryProvider(sharedBytes.duplicate().position(0), totalSize)
-        SafetensorsBinaryProvider.isSafetensorsFile(sharedBytes, totalSize) ->
-            SafetensorsBinaryProvider(sharedBytes.duplicate().position(0), totalSize)
+        safetensorsHeader.value != null ->
+            SafetensorsBinaryProvider(sharedBytes.duplicate().position(0), totalSize, safetensorsHeader.value!!)
         PdbBinaryProvider.isPdbFile(sharedBytes) -> PdbBinaryProvider(sharedBytes.duplicate().position(0), source ?: sharedBytes.asLargeBytes())
         PortablePdbBinaryProvider.isPortablePdbFile(sharedBytes) -> PortablePdbBinaryProvider(sharedBytes.duplicate().position(0))
         PcapBinaryProvider.isPcapFile(sharedBytes) ->

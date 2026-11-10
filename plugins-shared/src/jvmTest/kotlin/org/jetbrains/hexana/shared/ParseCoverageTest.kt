@@ -3,6 +3,7 @@ package org.jetbrains.hexana.shared
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.pcap.MAX_CAPTURE_PACKETS
 import org.jetbrains.hexana.providers.ArchiveBinaryProvider
+import org.jetbrains.hexana.providers.CoffBinaryProvider
 import org.jetbrains.hexana.providers.GenericBinaryProvider
 import org.jetbrains.hexana.providers.ParseCoverage
 import org.jetbrains.hexana.providers.PcapBinaryProvider
@@ -52,6 +53,20 @@ class ParseCoverageTest {
             createBinaryProvider(exe.copyOf(lastSectionEnd.toInt() - 1).toCommonByteBuffer(), "sample.exe"),
         )
         assertEquals(ParseCoverage.Prefix(lastSectionEnd - 1, "PE sections and tables"), cut.parseCoverage(far))
+    }
+
+    @Test
+    fun `a COFF string table cut after its size field is not covered`() {
+        val obj = File("../parsing/native-fixtures/test-data/pe/sample.coff").readBytes()
+        val whole = assertIs<CoffBinaryProvider>(createBinaryProvider(obj.toCommonByteBuffer(), "sample.obj"))
+        assertEquals(ParseCoverage.WholeFile, whole.parseCoverage(far))
+
+        val header = whole.coffHeader!!
+        val stringTable = (header.symbolTableOffset.toLong() + header.symbolCount.toLong() * 18).toInt()
+        assertTrue(obj.size > stringTable + 4, "the fixture's string table has names")
+        // The size field is loaded but the names it counts are not: symbol names would be lost.
+        val cut = assertIs<CoffBinaryProvider>(createBinaryProvider(obj.copyOf(stringTable + 4).toCommonByteBuffer(), "sample.obj"))
+        assertEquals(ParseCoverage.Prefix(stringTable + 4L, "COFF sections and symbols"), cut.parseCoverage(far))
     }
 
     private fun capture(packets: Int): ByteArray =

@@ -49,7 +49,7 @@ source for ELF / Mach-O / fat Mach-O (else `bytes`).
 | ZIP64, tar | `ZipParser`, `TarParser` | entry extraction (`decompressZipEntry`/`extractTarEntry` take `LargeBytes`) |
 | Windows PDB | `MsfStream` (block × size as Long) | — (companion PDBs next to a PE stay capped by `MAX_AUTOMATIC_PDB_SIZE`) |
 | Parquet, Arrow file | footer read from the end of `source` | preview chunk / first batch through a window with rebased page offsets; **value provenance shifted back by the window base** |
-| GGUF, safetensors | header only; tensor ranges validated against `fileSize` | — |
+| GGUF, safetensors | header only; tensor ranges validated against `fileSize`. A safetensors header past the head is read from `source` (`SafetensorsBinaryProvider.headerBytes`: exactly `8 + n`, so a sparse source fetches just it); a GGUF header past the head is not fetched (its length is only known by parsing, and zero-filled sparse bytes parse as plausible data) | — |
 | `ar` (static libraries) | `PeParser.parseArchive(LargeBytes)` (10-digit sizes → `ULong`; a member cut off by the end of the bytes ends the listing with an `archive.truncated` diagnostic instead of failing) | members via `ArchiveBinaryProvider.memberBytes`/`classifyMember` (a member > `MAX_BINARY_WINDOW_BYTES` is classified from its head and not openable) |
 | PE, COFF, DEX, class, Wasm, pcap (10k-packet cap), Arrow stream | head only | — |
 
@@ -66,13 +66,21 @@ coverage)` / `partialViewNotice(loaded, fileSize, coverage)` and the label from 
 (plugins-shared `PartialView.kt`).
 
 - Default `prefixCoverage`: `WholeFile` iff `fileSize >= fileLength` — so whole-file parsers (ELF,
-  Mach-O, ZIP, tar, ar, PDB, Parquet, Arrow file) and model headers (GGUF, safetensors, told the real
-  size) are covered with no override. In VS Code they read the whole file through fetched bytes (see
+  Mach-O, ZIP, tar, ar, PDB, Parquet, Arrow file) are covered with no override. **A provider that
+  overrides `fileSize` with the whole file's size must override `parseCoverage`** (the default and
+  `coverageByStructuresEnd` would always answer `WholeFile`): GGUF compares `tensorDataOffset` (null
+  unless the header, metadata and tensor infos were all read) with the loaded bytes → else
+  `Prefix("tensor infos")`; safetensors is always `WholeFile` (its header is always read whole). In VS Code they read the whole file through fetched bytes (see
   below) and are covered once the fetch rounds finish.
 - `GenericBinaryProvider` itself (unknown format; not its many format subclasses): `WholeFile`.
 - PE: `WholeFile` when the last section's raw data, the certificate table (its "RVA" is a file
   offset), debug raw data and the COFF symbol table end within the parsed bytes — an installer's
-  overlay past 2 GiB is a blob. COFF objects: sections + relocations + symbol table.
+  overlay past 2 GiB is a blob. COFF objects: sections + relocations + symbol table. The symbol
+  table's end includes the string table's declared contents (its u32 size counts itself) when that
+  field is loaded — counting only the field reported `WholeFile` with the names cut off.
+- Extents read from untrusted metadata (Parquet chunks, Arrow blocks) are checked with
+  `extentFits(start, length, size)` (`LargeFiles.kt`): subtraction, never `start + length`, which a
+  hostile footer can wrap negative into "inside the head".
 - pcap: `WholeFile` once `MAX_CAPTURE_PACKETS` (10k, `parsing/pcap` `PcapFile.kt`) were found in the
   head — a small capture is capped the same way, so reading further would list nothing more. This is
   why pcap was not migrated to `LargeBytes` (its dissectors all read `provider.bytes`).
@@ -90,6 +98,15 @@ coverage)` / `partialViewNotice(loaded, fileSize, coverage)` and the label from 
   `Dispatchers.Default` with chunked `findAll` (≤ 100k highlights, per-cell binary search
   `isInSearchResult`) and `indexOf` from the cursor. Copy is capped at 16 MiB.
 - The Compose v2 `ScrollbarAdapter` is `Double`-based, so ~335M rows scroll fine.
+- **Limit:** rows are lazy-list `Int` indexes, so the view reaches `Int.MAX_VALUE` rows (32 GiB at 16
+  bytes per row). Past that `HexViewer` shows a notice, and jumps/search hits/section arrows use
+  `rowOf(offset)`, which answers `null` rather than a wrapped row. Lifting it needs a scaled 64-bit
+  scroll model like the VS Code `HexScroller`.
+- `findAll` is one chunked pass with one buffer (per-match `indexOf` re-read 1 MiB per hit: ~100 GB
+  for 100k zeros). The search label says `N of 100000+` when capped and "past the first 100000"
+  when the selected match lies beyond the highlights (`searchStatusText`).
+- Opening a TAR entry copies it on `editorScope` (IO), like ZIP entries; `.jit` dumps pass
+  `fileSource` to their `HexViewer`.
 - `toMappedBuffer` / `File.toCommonByteBuffer` throw `FileTooLargeToMapException` (readable message)
   for paths that need the whole file in one buffer (running Wasm, diff); the structural diff shows it.
 - Read-only: `hexEditDoc = null` for partial views; `PieceTableDocument.originalHash` is now lazy (it
@@ -143,7 +160,9 @@ state write in composition) → fetch the misses (+ the last 1 MiB in the first 
 anything; a head-only provider misses nothing and is never rebuilt) in ≤ 16 MiB requests
 (`readByteRangeFromHost`, the extension's `MAX_RANGE_BYTES`) → `bytes = current.withChunks(...)`
 (state) → `Main.kt` rebuilds the provider keyed on it. Caps: 256 MiB fetched, 64 rounds; past them,
-or on a failed read, ranges are declined (not retried) and `isIncomplete`. `coverageOverride` is a
+or on a failed read, ranges are declined (not retried) and `isIncomplete`. The first round merges
+the tail with the misses before budgeting (a miss in the last MiB is fetched and counted once), and
+a failed round gives its reserved bytes back to the budget. `coverageOverride` is a
 `Prefix` while fetching or incomplete; `BinaryEditorContent` prefers a provider's own `Prefix`.
 `tabStateKey = buffer` keeps the selected tab across rebuilds.
 

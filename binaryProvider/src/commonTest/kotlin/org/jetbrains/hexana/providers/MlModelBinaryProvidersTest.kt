@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.providers
 
+import org.jetbrains.hexana.io.asLargeBytes
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -50,6 +51,31 @@ class MlModelBinaryProvidersTest {
         val provider = SafetensorsBinaryProvider(mlTestSafetensors().toCommonByteBuffer())
         assertEquals(listOf("Header Length", "Header (JSON)", "Tensor Data"), provider.structureRanges.map { it.label })
         assertTrue(provider.parsedSafetensors!!.diagnostics.isEmpty())
+    }
+
+    @Test
+    fun `a GGUF header cut off by the loaded head is a prefix`() {
+        val bytes = mlTestGguf()
+        val far = 8L shl 30
+        val whole = GgufBinaryProvider(bytes.toCommonByteBuffer(), far)
+        val headerEnd = assertNotNull(whole.parsedGguf?.tensorDataOffset)
+        // Everything past the tensor infos is tensor data: nothing is missing.
+        assertEquals(ParseCoverage.WholeFile, whole.parseCoverage(far))
+        val cut = GgufBinaryProvider(bytes.copyOf(headerEnd.toInt() - 1).toCommonByteBuffer(), far)
+        assertEquals(ParseCoverage.Prefix(headerEnd - 1, "tensor infos"), cut.parseCoverage(far))
+    }
+
+    @Test
+    fun `a safetensors header past the loaded head is read from the whole file`() {
+        val bytes = mlTestSafetensors()
+        val head = bytes.copyOf(16).toCommonByteBuffer()
+        assertIs<GenericBinaryProvider>(createBinaryProvider(head, "model.safetensors"), "the head alone cannot tell")
+        val provider = assertIs<SafetensorsBinaryProvider>(
+            createBinaryProvider(head, "model.safetensors", source = bytes.toCommonByteBuffer().asLargeBytes()),
+        )
+        assertEquals(mlTestSafetensors().let { SafetensorsBinaryProvider(it.toCommonByteBuffer()) }.parsedSafetensors!!.tensors.map { it.name },
+            provider.parsedSafetensors!!.tensors.map { it.name })
+        assertEquals(ParseCoverage.WholeFile, provider.parseCoverage(bytes.size.toLong()))
     }
 
     @Test

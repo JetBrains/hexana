@@ -43,7 +43,27 @@ class HexSearchState {
 
     val currentMatchStart: Long get() = matchStarts.getOrElse(currentMatchIndex) { -1L }
 
+    /** Bumped by each host search and by [clear]; an answer for an older one is dropped. */
+    private var pagedGeneration = 0
+
+    /**
+     * Starts a search of a paged file on the host. Its answers are detached promises that can
+     * arrive after a newer query's (a slow scan of a large file), so pass the returned generation
+     * to [applyPagedMatch] and [isCurrentPagedSearch].
+     */
+    fun beginPagedSearch(): Int = ++pagedGeneration
+
+    fun isCurrentPagedSearch(generation: Int): Boolean = generation == pagedGeneration
+
+    /** Shows the host's match at [at] (`-1` for none), unless a newer search has begun since [generation]. */
+    fun applyPagedMatch(generation: Int, at: Long) {
+        if (!isCurrentPagedSearch(generation)) return
+        matchStarts = if (at >= 0) listOf(at) else emptyList()
+        currentMatchIndex = if (at >= 0) 0 else -1
+    }
+
     fun clear() {
+        pagedGeneration++
         matchStarts = emptyList()
         matchLength = 0
         currentMatchIndex = -1
@@ -445,10 +465,8 @@ fun HexViewerPanel(
             onSearchFile != null -> {
                 hexSearchState.isPaged = true
                 hexSearchState.matchLength = pattern.size
-                onSearchFile(pattern, 0L, false).then { at ->
-                    hexSearchState.matchStarts = if (at >= 0) listOf(at) else emptyList()
-                    hexSearchState.currentMatchIndex = if (at >= 0) 0 else -1
-                }
+                val generation = hexSearchState.beginPagedSearch()
+                onSearchFile(pattern, 0L, false).then { at -> hexSearchState.applyPagedMatch(generation, at) }
             }
             else -> hexSearchState.clear()
         }
@@ -466,15 +484,14 @@ fun HexViewerPanel(
             reverse -> current - 1
             else -> current + 1
         }
+        val generation = hexSearchState.beginPagedSearch()
         search(pattern, from, reverse).then { at ->
             // Wrap around once, as the in-memory search does.
             if (at >= 0) {
-                hexSearchState.matchStarts = listOf(at)
-                hexSearchState.currentMatchIndex = 0
-            } else {
+                hexSearchState.applyPagedMatch(generation, at)
+            } else if (hexSearchState.isCurrentPagedSearch(generation)) {
                 search(pattern, if (reverse) totalBytes - 1 else 0L, reverse).then { wrapped ->
-                    hexSearchState.matchStarts = if (wrapped >= 0) listOf(wrapped) else emptyList()
-                    hexSearchState.currentMatchIndex = if (wrapped >= 0) 0 else -1
+                    hexSearchState.applyPagedMatch(generation, wrapped)
                 }
             }
         }

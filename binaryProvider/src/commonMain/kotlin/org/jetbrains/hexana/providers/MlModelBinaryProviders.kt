@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.providers
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.io.LargeBytes
 import org.jetbrains.hexana.mlmodel.ModelByteRange
 import org.jetbrains.hexana.mlmodel.gguf.GgufFile
 import org.jetbrains.hexana.mlmodel.gguf.GgufParser
@@ -21,6 +22,19 @@ class GgufBinaryProvider(
 
     /** The parsed file, or `null` when the header is not GGUF. */
     val parsedGguf: GgufFile? by lazy { GgufParser.parse(bytes, fileSize) }
+
+    /**
+     * Everything is listed when the header, metadata and tensor infos end within the loaded bytes;
+     * the rest of the file is tensor data. A header cut off by the head is a prefix. ([fileSize] is
+     * the whole file here, so the inherited [prefixCoverage] would always answer "whole".)
+     */
+    override fun parseCoverage(fileLength: Long): ParseCoverage {
+        val parsed = bytes.size.toLong()
+        if (parsed >= fileLength) return ParseCoverage.WholeFile
+        // Null unless the header, metadata and tensor infos were all read.
+        val headerEnd = parsedGguf?.tensorDataOffset
+        return if (headerEnd != null && headerEnd <= parsed) ParseCoverage.WholeFile else ParseCoverage.Prefix(parsed, "tensor infos")
+    }
 
     override val structureRanges: List<StructureRange> by lazy {
         val file = parsedGguf ?: return@lazy emptyList()
@@ -64,10 +78,18 @@ class SafetensorsBinaryProvider(
     sharedBytes: CommonByteBuffer,
     /** Size of the whole file; larger than [sharedBytes] when only its head was loaded. */
     override val fileSize: Long = sharedBytes.size.toLong(),
+    /**
+     * The file's first bytes through the end of its JSON header: [sharedBytes] when the header is
+     * in the head, else a read of just the header from the whole file ([headerBytes]).
+     */
+    private val header: CommonByteBuffer = sharedBytes,
 ) : GenericBinaryProvider(sharedBytes) {
 
     /** The parsed header, or `null` when the file does not start like safetensors. */
-    val parsedSafetensors: SafetensorsFile? by lazy { SafetensorsParser.parse(bytes, fileSize) }
+    val parsedSafetensors: SafetensorsFile? by lazy { SafetensorsParser.parse(header, fileSize) }
+
+    /** The JSON header is the only structure, and it is always read whole; the rest is tensor data. */
+    override fun parseCoverage(fileLength: Long): ParseCoverage = ParseCoverage.WholeFile
 
     override val structureRanges: List<StructureRange> by lazy {
         val file = parsedSafetensors ?: return@lazy emptyList()
@@ -95,6 +117,24 @@ class SafetensorsBinaryProvider(
         /** A plausible `u64` header length followed by a JSON object; see [SafetensorsParser.isSafetensors]. */
         fun isSafetensorsFile(buffer: CommonByteBuffer, fileSize: Long = buffer.size.toLong()): Boolean =
             SafetensorsParser.isSafetensors(buffer, fileSize)
+
+        /**
+         * The bytes a safetensors file must be parsed from: [head] when its header is in it, else
+         * the first `8 + header length` bytes read from [source] — a header larger than the loaded
+         * head (the format allows 100 MiB). `null` when the file is not safetensors, or when
+         * [source] has not got those bytes yet; a sparse source then records the miss, so a host
+         * that fetches misses rebuilds the provider once they arrive.
+         */
+        fun headerBytes(head: CommonByteBuffer, source: LargeBytes?): CommonByteBuffer? {
+            val size = source?.size ?: head.size.toLong()
+            if (isSafetensorsFile(head, size)) return head
+            if (source == null || head.size < 9 || head[8] != '{'.code.toByte()) return null
+            var declared = 0L
+            for (i in 0 until 8) declared = declared or ((head[i].toLong() and 0xFF) shl (8 * i))
+            if (declared !in 2..SafetensorsParser.MAX_HEADER_SIZE || declared > size - 8) return null
+            val window = try { source.window(0, (8 + declared).toInt()) } catch (_: Exception) { return null }
+            return window.takeIf { isSafetensorsFile(it, size) }
+        }
     }
 }
 

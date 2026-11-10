@@ -332,7 +332,7 @@
           "default": 512,
           "minimum": 1,
           "maximum": 2047,
-          "markdownDescription": "How much of a file the Hexana editor loads, in megabytes. A larger file opens as a read-only view of its first part: its size is shown, structures stored after that point are missing (GGUF and safetensors tensor tables are still complete), and editing is off. Raising the limit costs memory in both the extension host and the editor."
+          "markdownDescription": "How much of a file the Hexana editor loads up front, in megabytes. A larger local file still opens whole but read-only: the hex view, search and data inspector read the rest from disk as needed, and the tabs parse what was loaded. ELF, Mach-O, ZIP, tar, `ar`, PDB, Parquet and Arrow tabs also read the tables they need past that point (up to 256 MB of them); the toolbar says when tabs leave something out. A larger file that is not on the local disk cannot be opened. Raising the limit costs memory in both the extension host and the editor."
         },
         "hexana.mcp.enabled": {
           "type": "boolean",

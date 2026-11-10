@@ -1280,6 +1280,8 @@ class HexanaFileEditor(
                     binaryProvider = provider,
                     state = stateHolder,
                     hexFocusRequester = hexFocusRequester,
+                    // A dump past the window parses as its head, but the hex view covers all of it.
+                    source = fileSource,
                 )
             }
         }
@@ -1416,23 +1418,25 @@ class HexanaFileEditor(
         parentBuffer: LargeBytes,
     ) {
         val childName = entry.name.substringAfterLast('/').ifEmpty { entry.name }
-        val bytes = extractTarEntry(entry, parentBuffer) ?: return
-
-        if (isHexanaSupportedExtension(childName) || isUnsupportedByIntelliJ(childName)) {
-            val childFile = HexanaBinaryVirtualFile(
-                name = childName,
-                buffer = bytes.toCommonByteBuffer(),
-                baseOffset = entry.dataOffset,
-                parentFile = myFile,
-            )
-            FileEditorManager.getInstance(myProject).openFile(childFile, true)
-            return
+        // Off the EDT, like a ZIP entry: the copy out of the archive can be close to 2 GiB.
+        editorScope.launch {
+            val bytes = extractTarEntry(entry, parentBuffer) ?: return@launch
+            val binary = isHexanaSupportedExtension(childName) || isUnsupportedByIntelliJ(childName)
+            val text = if (binary) null else String(bytes)
+            withContext(Dispatchers.EDT) {
+                val childFile = if (text == null) {
+                    HexanaBinaryVirtualFile(
+                        name = childName,
+                        buffer = bytes.toCommonByteBuffer(),
+                        baseOffset = entry.dataOffset,
+                        parentFile = myFile,
+                    )
+                } else {
+                    LightVirtualFile(childName, text)
+                }
+                FileEditorManager.getInstance(myProject).openFile(childFile, true)
+            }
         }
-
-        FileEditorManager.getInstance(myProject).openFile(
-            LightVirtualFile(childName, String(bytes)),
-            true,
-        )
     }
 }
 

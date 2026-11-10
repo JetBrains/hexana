@@ -164,9 +164,14 @@ class ArrowBinaryProvider(
                 // Read the first record-batch block's encapsulated message. The decoders are
                 // Int-addressed, so a block past the buffer's reach is read through a window over it.
                 val blockOff = footer.blockOffset(vec, 0)
-                val blockLength = footer.blockMetaDataLength(vec, 0).toLong() + footer.blockBodyLength(vec, 0)
-                if (blockOff + blockLength > file.size) {
-                    if (blockOff < 0 || blockLength !in 0..Int.MAX_VALUE.toLong() || blockOff + blockLength > source.size) return null
+                val metaDataLength = footer.blockMetaDataLength(vec, 0).toLong()
+                val bodyLength = footer.blockBodyLength(vec, 0)
+                // Validated before any sum, so a hostile footer cannot wrap the extent negative.
+                if (metaDataLength < 0 || bodyLength !in 0..Long.MAX_VALUE - metaDataLength) return null
+                val blockLength = metaDataLength + bodyLength
+                if (!extentFits(blockOff, blockLength, source.size)) return null
+                if (!extentFits(blockOff, blockLength, file.size.toLong())) {
+                    if (blockLength > Int.MAX_VALUE) return null
                     file = source.window(blockOff, blockLength.toInt())
                     base = blockOff
                 }

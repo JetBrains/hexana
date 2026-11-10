@@ -159,6 +159,27 @@ class HexBytesTest {
     }
 
     @Test
+    fun aLateHostAnswerForAnOlderQueryIsDropped() {
+        val state = HexSearchState()
+        val first = state.beginPagedSearch() // "4F"
+        val second = state.beginPagedSearch() // "4F 6B", typed before the first scan finished
+        state.applyPagedMatch(second, 10L shl 30)
+        state.applyPagedMatch(first, 5L)
+        assertEquals(10L shl 30, state.currentMatchStart)
+        assertFalse(state.isCurrentPagedSearch(first), "no wrap-around search for the old query either")
+    }
+
+    @Test
+    fun anAnswerArrivingAfterTheQueryWasClearedIsDropped() {
+        val state = HexSearchState()
+        val generation = state.beginPagedSearch()
+        state.clear()
+        state.applyPagedMatch(generation, 42L)
+        assertEquals(-1L, state.currentMatchStart)
+        assertEquals(emptyList(), state.matchStarts)
+    }
+
+    @Test
     fun selectionIsSixtyFourBit() {
         val selection = HexSelectionState()
         selection.selectRange(5L shl 30, 16L)

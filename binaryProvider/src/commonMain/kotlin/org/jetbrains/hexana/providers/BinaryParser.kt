@@ -139,7 +139,7 @@ fun createBinaryProvider(
             BinaryParser.ARSC -> ArscBinaryProvider(shared)
             BinaryParser.DOTNET_RESOURCES -> ClrResourcesBinaryProvider(shared)
             BinaryParser.GGUF -> GgufBinaryProvider(shared, totalSize)
-            BinaryParser.SAFETENSORS -> SafetensorsBinaryProvider(shared, totalSize)
+            BinaryParser.SAFETENSORS -> SafetensorsBinaryProvider(shared, totalSize, SafetensorsBinaryProvider.headerBytes(shared, source) ?: shared)
             BinaryParser.PDB -> PdbBinaryProvider(shared, source ?: shared.asLargeBytes())
             BinaryParser.PORTABLE_PDB -> PortablePdbBinaryProvider(shared)
             BinaryParser.PCAP -> PcapBinaryProvider(shared, sourcePath)

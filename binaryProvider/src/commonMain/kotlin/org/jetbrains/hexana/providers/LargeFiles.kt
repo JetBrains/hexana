@@ -10,3 +10,11 @@ package org.jetbrains.hexana.providers
  * near the end of the window cannot overflow an `Int`.
  */
 const val MAX_BINARY_WINDOW_BYTES: Int = 2_146_435_072
+
+/**
+ * Whether [length] bytes from [start] lie within the first [size] bytes, for extents read from
+ * untrusted metadata: checked with subtraction, so a hostile `start + length` cannot wrap negative
+ * and pass as "inside".
+ */
+internal fun extentFits(start: Long, length: Long, size: Long): Boolean =
+    start >= 0 && length >= 0 && start <= size - length

@@ -1129,8 +1129,10 @@ private fun LargeBytes.archiveLongName(tableRange: NativeByteRange, nameOffset: 
     if (nameOffset < 0 || nameOffset >= tableRange.length) return null
     val absoluteOffset = tableRange.start + nameOffset
     val tableEnd = tableRange.end
+    // Scanned no further than the longest name: an unterminated run in a huge table is not one.
+    val scanEnd = minOf(tableEnd, absoluteOffset + MAX_ARCHIVE_LONG_NAME + 1)
     var end = absoluteOffset
-    while (end < tableEnd) {
+    while (end < scanEnd) {
         val byte = get(end).toInt()
         if (byte == '\n'.code || byte == 0) break
         end++

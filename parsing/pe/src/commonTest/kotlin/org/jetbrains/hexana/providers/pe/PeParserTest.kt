@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.providers.pe
 
+import org.jetbrains.hexana.io.LargeBytes
+import org.jetbrains.hexana.io.asLargeBytes
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.parsing.common.NativeBinaryWordSize
 import org.jetbrains.hexana.parsing.common.NativeParseFailure
@@ -440,6 +442,23 @@ class PeParserTest {
         assertEquals(7, file.members[3].contentRange.size)
         assertEquals('P'.code.toByte(), archive[file.members[3].contentRange.offset])
         assertTrue(file.members[3].contentRange.offset > file.members[3].headerRange.offset + 60)
+    }
+
+    @Test
+    fun `an unterminated long-names table is scanned only as far as the longest name`() {
+        val table = ByteArray(4 shl 20) { 'x'.code.toByte() } // no terminator anywhere
+        val archive = coffArchiveBytes("//" to table, "/0" to byteArrayOf(1), "/10" to byteArrayOf(2), "/20" to byteArrayOf(3))
+        val source = archive.toCommonByteBuffer().asLargeBytes()
+        var gets = 0L
+        val counting = object : LargeBytes by source {
+            override fun get(offset: Long): Byte {
+                gets++
+                return source[offset]
+            }
+        }
+        PeParser.parseArchive(counting)
+        // Three names, each scanned at most 64 KiB + 1 before it is given up on, not the 4 MiB table.
+        assertTrue(gets <= 3L * (64 * 1024 + 1) + 4096, "scanned $gets bytes")
     }
 
     @Test

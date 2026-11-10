@@ -29,12 +29,25 @@ fun LargeBytes.indexOf(
  */
 fun LargeBytes.findAll(needle: ByteArray, limit: Int, checkCanceled: () -> Unit = {}): List<Long> {
     val found = ArrayList<Long>()
-    var from = 0L
-    while (found.size < limit) {
-        val at = indexOf(needle, from, reverse = false, checkCanceled)
-        if (at < 0) break
-        found += at
-        from = at + 1
+    if (needle.isEmpty() || needle.size > size || limit <= 0) return found
+    val lastStart = size - needle.size
+    // One pass over the bytes with one buffer: dense matches (zeros in zero padding) must not
+    // re-read a chunk per match.
+    val buffer = ByteArray(SEARCH_CHUNK + needle.size - 1)
+    var chunkStart = 0L
+    while (chunkStart <= lastStart) {
+        checkCanceled()
+        val starts = minOf(SEARCH_CHUNK.toLong(), lastStart - chunkStart + 1).toInt()
+        read(chunkStart, buffer, 0, starts + needle.size - 1)
+        var i = 0
+        while (i < starts) {
+            val hit = buffer.indexOf(needle, i, starts - i)
+            if (hit < 0) break
+            found += chunkStart + hit
+            if (found.size >= limit) return found
+            i = hit + 1
+        }
+        chunkStart += starts
     }
     return found
 }

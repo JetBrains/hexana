@@ -187,7 +187,8 @@ class SparseLargeBytes private constructor(
             return out
         }
 
-        private fun mergeRanges(ranges: List<LongRange>): List<LongRange> {
+        /** [ranges] sorted, with overlapping and adjacent ones joined. */
+        fun mergeRanges(ranges: List<LongRange>): List<LongRange> {
             val sorted = ranges.sortedBy { it.first }
             val out = mutableListOf<LongRange>()
             for (range in sorted) {

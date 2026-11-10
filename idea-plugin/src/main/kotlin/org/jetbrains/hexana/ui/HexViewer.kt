@@ -295,7 +295,12 @@ internal fun HexViewer(
 
         val totalBytes: Long = bytes.size
         // Row indices stay Int — 16 bytes per row reaches 32 GiB — while byte offsets are Long.
-        val rowCount = ((totalBytes + bytesPerRow - 1) / bytesPerRow).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        // Past that the lazy lists cannot reach; a notice says where the view stops.
+        val totalRows = (totalBytes + bytesPerRow - 1) / bytesPerRow
+        val rowCount = totalRows.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        val viewableBytes = minOf(totalBytes, rowCount.toLong() * bytesPerRow)
+        /** The row showing [offset], or `null` past the rows the view can reach (never a wrapped index). */
+        fun rowOf(offset: Long): Int? = (offset / bytesPerRow).takeIf { offset >= 0 && it < rowCount }?.toInt()
         // Eight hex digits cover 4 GiB; a larger file (or a nested one deep in it) needs more.
         val offsetDigits = maxOf(8, (state.displayBaseOffset + totalBytes).toString(16).length)
         val offsetWidth = 96.dp + (10 * (offsetDigits - 8)).dp
@@ -430,7 +435,7 @@ internal fun HexViewer(
 
         LaunchedEffect(state) {
             state.hexScrollFlow.collect { request ->
-                val lineNo = (request.offset / bytesPerRow).toInt()
+                val lineNo = rowOf(request.offset) ?: return@collect
                 hexDataListState.animateScrollToItem(lineNo)
                 if (request.setCursor) {
                     state.setCursorPosition(request.offset, bytesPerRow)
@@ -526,6 +531,14 @@ internal fun HexViewer(
 
 
         Column(modifier = Modifier.fillMaxSize()) {
+            if (viewableBytes < totalBytes) {
+                Text(
+                    "The hex view shows the first ${formatSizeLong(viewableBytes)} of this " +
+                        "${formatSizeLong(totalBytes)} file; offsets past that cannot be scrolled to.",
+                    style = TextStyle(color = HexanaTheme.textColor),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -624,9 +637,9 @@ internal fun HexViewer(
                                     .onClick {
                                         val currentRow = hexDataListState.firstVisibleItemIndex
                                         val currentOffset = currentRow.toLong() * bytesPerRow
-                                        val prevIdx = structureRanges.indexOfLast { it.offset < currentOffset }
-                                        if (prevIdx >= 0) {
-                                            val targetRow = (structureRanges[prevIdx].offset / bytesPerRow).toInt()
+                                        val prevIdx = structureRanges.indexOfLast { it.offset < currentOffset && rowOf(it.offset) != null }
+                                        val targetRow = structureRanges.getOrNull(prevIdx)?.let { rowOf(it.offset) }
+                                        if (targetRow != null) {
                                             coroutineScope.launch { hexDataListState.animateScrollToItem(targetRow) }
                                         }
                                     },
@@ -647,11 +660,10 @@ internal fun HexViewer(
                                     .onClick {
                                         val currentRow = hexDataListState.firstVisibleItemIndex
                                         // Find the first range whose start row is strictly after currentRow
-                                        val nextIdx = structureRanges.indexOfFirst {
-                                            (it.offset / bytesPerRow).toInt() > currentRow
+                                        val targetRow = structureRanges.firstNotNullOfOrNull { range ->
+                                            rowOf(range.offset)?.takeIf { it > currentRow }
                                         }
-                                        if (nextIdx >= 0) {
-                                            val targetRow = (structureRanges[nextIdx].offset / bytesPerRow).toInt()
+                                        if (targetRow != null) {
                                             coroutineScope.launch { hexDataListState.animateScrollToItem(targetRow) }
                                         }
                                     },

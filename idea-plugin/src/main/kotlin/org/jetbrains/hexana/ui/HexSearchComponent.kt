@@ -86,6 +86,17 @@ fun HexSearchField(
 internal const val MAX_SEARCH_HIGHLIGHTS: Int = 100_000
 
 /**
+ * The search bar's status for [highlighted] matches (at most [MAX_SEARCH_HIGHLIGHTS], so possibly
+ * not all of them) and the selected one's index among them, `-1` when it is past the highlighted
+ * ones — the selection moves to the next match however far it is.
+ */
+internal fun searchStatusText(queryEmpty: Boolean, highlighted: Int, currentIndex: Int): String {
+    if (highlighted == 0) return if (queryEmpty) "" else "0 results"
+    val total = if (highlighted >= MAX_SEARCH_HIGHLIGHTS) "$highlighted+" else "$highlighted"
+    return if (currentIndex >= 0) "${currentIndex + 1} of $total" else "past the first $highlighted"
+}
+
+/**
  * Finds [text] in [bytes] off the UI thread and moves the selection to the next match after the
  * current one (before it when [reverse]), wrapping around. Reads in chunks, so it works on files of
  * any size; highlights the first [MAX_SEARCH_HIGHLIGHTS] matches.
@@ -233,11 +244,7 @@ private fun SwingSearchComponent(
             val currentIndex = state.currentSearchIndex.value
             val statusLabel = UIUtil.findComponentOfType(panel, JBLabel::class.java)
             if (statusLabel != null) {
-                if (results.isEmpty()) {
-                    statusLabel.text = if (state.searchText.value.isEmpty()) "" else "0 results"
-                } else {
-                    statusLabel.text = "${currentIndex + 1} of ${results.size}"
-                }
+                statusLabel.text = searchStatusText(state.searchText.value.isEmpty(), results.size, currentIndex)
             }
         },
         modifier = Modifier.fillMaxWidth().height(height = 28.dp)

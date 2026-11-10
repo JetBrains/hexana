@@ -94,6 +94,7 @@ import org.jetbrains.hexana.disassembly.core.Arch
 import org.jetbrains.hexana.disassembly.core.AssemblyFormatter
 import org.jetbrains.hexana.disassembly.core.AssemblySyntax
 import org.jetbrains.hexana.disassembly.core.DecodedInstruction
+import org.jetbrains.hexana.io.LargeBytes
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.javabytecode.JavaBytecodeDecoder
 import org.jetbrains.hexana.javabytecode.JavaBytecodeInstruction
@@ -208,6 +209,8 @@ internal fun JitFileEditorView(
     binaryProvider: BinaryProvider,
     state: HexViewStateHolder,
     hexFocusRequester: FocusRequester,
+    /** The whole dump when it is larger than [binaryProvider]'s bytes; see `HexViewer`'s `source`. */
+    source: LargeBytes? = null,
 ) {
     val groups = remember(jit) { groupSyms(jit.symbols) }
 
@@ -326,6 +329,7 @@ internal fun JitFileEditorView(
                             selectedBci = selectedBci,
                             onSelectBci = { selectedBci = if (selectedBci == it) null else it },
                             addressNav = addressNav,
+                            source = source,
                         )
                     }
                 }
@@ -700,6 +704,7 @@ private fun JitSymDetail(
     selectedBci: Int?,
     onSelectBci: (Int) -> Unit,
     addressNav: AddressNav?,
+    source: LargeBytes?,
 ) {
     val instructions = remember(sym) {
         runCatching { JavaBytecodeDecoder.decode(sym.bytecode) }.getOrDefault(emptyList())
@@ -733,6 +738,7 @@ private fun JitSymDetail(
                     binaryProvider = binaryProvider,
                     state = state,
                     focusRequester = hexFocusRequester,
+                    source = source,
                 )
             }
         },

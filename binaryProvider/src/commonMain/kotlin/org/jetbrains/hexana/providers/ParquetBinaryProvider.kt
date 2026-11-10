@@ -107,9 +107,13 @@ class ParquetBinaryProvider(
      */
     private fun decodeChunk(chunk: ColumnMetaData, leaf: SchemaNode, rowLimit: Int): ColumnValues {
         val start = chunk.dictionaryPageOffset ?: chunk.dataPageOffset
-        val end = start + chunk.totalCompressedSize
-        if (end <= bytes.size) return decodeColumnChunk(bytes, chunk, leaf, rowLimit)
-        if (start < 0 || chunk.totalCompressedSize !in 0..Int.MAX_VALUE.toLong() || end > source.size) {
+        val length = chunk.totalCompressedSize
+        // Validated before comparing with subtraction, so hostile metadata cannot wrap the extent.
+        if (!extentFits(start, length, source.size)) {
+            return ColumnValues(chunk.pathInSchema, chunk.type, emptyList(), false, "column chunk lies outside the file or is too large to decode")
+        }
+        if (extentFits(start, length, bytes.size.toLong())) return decodeColumnChunk(bytes, chunk, leaf, rowLimit)
+        if (length > Int.MAX_VALUE) {
             return ColumnValues(chunk.pathInSchema, chunk.type, emptyList(), false, "column chunk lies outside the file or is too large to decode")
         }
         val rebased = chunk.copy(
@@ -117,7 +121,7 @@ class ParquetBinaryProvider(
             dictionaryPageOffset = chunk.dictionaryPageOffset?.minus(start),
             indexPageOffset = chunk.indexPageOffset?.minus(start)?.takeIf { it >= 0 },
         )
-        val decoded = decodeColumnChunk(source.window(start, chunk.totalCompressedSize.toInt()), rebased, leaf, rowLimit)
+        val decoded = decodeColumnChunk(source.window(start, length.toInt()), rebased, leaf, rowLimit)
         // The decoder located values within the window; move them back to where they are in the file.
         val cells = decoded.cells.map { cell ->
             val at = cell.provenance

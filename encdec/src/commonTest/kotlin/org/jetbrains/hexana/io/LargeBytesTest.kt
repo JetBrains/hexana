@@ -77,6 +77,43 @@ class LargeBytesSearchTest {
     }
 
     @Test
+    fun findAllFindsMatchesSpanningSearchChunks() {
+        val data = ByteArray((1 shl 20) * 2 + 3)
+        val at = (1 shl 20) - 2
+        "NEEDLE".encodeToByteArray().copyInto(data, at)
+        "NEEDLE".encodeToByteArray().copyInto(data, data.size - 6)
+        val hay = data.toCommonByteBuffer().asLargeBytes()
+        assertEquals(listOf(at.toLong(), data.size - 6L), hay.findAll("NEEDLE".encodeToByteArray(), limit = 10))
+    }
+
+    /** Counts the bytes [read] copies out of [bytes]. */
+    private class CountingBytes(private val bytes: LargeBytes) : LargeBytes by bytes {
+        var bytesRead = 0L
+        override fun read(offset: Long, dst: ByteArray, dstOffset: Int, length: Int) {
+            bytesRead += length
+            bytes.read(offset, dst, dstOffset, length)
+        }
+    }
+
+    @Test
+    fun denseMatchesAreFoundInOnePass() {
+        // Every offset of a zero-filled region matches a zero byte.
+        val zeros = CountingBytes(ByteArray(4 shl 20).toCommonByteBuffer().asLargeBytes())
+        val found = zeros.findAll(byteArrayOf(0), limit = 100_000)
+        assertEquals(100_000, found.size)
+        assertEquals(99_999L, found.last())
+        // The first chunk holds them all; per-match reads would copy 100 000 MiB.
+        assertTrue(zeros.bytesRead <= (1L shl 20), "read ${zeros.bytesRead} bytes")
+    }
+
+    @Test
+    fun findAllOfDegenerateNeedles() {
+        assertEquals(emptyList(), bytesOf("ab").findAll(ByteArray(0), limit = 10))
+        assertEquals(emptyList(), bytesOf("ab").findAll("abc".encodeToByteArray(), limit = 10))
+        assertEquals(emptyList(), bytesOf("ab").findAll("a".encodeToByteArray(), limit = 0))
+    }
+
+    @Test
     fun degenerateNeedles() {
         assertEquals(-1L, bytesOf("ab").indexOf(ByteArray(0)))
         assertEquals(-1L, bytesOf("ab").indexOf("abc".encodeToByteArray()))

@@ -78,7 +78,7 @@ class StructureBytesFetcher(
 
     private fun runRound() {
         val current = bytes
-        val wanted = current.misses
+        var wanted = current.misses
             .filter { miss -> declined.none { it.first <= miss.first && miss.last <= it.last } }
             .toMutableList()
         // Nothing read past the head: a provider limited to it, which must not be rebuilt for nothing.
@@ -87,6 +87,8 @@ class StructureBytesFetcher(
             tailRequested = true
             val tailStart = maxOf(headSize, fileSize - TAIL_BYTES)
             if (tailStart < fileSize && !current.isLoaded(tailStart, fileSize)) wanted += tailStart until fileSize
+            // A miss already in the tail must not be fetched, and counted against the budget, twice.
+            wanted = SparseLargeBytes.mergeRanges(wanted).toMutableList()
         }
         if (rounds >= MAX_ROUNDS) {
             decline(wanted)
@@ -125,6 +127,8 @@ class StructureBytesFetcher(
                 bytes = next
             },
             {
+                // Declined ranges are not asked for again, so what they reserved is free for others.
+                fetchedBytes -= accepted.sumOf { it.last - it.first + 1 }
                 decline(accepted)
                 inFlight = false
                 isFetching = false
