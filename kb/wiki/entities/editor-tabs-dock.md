@@ -11,6 +11,10 @@ The analysis tabs of the IntelliJ single-file editor (`ui/BinaryEditorView.kt`) 
 - **Split:** `VerticalSplitPanel(state, …, sideBySide = …)` switches to `HorizontalSplitPanel`. Both orientations
   share `HexViewStateHolder.topFraction` as the hex pane's share, so the proportion survives toggling and the existing
   `topFraction > 0.9f → 0.5f` restores (size badge, Top tab links) and expand/collapse need no changes.
+- **Expand when docked right:** the expand button sets `topFraction = 0`. The vertical split clamps that to its 20%
+  minimum; the horizontal one has no fractional minimum and shows the hex pane as a clipped 12 dp strip
+  (`COLLAPSED_PANE_WIDTH`) to grab the divider. A drag from the strip first snaps the fraction to the strip's real
+  share so the divider follows the pointer. Dragging may also narrow the hex pane below 20% in this layout.
 - **Vertical tabs:** when docked right the horizontal `ScrollableTabStrip` is replaced by `VerticalTabList` on the panel's right (outer) edge, right of the content (rows as
   wide as the longest title, capped at 220 dp, ellipsized, scrollable, selection bar on the outer edge, scrollbar on the inner one, close button for
   script tabs). A tall, narrow panel shows only two or three tabs of a horizontal strip.

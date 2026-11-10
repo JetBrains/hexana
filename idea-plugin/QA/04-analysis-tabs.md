@@ -74,7 +74,8 @@
 **+**). Drag the vertical divider; select tabs in the list; add a script tab and close it from the list. Open a second
 binary, then restart the IDE.
 **Expected:** The tabs panel moves beside the hex view and lists its tabs vertically (selected one marked, long names
-ellipsized, the list scrolls when it does not fit). The divider resizes the two sides; expand/collapse still works. The
+ellipsized, the list scrolls when it does not fit). The divider resizes the two sides. Expand leaves only a thin (~12 px) strip of the hex view; dragging the divider
+from there follows the pointer, and collapse restores the split. The
 second file and the restarted IDE open with the tabs on the right too. With the panel narrow, tables (e.g. a .NET
 assembly's **Methods**) keep readable single-line headers and scroll horizontally, header and rows together, instead of
 squeezing or overlapping columns. Virtualized listings (**IL Disassembly**, **WAT (virtualized)**, Smali, native

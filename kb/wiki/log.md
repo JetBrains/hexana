@@ -189,3 +189,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-10 — `entities/editor-tabs-dock` — IntelliJ editor tabs panel can dock right of the hex view with a vertical tab list (`HexanaSettings.tabsPanelOnRight`, `HorizontalSplitPanel`).
 - 2026-11-10 — `entities/editor-tabs-dock` — IntelliJ `Table` gets a minimum content width and horizontal scrolling in narrow panes; single-line header titles.
 - 2026-11-10 — `entities/editor-tabs-dock` — `VirtualizedChunkPanel` rows keep natural width; listing scrolls horizontally (`WidthTrackingLazyListScope`, `naturalWidthRow`).
+- 2026-11-10 — `entities/editor-tabs-dock` — expand in the right-docked layout collapses the hex pane to a 12 dp strip (`COLLAPSED_PANE_WIDTH`).

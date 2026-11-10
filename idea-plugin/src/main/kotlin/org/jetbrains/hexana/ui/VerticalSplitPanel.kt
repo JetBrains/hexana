@@ -16,6 +16,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,20 +55,23 @@ fun VerticalSplitPanel(
     }
     // Delegate to the stateless core; the state holder is read live inside the
     // delta callback so divider drags stay correct across recomposition.
-    val onDragFraction = { delta: Float ->
-        state.setTopFraction((state.topFraction + delta).coerceIn(MIN_TOP_FRACTION, 1f - MIN_BOTTOM_FRACTION))
-    }
     if (sideBySide) {
+        // No fractional minimum: the hex pane may shrink to the collapsed strip (expand button),
+        // which the split itself keeps at COLLAPSED_PANE_WIDTH.
         HorizontalSplitPanel(
             leftFraction = state.topFraction,
-            onDragFraction = onDragFraction,
+            onDragFraction = { delta ->
+                state.setTopFraction((state.topFraction + delta).coerceIn(0f, 1f - MIN_BOTTOM_FRACTION))
+            },
             westPanel = northPanel,
             eastPanel = southPanel,
         )
     } else {
         VerticalSplitPanel(
             topFraction = state.topFraction,
-            onDragFraction = onDragFraction,
+            onDragFraction = { delta ->
+                state.setTopFraction((state.topFraction + delta).coerceIn(MIN_TOP_FRACTION, 1f - MIN_BOTTOM_FRACTION))
+            },
             northPanel = northPanel,
             southPanel = southPanel,
         )
@@ -76,6 +82,10 @@ fun VerticalSplitPanel(
  * State-hoisted horizontal split, the side-by-side counterpart of the vertical one:
  * [leftFraction] is the west pane's width fraction, [onDragFraction] receives incremental
  * changes from a divider drag.
+ *
+ * The west pane never gets narrower than [COLLAPSED_PANE_WIDTH]: a fraction below that (the
+ * tabs panel's expand button sets 0) shows it as a thin, clipped strip — just enough to grab
+ * the divider and drag it back. A drag from there starts at the strip's edge, not at 0.
  */
 @Composable
 fun HorizontalSplitPanel(
@@ -85,29 +95,43 @@ fun HorizontalSplitPanel(
     eastPanel: @Composable () -> Unit,
 ) {
     var containerWidthPx by remember { mutableFloatStateOf(0f) }
-    val weightRange = MIN_TOP_FRACTION..(1f - MIN_BOTTOM_FRACTION)
+    val collapsedPx = with(LocalDensity.current) { COLLAPSED_PANE_WIDTH.toPx() }
+    val collapsedFraction = if (containerWidthPx > 0) (collapsedPx / containerWidthPx).coerceAtMost(0.5f) else 0f
+    val collapsed = leftFraction <= collapsedFraction
+    // Read inside the drag callback, which is remembered across recompositions.
+    val currentLeftFraction by rememberUpdatedState(leftFraction)
 
     Row(
         modifier = Modifier
             .fillMaxSize()
             .onSizeChanged { containerWidthPx = it.width.toFloat() }
     ) {
-        Box(modifier = Modifier.fillMaxHeight().weight(leftFraction.coerceIn(weightRange))) {
+        val westModifier = if (collapsed) {
+            Modifier.width(COLLAPSED_PANE_WIDTH)
+        } else {
+            Modifier.weight(leftFraction.coerceAtMost(1f - MIN_BOTTOM_FRACTION))
+        }
+        Box(modifier = Modifier.fillMaxHeight().then(westModifier).clipToBounds()) {
             westPanel()
         }
 
         VerticalDraggableDivider(
             onDrag = { deltaX ->
                 if (containerWidthPx > 0) {
-                    onDragFraction(deltaX / containerWidthPx)
+                    val minFraction = (collapsedPx / containerWidthPx).coerceAtMost(0.5f)
+                    // Snap a collapsed pane to the strip's real fraction first, so the divider
+                    // follows the pointer instead of sitting still until 0 catches up.
+                    val snap = (minFraction - currentLeftFraction).coerceAtLeast(0f)
+                    onDragFraction(deltaX / containerWidthPx + snap)
                 }
             }
         )
 
+        val eastWeight = if (collapsed) 1f else (1f - leftFraction).coerceAtLeast(MIN_BOTTOM_FRACTION)
         Box(
             modifier = Modifier
                 .fillMaxHeight()
-                .weight((1f - leftFraction).coerceIn(weightRange))
+                .weight(eastWeight)
                 .background(HexanaTheme.backgroundColor),
             contentAlignment = Alignment.TopStart
         ) {
@@ -228,6 +252,9 @@ private fun HorizontalDraggableDivider(onDrag: (deltaY: Float) -> Unit) {
         }
     }
 }
+
+/** Width the left pane collapses to when the tabs panel is expanded beside it; enough to grab the divider. */
+private val COLLAPSED_PANE_WIDTH = 12.dp
 
 /** Minimum fraction reserved for the top (or left) pane so the splitter cannot be dragged to the very edge. */
 private const val MIN_TOP_FRACTION = 0.2f
