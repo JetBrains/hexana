@@ -12,6 +12,7 @@ import org.jetbrains.hexana.providers.pe.clr.ClrPortablePdb
 import org.jetbrains.hexana.providers.pe.clr.ClrSequencePoint
 import org.jetbrains.hexana.providers.pe.clr.ClrExceptionClause
 import org.jetbrains.hexana.providers.pe.clr.ClrExceptionClauseKind
+import org.jetbrains.hexana.providers.pe.clr.ClrField
 import org.jetbrains.hexana.providers.pe.clr.ClrIlDecoder
 import org.jetbrains.hexana.providers.pe.clr.ClrIlInstruction
 import org.jetbrains.hexana.providers.pe.clr.ClrIlOperand
@@ -142,13 +143,7 @@ fun clrIlTypeRows(metadata: ClrMetadata, bytes: CommonByteBuffer, type: ClrIlTyp
     if (fields.isNotEmpty()) {
         rows += ilBlankRow()
         for (field in fields) {
-            rows += ilRow(field.recordRange) {
-                directive(".field")
-                keywords(clrFieldModifiers(field))
-                type(field.type)
-                plain(" ")
-                identifier(field.name)
-            }
+            rows += fieldRow(field)
         }
     }
     for (method in metadata.methodsByType[typeDef.row].orEmpty()) {
@@ -158,9 +153,45 @@ fun clrIlTypeRows(metadata: ClrMetadata, bytes: CommonByteBuffer, type: ClrIlTyp
     return rows
 }
 
+/**
+ * Renders one method as IL — the same rows [clrIlTypeRows] emits for it, without `.line`
+ * directives. Used by the assembly diff, which compares methods one by one. Resolves tokens, so
+ * the threading rule of [clrIlTypeRows] applies.
+ */
+internal fun clrIlMethodRows(metadata: ClrMetadata, bytes: CommonByteBuffer, method: ClrMethodDef): List<ClrIlRow> {
+    val rows = ArrayList<ClrIlRow>()
+    appendMethod(metadata, bytes.duplicate(), method, rows, pdb = null)
+    return rows
+}
+
+/**
+ * The rows of a type's header and fields only — what [clrIlTypeRows] emits before the first
+ * method. Cheap: no IL is decoded.
+ */
+internal fun clrIlTypeHeaderRows(metadata: ClrMetadata, type: ClrIlType): List<ClrIlRow> {
+    val typeDef = metadata.typeDefs.getOrNull(type.index) ?: return emptyList()
+    val rows = ArrayList<ClrIlRow>()
+    appendTypeHeader(metadata, typeDef, type, rows)
+    for (field in metadata.fieldsByType[typeDef.row].orEmpty()) {
+        rows += fieldRow(field)
+    }
+    return rows
+}
+
+/** Number of leading gutter tokens (file offset + spacing) on every [ClrIlRow]. */
+internal const val CLR_IL_GUTTER_TOKENS: Int = 2
+
 // ---------------------------------------------------------------------------
 // Type and method rendering
 // ---------------------------------------------------------------------------
+
+private fun fieldRow(field: ClrField): ClrIlRow = ilRow(field.recordRange) {
+    directive(".field")
+    keywords(clrFieldModifiers(field))
+    type(field.type)
+    plain(" ")
+    identifier(field.name)
+}
 
 private fun typeDeclaration(type: ClrTypeDef): String =
     listOf(clrTypeModifiers(type), type.kind.label).filter { it.isNotEmpty() }.joinToString(" ")

@@ -153,6 +153,7 @@ object BinaryDiffProviderRegistry {
         listOf(
             WasmComponentDiffProvider(),
             WasmModuleDiffProvider(),
+            ClrDiffProvider(),
             NativeDiffProvider(),
         )
     }

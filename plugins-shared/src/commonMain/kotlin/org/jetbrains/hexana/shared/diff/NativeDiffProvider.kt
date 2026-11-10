@@ -23,7 +23,8 @@ import org.jetbrains.hexana.wasm.analysis.diff.SizeDiffNode
  * the parser yet (no `.pdata`), and archives / fat Mach-O have no single body list, so
  * those keep the size tab only.
  *
- * Accepts any pair where neither side is Wasm, so it is the registry's fallback.
+ * Accepts any pair where neither side is Wasm, so it is the registry's fallback. Two .NET
+ * assemblies are taken by [ClrDiffProvider] first.
  */
 class NativeDiffProvider : BinaryDiffProvider {
     override fun accepts(input: BinaryDiffInput): Boolean =
@@ -97,7 +98,7 @@ internal fun nativeSizeRows(root: SizeDiffNode): List<NativeSizeRow> {
 private fun SizeDiffNode.toNativeRow(prefix: String = "") =
     NativeSizeRow(prefix + displayName, classification, sizeA, sizeB, delta)
 
-private fun nativeSizeTab(input: BinaryDiffInput): DiffTabContent {
+internal fun nativeSizeTab(input: BinaryDiffInput): DiffTabContent {
     val diff = nativeSizeDiff(input)
         ?: return DiffTabContent(emptyMessage = "Size analysis is not available for one or both binaries.")
     val rows = diff.rows

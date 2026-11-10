@@ -41,9 +41,19 @@
 **Expected:** Every function is listed individually, not merged into one.
 
 ### 13.7 Formats without per-function comparison
-**Steps:** Compare two PE images; then two stripped ELF executables.
+**Steps:** Compare two native (non-.NET) PE images; then two stripped ELF executables.
 **Expected:** PE shows **Size Impact** only, with no bottom pane. The stripped pair shows a Functions tab saying neither side has function symbols.
 
 ### 13.8 Large binaries
 **Steps:** Compare `clangd` with `clang-tidy` (tens of thousands of functions).
 **Expected:** The IDE stays responsive while both tabs load (Functions takes longest, as it disassembles changed functions to rule out address-only changes); selecting a large function renders without freezing.
+
+### 13.9 .NET assemblies
+**Steps:** **Compare Binaries With…** on `parsing/native-fixtures/test-data/pe/sample-clr.exe` and `sample-clr-v2.exe`
+(or two versions of the same NuGet DLL). Click a Modified method, then a Modified type.
+**Expected:** **Size Impact**, **Types** and **Methods** tabs. The header shows the assembly version change
+(`1.2.3.4 → 1.2.4.0`). Methods lists `Greeter::Greet` and `Program::Describe` as Modified, `get_Prefix` as Removed and
+the `Farewell` methods as Added; `Main` is absent although its IL bytes changed, and the header says how many methods
+differ only in metadata tokens. The bottom pane shows the method's IL side by side: in `Describe`, the `"three"` case is
+three added lines and the shifted `IL_` labels around it are not tinted. A type row shows the whole type's IL (`Color`
+gains `.field … Alpha`).

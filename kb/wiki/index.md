@@ -35,8 +35,8 @@ consult-first / write-back rules.
   `BinaryProblem`) behind the Problems tab, the toolbar count badge, and `inspect-binary`;
   what was migrated into it and why unresolved native records are excluded.
 - [[entities/binary-diff-provider]] — the shared diff model (`BinaryDiffProvider`): tabs,
-  detail pane, navigation requests, how IntelliJ and VS Code host it, and the hex viewer in the
-  IntelliJ diff window (`diff.DiffTool`).
+  detail pane, navigation requests, how IntelliJ and VS Code host it, the hex viewer in the
+  IntelliJ diff window (`diff.DiffTool`), native per-function and .NET per-method IL diff.
 - [[entities/apk-emulator-run]] — the trivial APK Run button: SDK/AVD detection gate, boot →
   install → launch flow shared by IntelliJ and VS Code via `AndroidEmulatorRun`, and what it
   deliberately does not do.

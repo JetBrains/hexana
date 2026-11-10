@@ -18,7 +18,7 @@ Per-function native diff was next, so it needed one abstraction first.
 BinaryDiffInput(left, right, leftName, rightName, symbol maps)
         │  BinaryDiffProviderRegistry.forInput — first accepting provider wins:
         │    WasmComponentDiffProvider (both components) → WasmModuleDiffProvider (both core)
-        │    → NativeDiffProvider (neither is Wasm).  A mixed pair has none → "cannot compare".
+        │    → ClrDiffProvider (both managed PE) → NativeDiffProvider (neither is Wasm).  A mixed pair has none → "cannot compare".
         ▼
 BinaryDiffSession(tabs: List<DiffTab>, banner: () -> lines, detail: DiffDetailSource?)
    DiffTab(name, loadingMessage, compute: (DiffTabContext) -> DiffTabContent)
@@ -79,6 +79,32 @@ over `parsing/native-fixtures`, with real Capstone).
   stays blocking and hosts still pick the thread.
 - The arch mapping (`nativeDisassemblyArch`, plugins-shared) moved out of IntelliJ's
   `NativeDisassemblyPanel`; per-function Thumb comes from `NativeFunctionRecord.isThumb`.
+
+## .NET assembly diff (2026-11-10)
+
+`ClrDiffProvider` (`plugins-shared/.../shared/diff/ClrDiffProvider.kt`) sits before `NativeDiffProvider` and takes a
+pair only when both sides are PE images with a CLR header (`PeBinaryProvider.isManaged`, no metadata decode); managed vs
+native PE still goes to the native provider. Tabs: **Size Impact** (the native one, which already nests CLR metadata /
+IL bodies / R2R code via `clrSizeAnalysis`), **Types**, **Methods**; detail = IL side by side. Pinned by
+`ClrDiffProviderTest` (jvmTest) over `pe/sample-clr.exe` → `pe/sample-clr-v2.exe` (`src/clr/diff/SampleV2.cs`).
+
+- **Compare rendered IL, not bytes.** Any new type, MemberRef or `#US` string renumbers tokens, so raw IL of untouched
+  methods changes. Each method is rendered once per side with `clrIlMethodRows` (tokens resolved to names, gutter
+  dropped, `RVA 0x…` masked) and fingerprinted (two 32-bit hashes, JS-friendly). Equal fingerprint = identical; the tab
+  header reports how many of those had different IL bytes ("differ only in metadata tokens") — 32k of CoreLib 9 → 10.
+- **Pairing:** `Type::signature` → unique `Type::name` (signature changed) → unique identical body (renamed / moved
+  type, MOVED). Types pair by display name; Modified when header/fields rows (`clrIlTypeHeaderRows`) differ or any of
+  their methods changed (`methods +a -r ~m`).
+- **Detail:** `DiffItemRef.name` is prefixed `T:` (whole type via `clrIlTypeRows`) or `M:` (one method). Alignment keys
+  also mask every `IL_xxxx` label (own and branch targets), like the native address masking; if that leaves no changed
+  line although the exact keys differ (only a branch target moved), it re-diffs unmasked.
+- One `Mutex` per session guards both sides: `ClrTokenResolver` is not thread-safe and IntelliJ computes tabs and the
+  detail concurrently. Not used: Portable PDB `.line` rows (would make every edit noisy).
+- Measured (JVM): CoreLib 10.0.13 → 10.0.14 (R2R, 38k methods) — full method diff ~1.6 s, exactly 2 modified
+  methods (the version strings); 9.0.4 → 10.0.14 — 5.6k changed rows, method detail < 1 ms, type detail ≤ 10 ms.
+  Known noise: the whole-type detail of a heavily reordered type (`Interop+Sys`) aligns poorly — member order is file
+  order and `LineDiff` stops aligning past its cell budget.
+- Hosts needed no change (`.dll`/`.exe` are already in both hosts' compare entry points).
 
 ### Performance (webview)
 

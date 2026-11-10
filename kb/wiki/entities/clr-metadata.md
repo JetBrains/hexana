@@ -165,6 +165,12 @@ reflection-based API summary; `binary.format` stays `"pe"`.
   CoreLib (1,405 strings), WinForms dialogs written by `DeserializingResourceReader` (user types).
   Fixture written with Mono's `ResourceWriter` — .NET 8+ refuses to serialize user types.
 
+## Assembly diff
+
+Two managed images compare through `ClrDiffProvider` (Types / Methods tabs, IL side by side); see
+[[entities/binary-diff-provider]] → ".NET assembly diff". It reuses `ClrIlText` (`clrIlMethodRows`,
+`clrIlTypeHeaderRows`) and needs the same single-threaded token resolution.
+
 ## Fixture and measurements
 
 - `parsing/native-fixtures/test-data/pe/sample-clr.exe` from `src/clr/Sample.cs` (Roslyn `csc`,
