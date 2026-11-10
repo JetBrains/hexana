@@ -5009,6 +5009,18 @@ interface GgufBinaryProvider extends GenericBinaryProvider {
 
 interface SafetensorsBinaryProvider extends GenericBinaryProvider {
   fileSize: number;
+  header: {
+    indices: {
+      endExclusive: number;
+      endInclusive: number;
+      first: number;
+      last: number;
+      start: number;
+      step: number;
+    };
+    lastIndex: number;
+    size: number;
+  };
   parsedSafetensors?: {
     dataOffset: number;
     diagnostics: {
