@@ -103,6 +103,7 @@ val r8OwnedJarNames = setOf(
     "hexanaDocument-jvm.jar",
     "javaBytecode-jvm.jar",
     "macho-jvm.jar",
+    "mlmodel-jvm.jar",
     "parquet-jvm.jar",
     "pcap-jvm.jar",
     "pdb-jvm.jar",
