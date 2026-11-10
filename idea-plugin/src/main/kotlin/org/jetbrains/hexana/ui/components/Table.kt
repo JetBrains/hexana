@@ -213,6 +213,8 @@ fun Table(
         textMeasurer.measureWidthMonospace(dataCount, 4),
         textMeasurer.measureWidthMonospace("ID ▾"),
     ) else 0.dp
+    val minContentWidth = minTableContentWidth(columns, textMeasurer, idColumnWidth, actionColumnWidth)
+    val horizontalScroll = rememberScrollState()
 
 
     Column(modifier = Modifier
@@ -362,6 +364,19 @@ fun Table(
             }
         }
 
+        // Columns never shrink below what their headers and fixed widths need: in a narrow pane
+        // (tabs docked beside the hex view) the header and rows scroll sideways together instead
+        // of squeezing columns until titles wrap letter by letter and cells overlap.
+        BoxWithConstraints(
+            modifier = if (maxVisibleRows == null) Modifier.weight(1f).fillMaxWidth() else Modifier.fillMaxWidth(),
+        ) {
+        val contentWidth = if (constraints.hasBoundedWidth) maxOf(maxWidth, minContentWidth) else minContentWidth
+        Column(
+            modifier = Modifier
+                .horizontalScroll(horizontalScroll)
+                .width(contentWidth)
+                .then(if (maxVisibleRows == null) Modifier.fillMaxHeight() else Modifier),
+        ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -447,7 +462,11 @@ fun Table(
                                 style = TextStyle(
                                     color = HexanaTheme.textColor,
                                     fontFamily = FontFamily.Monospace
-                                )
+                                ),
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
                             )
 
                             Text(
@@ -611,11 +630,60 @@ fun Table(
                 }
             }
 
-            VerticalScrollbar(lazyListState, modifier = Modifier.align(Alignment.CenterEnd))
+        }
+        }
+        // Outside the scrolled content, so they stay on the visible edges.
+        VerticalScrollbar(lazyListState, modifier = Modifier.align(Alignment.CenterEnd))
+        if (constraints.hasBoundedWidth && contentWidth > maxWidth) {
+            HorizontalScrollbar(horizontalScroll, modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth())
+        }
         }
     }
 
 }
+
+/**
+ * The narrowest the table may get before it scrolls horizontally: every fixed-width column at
+ * its width, and weighted columns wide enough that each still shows its title (and at least
+ * [MIN_WEIGHTED_COLUMN_CHARS] characters) after the space is split by weight. Includes the
+ * per-cell and per-row padding the layout adds.
+ */
+@Composable
+private fun minTableContentWidth(
+    columns: List<TableColumn>,
+    textMeasurer: TextMeasurer,
+    idColumnWidth: Dp,
+    actionColumnWidth: Dp,
+): Dp {
+    val minWeighted = textMeasurer.measureWidthMonospace("x".repeat(MIN_WEIGHTED_COLUMN_CHARS))
+    val totalWeight = columns.sumOf { (if (it.width == null) it.weight ?: 0f else 0f).toDouble() }.toFloat()
+    var fixed = ROW_HORIZONTAL_PADDING * 2
+    if (actionColumnWidth > 0.dp) fixed += actionColumnWidth + CELL_HORIZONTAL_PADDING * 2
+    if (idColumnWidth > 0.dp) fixed += idColumnWidth + CELL_HORIZONTAL_PADDING * 2
+    var weightedShare = 0.dp
+    for (column in columns) {
+        fixed += CELL_HORIZONTAL_PADDING * 2
+        val width = column.width
+        val weight = column.weight
+        val titleWidth = textMeasurer.measureWidthMonospace(column.title + " ▾")
+        when {
+            width != null -> fixed += width
+            weight != null && weight > 0f && totalWeight > 0f ->
+                weightedShare = maxOf(weightedShare, maxOf(titleWidth, minWeighted) * (totalWeight / weight))
+            else -> fixed += titleWidth
+        }
+    }
+    return fixed + weightedShare
+}
+
+/** Narrowest a weighted (fill) column may get, in monospace characters. */
+private const val MIN_WEIGHTED_COLUMN_CHARS = 12
+
+/** Horizontal padding of each header and data cell, per side. */
+private val CELL_HORIZONTAL_PADDING = 4.dp
+
+/** Horizontal padding of each data row, per side. */
+private val ROW_HORIZONTAL_PADDING = 4.dp
 
 /** The row and time of a table's last click, for double-click detection. */
 private class LastRowClick(var id: Int? = null, var at: Long = 0L)

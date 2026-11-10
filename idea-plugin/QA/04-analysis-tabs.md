@@ -75,5 +75,7 @@
 binary, then restart the IDE.
 **Expected:** The tabs panel moves beside the hex view and lists its tabs vertically (selected one marked, long names
 ellipsized, the list scrolls when it does not fit). The divider resizes the two sides; expand/collapse still works. The
-second file and the restarted IDE open with the tabs on the right too. Clicking the button again (**Move tabs below the
+second file and the restarted IDE open with the tabs on the right too. With the panel narrow, tables (e.g. a .NET
+assembly's **Methods**) keep readable single-line headers and scroll horizontally, header and rows together, instead of
+squeezing or overlapping columns. Clicking the button again (**Move tabs below the
 hex view**) restores the bottom layout with the horizontal tab strip, in every open editor.
