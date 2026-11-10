@@ -36,6 +36,12 @@ data class ClrMetadata(
     val diagnostics: List<NativeParserDiagnostic>,
     /** Renders metadata tokens that IL instructions refer to; see [ClrTokenResolver]. */
     val tokens: ClrTokenResolver,
+    /**
+     * Like [tokens], but every type in a signature keeps its namespace and enclosing types
+     * (`Ns.Outer+Widget`, not `Widget`). Display uses [tokens]; comparisons (the assembly diff)
+     * use this, so `A.Widget` and `B.Widget` do not read as the same type. Same threading rule.
+     */
+    val qualifiedTokens: ClrTokenResolver = tokens,
     /** Debug metadata, when this is Portable PDB metadata rather than an assembly's own. */
     val portablePdb: ClrPortablePdb? = null,
 ) {
@@ -300,6 +306,12 @@ interface ClrTokenResolver {
 
     /** Local variable types of a method body, from its `LocalVarSigTok`; empty when there are none. */
     fun localVariableTypes(method: ClrMethodDef): List<String>
+
+    /** [method]'s declaration signature in this resolver's naming, e.g. `string Greet(string name)`. */
+    fun methodSignature(method: ClrMethodDef): String = method.signature
+
+    /** [field]'s type in this resolver's naming. */
+    fun fieldType(field: ClrField): String = field.type
 }
 
 data class ClrMemberRef(

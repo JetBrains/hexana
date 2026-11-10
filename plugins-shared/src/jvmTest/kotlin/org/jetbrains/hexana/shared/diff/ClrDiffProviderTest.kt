@@ -1,7 +1,10 @@
 package org.jetbrains.hexana.shared.diff
 
 import kotlinx.coroutines.test.runTest
+import org.jetbrains.hexana.document.format.RenderToken
+import org.jetbrains.hexana.document.format.RenderTokenKind
 import org.jetbrains.hexana.io.toCommonByteBuffer
+import org.jetbrains.hexana.shared.ClrIlRow
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -111,5 +114,61 @@ class ClrDiffProviderTest {
         val diff = s.detail!!.render(selected!!)
         assertEquals("Hexana.Sample.Color", diff.title)
         assertTrue(diff.rows.any { it.rightAdded && it.right!!.contains("Alpha") }, diff.rows.joinToString("\n"))
+    }
+
+    // --- Review regressions over pe/sample-clr-review-{base,head}.dll (src/clr/diff/Review.cs) ---
+
+    private val reviewBase by lazy { fixture("pe/sample-clr-review-base.dll") }
+    private val reviewHead by lazy { fixture("pe/sample-clr-review-head.dll") }
+
+    @Test
+    fun sameShortTypeNameFromAnotherNamespaceIsAChange() = runTest {
+        val rows = tab(session(reviewBase, reviewHead), "Methods").rows()
+        // Display text abbreviates both to `Widget`; the comparison must not.
+        assertEquals(
+            "Modified | signature: void Take(A.Widget w) → void Take(B.Widget w)",
+            rows["Hexana.Review.Uses::void Take(Widget w)"],
+            rows.toString(),
+        )
+        assertTrue(rows["Hexana.Review.Uses::object Make()"].orEmpty().startsWith("Modified"), rows.toString())
+    }
+
+    @Test
+    fun userStringReadingLikeTheRvaCommentIsCompared() = runTest {
+        val rows = tab(session(reviewBase, reviewHead), "Methods").rows()
+        assertTrue(rows["Hexana.Review.Strings::string Label()"].orEmpty().startsWith("Modified"), rows.toString())
+    }
+
+    @Test
+    fun methodMovedToAnotherTypeMarksBothTypes() = runTest {
+        val s = session(reviewBase, reviewHead)
+        val methods = tab(s, "Methods").rows()
+        assertEquals("Moved | renamed from Hexana.Review.Source::int Twice(int x)", methods["Hexana.Review.Target::int Twice(int x)"], methods.toString())
+        val types = tab(s, "Types").rows()
+        assertTrue(types["Hexana.Review.Source"].orEmpty().startsWith("Modified"), types.toString())
+        assertTrue(types["Hexana.Review.Target"].orEmpty().startsWith("Modified"), types.toString())
+    }
+
+    @Test
+    fun keysMaskOnlyGeneratedRvaAndLabelTokens() {
+        fun row(vararg tokens: Pair<String, RenderTokenKind>) = ClrIlRow(
+            fileOffset = null,
+            byteSize = 0,
+            tokens = listOf(RenderToken("0x000100", RenderTokenKind.OFFSET_ANNOTATION), RenderToken("  ", RenderTokenKind.WHITESPACE)) +
+                tokens.map { (text, kind) -> RenderToken(text, kind) },
+        )
+        val lines = clrIlLines(
+            listOf(
+                row("// RVA 0x2050, code size 7, tiny header" to RenderTokenKind.COMMENT),
+                row("IL_0010" to RenderTokenKind.OFFSET_ANNOTATION, ": " to RenderTokenKind.PUNCTUATION, "br.s" to RenderTokenKind.KEYWORD, "IL_0020" to RenderTokenKind.LABEL_REF),
+                row("ldstr" to RenderTokenKind.KEYWORD, "\"RVA 0x1234, IL_0010\"" to RenderTokenKind.STRING),
+            ),
+        )
+        assertEquals("// RVA 0x…, code size 7, tiny header", lines[0].key)
+        assertEquals("IL_0010: br.sIL_0020", lines[1].key)
+        assertEquals("IL_…: br.sIL_…", lines[1].alignKey)
+        assertEquals("ldstr\"RVA 0x1234, IL_0010\"", lines[2].key)
+        assertEquals(lines[2].key, lines[2].alignKey)
+        assertEquals("IL_0010: br.sIL_0020", lines[1].text)
     }
 }

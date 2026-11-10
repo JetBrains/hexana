@@ -98,6 +98,16 @@ IL bodies / R2R code via `clrSizeAnalysis`), **Types**, **Methods**; detail = IL
 - **Detail:** `DiffItemRef.name` is prefixed `T:` (whole type via `clrIlTypeRows`) or `M:` (one method). Alignment keys
   also mask every `IL_xxxx` label (own and branch targets), like the native address masking; if that leaves no changed
   line although the exact keys differ (only a branch target moved), it re-diffs unmasked.
+- **Review fixes (2026-11-10):** display text abbreviates signature types (`shortTypeName`: `A.Widget` and
+  `B.Widget` both print `Widget`), so pairing keys, fingerprints and type-header keys render through
+  `ClrMetadata.qualifiedTokens` — a second `Resolver` over a second `ClrSignatureDecoder` that keeps namespaces and
+  enclosing types (`ClrTokenResolver.methodSignature` / `fieldType` let `ClrIlText` take signatures from it);
+  `ClrSide.qualified = metadata.copy(tokens = qualifiedTokens)`. Tables and the detail pane still show short names;
+  the detail zips short (text) and qualified (keys) renderings of the same rows. Masking is by token kind
+  (`COMMENT` RVA comment, `OFFSET_ANNOTATION`/`LABEL_REF` labels), never by text, so a literal reading `RVA 0x…`
+  is compared. Method pairs carry both declaring types, so a method moved between types marks both in Types
+  ("renamed or moved"). Regression fixture `pe/sample-clr-review-{base,head}.dll` (`src/clr/diff/Review.cs`); all
+  three tests failed before the fix.
 - One `Mutex` per session guards both sides: `ClrTokenResolver` is not thread-safe and IntelliJ computes tabs and the
   detail concurrently. Not used: Portable PDB `.line` rows (would make every edit noisy).
 - Measured (JVM): CoreLib 10.0.13 → 10.0.14 (R2R, 38k methods) — full method diff ~1.6 s, exactly 2 modified

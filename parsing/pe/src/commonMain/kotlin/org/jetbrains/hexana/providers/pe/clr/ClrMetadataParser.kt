@@ -143,6 +143,8 @@ object ClrMetadataParser {
         private var tables: Tables? = null
         private var pdbHeader: ClrPdbStreamHeader? = null
         private val signatures = ClrSignatureDecoder(bytes, ::encodedTypeName)
+        private val qualifiedSignatures = ClrSignatureDecoder(bytes, ::encodedQualifiedTypeName)
+        private var methodParameterNames: Map<Int, List<String?>> = emptyMap()
 
         private val typeDefNames = HashMap<Int, String>()
         private var enclosingTypes: Map<Int, Int> = emptyMap()
@@ -206,7 +208,8 @@ object ClrMetadataParser {
                 manifestResources = t?.let { decodeManifestResources(it) }.orEmpty(),
                 userStrings = heaps.userStrings(),
                 diagnostics = diagnostics,
-                tokens = Resolver(methods),
+                tokens = Resolver(methods, signatures),
+                qualifiedTokens = Resolver(methods, qualifiedSignatures),
                 portablePdb = pdbHeader?.let { header -> t?.let { decodePortablePdb(it, header) } },
             )
         }
@@ -493,10 +496,27 @@ object ClrMetadataParser {
             return if (namespace.isEmpty()) name else "$namespace.$name"
         }
 
-        private fun typeSpecName(row: Int, context: ClrGenericContext, depth: Int): String {
+        private fun typeSpecName(
+            row: Int,
+            context: ClrGenericContext,
+            depth: Int,
+            decoder: ClrSignatureDecoder = signatures,
+        ): String {
             val t = tables ?: return "<typespec #$row>"
             if (row !in 1..t.rowCount(T.TYPE_SPEC)) return "<typespec #$row>"
-            return signatures.typeSpec(heaps.blob(t.cell(T.TYPE_SPEC, row, 0)), context, depth)
+            return decoder.typeSpec(heaps.blob(t.cell(T.TYPE_SPEC, row, 0)), context, depth)
+        }
+
+        /** Fully qualified name used inside signatures by [qualifiedSignatures]: `Ns.Outer+Box`. */
+        private fun encodedQualifiedTypeName(encoded: Int, context: ClrGenericContext, depth: Int): String {
+            val row = encoded ushr 2
+            return when (encoded and 3) {
+                // The arity suffix is dropped as in display text; a generic instance still lists its arguments.
+                0 -> typeDefFullName(row).replace(GENERIC_ARITY, "")
+                1 -> typeRefFullName(row).replace(GENERIC_ARITY, "")
+                2 -> typeSpecName(row, context, depth, qualifiedSignatures)
+                else -> "<invalid type>"
+            }
         }
 
         /** Short display name used inside signatures: no namespace, no generic arity suffix. */
@@ -628,6 +648,7 @@ object ClrMetadataParser {
             fieldOwners = memberOwners(t, column = 4, T.FIELD_PTR, T.FIELD)
             val methodOwners = memberOwners(t, column = 5, T.METHOD_PTR, T.METHOD_DEF)
             val parameterNames = parameterNames(t)
+            methodParameterNames = parameterNames
 
             val fields = List(t.rowCount(T.FIELD)) { index ->
                 val row = index + 1
@@ -975,7 +996,31 @@ object ClrMetadataParser {
 
         // region IL operands
 
-        private inner class Resolver(private val methods: List<ClrMethodDef>) : ClrTokenResolver {
+        /** Operand text through [signatures]: short names for display, or qualified ones for comparisons. */
+        private inner class Resolver(
+            private val methods: List<ClrMethodDef>,
+            private val signatures: ClrSignatureDecoder,
+        ) : ClrTokenResolver {
+            override fun methodSignature(method: ClrMethodDef): String {
+                if (signatures === this@Decoder.signatures) return method.signature
+                val t = tables ?: return method.signature
+                if (method.row !in 1..t.rowCount(T.METHOD_DEF)) return method.signature
+                return signatures.methodSignature(
+                    blob = heaps.blob(t.cell(T.METHOD_DEF, method.row, 4)),
+                    name = method.name,
+                    parameterNames = methodParameterNames[method.row].orEmpty(),
+                    context = genericContextOf(method),
+                )
+            }
+
+            override fun fieldType(field: ClrField): String {
+                if (signatures === this@Decoder.signatures) return field.type
+                val t = tables ?: return field.type
+                if (field.row !in 1..t.rowCount(T.FIELD)) return field.type
+                val owner = fieldOwners.getOrElse(field.row) { 0 }
+                return signatures.fieldType(heaps.blob(t.cell(T.FIELD, field.row, 2)), ClrGenericContext(typeGenerics[owner].orEmpty()))
+            }
+
             override fun describe(token: UInt, method: ClrMethodDef?): String? {
                 val table = (token shr 24).toInt()
                 val row = (token and 0x00FFFFFFu).toInt()
@@ -987,7 +1032,7 @@ object ClrMetadataParser {
                 return when (table) {
                     T.TYPE_DEF -> typeDefDisplayName(row)
                     T.TYPE_REF -> typeRefFullName(row)
-                    T.TYPE_SPEC -> typeSpecName(row, context, 0)
+                    T.TYPE_SPEC -> typeSpecName(row, context, 0, signatures)
                     T.FIELD -> fieldText(t, row)
                     T.METHOD_DEF -> methodDefText(t, row, instantiation = null)
                     T.MEMBER_REF -> memberRefText(t, row, instantiation = null)
@@ -1033,7 +1078,7 @@ object ClrMetadataParser {
                 val parentName = when (parent?.first) {
                     T.TYPE_DEF -> typeDefDisplayName(parentRow)
                     T.TYPE_REF -> typeRefFullName(parentRow)
-                    T.TYPE_SPEC -> typeSpecName(parentRow, ClrGenericContext.Empty, 0)
+                    T.TYPE_SPEC -> typeSpecName(parentRow, ClrGenericContext.Empty, 0, signatures)
                     T.MODULE_REF -> heaps.string(t.cell(T.MODULE_REF, parentRow, 0))
                     // A vararg call site: the MemberRef refines a MethodDef's signature.
                     T.METHOD_DEF -> return methodDefText(t, parentRow, instantiation)

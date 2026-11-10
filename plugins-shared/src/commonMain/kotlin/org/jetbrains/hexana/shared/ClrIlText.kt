@@ -143,7 +143,7 @@ fun clrIlTypeRows(metadata: ClrMetadata, bytes: CommonByteBuffer, type: ClrIlTyp
     if (fields.isNotEmpty()) {
         rows += ilBlankRow()
         for (field in fields) {
-            rows += fieldRow(field)
+            rows += fieldRow(metadata, field)
         }
     }
     for (method in metadata.methodsByType[typeDef.row].orEmpty()) {
@@ -173,7 +173,7 @@ internal fun clrIlTypeHeaderRows(metadata: ClrMetadata, type: ClrIlType): List<C
     val rows = ArrayList<ClrIlRow>()
     appendTypeHeader(metadata, typeDef, type, rows)
     for (field in metadata.fieldsByType[typeDef.row].orEmpty()) {
-        rows += fieldRow(field)
+        rows += fieldRow(metadata, field)
     }
     return rows
 }
@@ -185,10 +185,10 @@ internal const val CLR_IL_GUTTER_TOKENS: Int = 2
 // Type and method rendering
 // ---------------------------------------------------------------------------
 
-private fun fieldRow(field: ClrField): ClrIlRow = ilRow(field.recordRange) {
+private fun fieldRow(metadata: ClrMetadata, field: ClrField): ClrIlRow = ilRow(field.recordRange) {
     directive(".field")
     keywords(clrFieldModifiers(field))
-    type(field.type)
+    type(metadata.tokens.fieldType(field))
     plain(" ")
     identifier(field.name)
 }
@@ -229,7 +229,7 @@ private fun appendMethod(metadata: ClrMetadata, buffer: CommonByteBuffer, method
     rows += ilRow(body?.range ?: method.recordRange) {
         directive(".method")
         keywords(clrMethodModifiers(method))
-        func(method.signature)
+        func(metadata.tokens.methodSignature(method))
     }
     if (body == null) {
         rows += ilRow(null) {

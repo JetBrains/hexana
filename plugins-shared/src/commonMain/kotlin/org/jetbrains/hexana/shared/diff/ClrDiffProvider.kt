@@ -3,6 +3,7 @@ package org.jetbrains.hexana.shared.diff
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.yield
+import org.jetbrains.hexana.document.format.RenderTokenKind
 import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormatDetector
@@ -71,10 +72,22 @@ internal fun isManagedPe(bytes: CommonByteBuffer): Boolean {
 internal class ClrSide(val bytes: CommonByteBuffer, val metadata: ClrMetadata) {
     val types: List<ClrIlType> = clrIlTypes(metadata)
 
+    /**
+     * [metadata] rendering every signature type with its namespace. Display text abbreviates
+     * types (`Widget`), which would make `A.Widget` and `B.Widget` compare equal; pairing and
+     * fingerprints therefore use this, and only the shown text uses [metadata].
+     */
+    val qualified: ClrMetadata = metadata.copy(tokens = metadata.qualifiedTokens)
+
     fun typeName(method: ClrMethodDef): String = types.getOrNull(method.declaringTypeRow - 1)?.name ?: "<unknown type>"
 
-    /** `Type::signature` — what pairs a method with its counterpart and what the tables show. */
-    fun methodKey(method: ClrMethodDef): String = "${typeName(method)}::${method.signature}"
+    /** `Type::signature` as the tables show it. */
+    fun methodLabel(method: ClrMethodDef): String = "${typeName(method)}::${method.signature}"
+
+    /** `Type::signature` with qualified signature types — what pairs a method with its counterpart. */
+    fun methodKey(method: ClrMethodDef): String = "${typeName(method)}::${qualifiedSignature(method)}"
+
+    fun qualifiedSignature(method: ClrMethodDef): String = qualified.tokens.methodSignature(method)
 
     /** `Type::name`, which pairs an overload whose signature changed. */
     fun methodNameKey(method: ClrMethodDef): String = "${typeName(method)}::${method.name}"
@@ -85,7 +98,9 @@ internal class ClrSide(val bytes: CommonByteBuffer, val metadata: ClrMetadata) {
 /** A row of the Methods tab: a method on either or both sides, by index into `ClrMetadata.methods`. */
 internal class ClrMethodPair(
     val name: String,
-    val typeName: String,
+    /** Declaring type on each side; they differ when an unchanged method moved to another type. */
+    val leftTypeName: String?,
+    val rightTypeName: String?,
     val left: Int?,
     val right: Int?,
     val classification: DiffClass,
@@ -155,21 +170,43 @@ internal class ClrAssemblyDiff(private val input: BinaryDiffInput) {
 
 /**
  * A rendered IL line without its file-offset gutter. [key] decides whether two methods are
- * identical: only the RVA, which moves whenever an earlier body changes size, is masked.
- * [alignKey] is what the detail pane aligns on and also masks every `IL_xxxx` label — the
- * instruction's own and branch targets — so one inserted instruction does not mark every later
- * line, or every branch over it, as changed (the native diff masks shifted addresses alike).
+ * identical: only the RVA in the generated `// RVA 0x…` comment, which moves whenever an earlier
+ * body changes size, is masked. [alignKey] is what the detail pane aligns on and also masks
+ * every `IL_xxxx` label — the instruction's own and branch targets — so one inserted
+ * instruction does not mark every later line, or every branch over it, as changed (the native
+ * diff masks shifted addresses alike).
+ *
+ * Masking goes by token kind, never by text, so a string literal or an identifier that happens
+ * to read `RVA 0x1234` or `IL_0010` is compared as written.
  */
 internal class ClrIlLine(val text: String, val key: String, val alignKey: String)
 
-internal fun clrIlLines(rows: List<ClrIlRow>): List<ClrIlLine> = rows.map { row ->
-    val text = row.tokens.drop(CLR_IL_GUTTER_TOKENS).joinToString("") { it.text }
-    val key = RVA.replace(text, "RVA …")
-    ClrIlLine(text, key, IL_LABEL.replace(key, "IL_…"))
+/**
+ * Lines of [display], keyed by [keyRows] — the same listing rendered with qualified type names
+ * ([ClrSide.qualified]). Both renderings emit the same rows; should they ever not, the keys
+ * come from [keyRows] alone.
+ */
+internal fun clrIlLines(display: List<ClrIlRow>, keyRows: List<ClrIlRow> = display): List<ClrIlLine> {
+    val shown = if (display.size == keyRows.size) display else keyRows
+    return keyRows.mapIndexed { i, row ->
+        val content = row.tokens.drop(CLR_IL_GUTTER_TOKENS)
+        val key = content.joinToString("") { t ->
+            if (t.kind == RenderTokenKind.COMMENT) GENERATED_RVA.replace(t.text, "$1…") else t.text
+        }
+        val alignKey = content.joinToString("") { t ->
+            when (t.kind) {
+                RenderTokenKind.COMMENT -> GENERATED_RVA.replace(t.text, "$1…")
+                RenderTokenKind.OFFSET_ANNOTATION, RenderTokenKind.LABEL_REF -> IL_LABEL.replace(t.text, "IL_…")
+                else -> t.text
+            }
+        }
+        ClrIlLine(shown[i].tokens.drop(CLR_IL_GUTTER_TOKENS).joinToString("") { it.text }, key, alignKey)
+    }
 }
 
-private val RVA = Regex("RVA 0x[0-9A-Fa-f]+")
-private val IL_LABEL = Regex("\\bIL_[0-9a-fA-F]{4,}\\b")
+/** The method header comment `clrIlMethodRows` emits: `// RVA 0x2050, code size …`. */
+private val GENERATED_RVA = Regex("^(// RVA 0x)[0-9A-Fa-f]+(?=,)")
+private val IL_LABEL = Regex("^IL_[0-9a-fA-F]+$")
 
 /**
  * Identity of a list of keys: two independent 32-bit polynomial hashes over the lines' hash
@@ -194,7 +231,7 @@ private class MethodFingerprint(
 )
 
 private fun fingerprint(side: ClrSide, method: ClrMethodDef): MethodFingerprint {
-    val keys = clrIlLines(clrIlMethodRows(side.metadata, side.bytes, method)).map { it.key }
+    val keys = clrIlLines(clrIlMethodRows(side.qualified, side.bytes, method)).map { it.key }
     return MethodFingerprint(keysHash(keys), if (method.body != null) keysHash(keys, from = 1) else null)
 }
 
@@ -226,7 +263,7 @@ internal suspend fun diffClrMethods(left: ClrSide, right: ClrSide): ClrMethodDif
     suspend fun pair(l: Int, r: Int, renamedFrom: String? = null) {
         val a = lm[l]
         val b = rm[r]
-        val name = right.methodKey(b)
+        val name = right.methodLabel(b)
         val same = print(left, lPrints, l, lm).full == print(right, rPrints, r, rm).full
         val classification: DiffClass
         val detail: String
@@ -240,9 +277,14 @@ internal suspend fun diffClrMethods(left: ClrSide, right: ClrSide): ClrMethodDif
                 detail = ""
                 if (!sameIlBytes(left, a, right, b)) tokenOnly++
             }
-            a.signature != b.signature -> {
+            left.qualifiedSignature(a) != right.qualifiedSignature(b) -> {
                 classification = DiffClass.MODIFIED
-                detail = "signature: ${a.signature} → ${b.signature}"
+                // Abbreviated names can read the same while the types differ (A.Widget → B.Widget).
+                detail = if (a.signature != b.signature) {
+                    "signature: ${a.signature} → ${b.signature}"
+                } else {
+                    "signature: ${left.qualifiedSignature(a)} → ${right.qualifiedSignature(b)}"
+                }
             }
             left.ilSize(a) != right.ilSize(b) -> {
                 classification = DiffClass.MODIFIED
@@ -253,7 +295,7 @@ internal suspend fun diffClrMethods(left: ClrSide, right: ClrSide): ClrMethodDif
                 detail = "IL changed"
             }
         }
-        pairs += ClrMethodPair(name, right.typeName(b), l, r, classification, detail)
+        pairs += ClrMethodPair(name, left.typeName(a), right.typeName(b), l, r, classification, detail)
     }
 
     // 1. Same type and signature.
@@ -291,15 +333,15 @@ internal suspend fun diffClrMethods(left: ClrSide, right: ClrSide): ClrMethodDif
         val body = lPrints[l]?.body
         val r = body?.takeIf { leftBodyCounts[it] == 1 }?.let { rightByBody[it]?.singleOrNull() }
         if (r == null) {
-            pairs += ClrMethodPair(left.methodKey(lm[l]), left.typeName(lm[l]), l, null, DiffClass.REMOVED, sizeText(left.ilSize(lm[l])))
+            pairs += ClrMethodPair(left.methodLabel(lm[l]), left.typeName(lm[l]), null, l, null, DiffClass.REMOVED, sizeText(left.ilSize(lm[l])))
         } else {
             renamedRight += r
-            pair(l, r, renamedFrom = left.methodKey(lm[l]))
+            pair(l, r, renamedFrom = left.methodLabel(lm[l]))
         }
     }
     for (r in rightOnly) {
         if (r in renamedRight) continue
-        pairs += ClrMethodPair(right.methodKey(rm[r]), right.typeName(rm[r]), null, r, DiffClass.ADDED, sizeText(right.ilSize(rm[r])))
+        pairs += ClrMethodPair(right.methodLabel(rm[r]), null, right.typeName(rm[r]), null, r, DiffClass.ADDED, sizeText(right.ilSize(rm[r])))
     }
     return ClrMethodDiff(pairs, tokenOnly)
 }
@@ -333,13 +375,16 @@ internal fun diffClrTypes(left: ClrSide, right: ClrSide, methods: ClrMethodDiff)
     val counts = HashMap<String, Counts>()
     for (p in methods.pairs) {
         if (p.classification == DiffClass.IDENTICAL) continue
-        val c = counts.getOrPut(p.typeName) { Counts() }
-        when (p.classification) {
-            DiffClass.ADDED -> c.added++
-            DiffClass.REMOVED -> c.removed++
-            DiffClass.MODIFIED -> c.modified++
-            DiffClass.MOVED -> c.moved++
-            DiffClass.IDENTICAL -> Unit
+        // A method that moved to another type changes both: the source loses it, the target gains it.
+        for (typeName in setOfNotNull(p.leftTypeName, p.rightTypeName)) {
+            val c = counts.getOrPut(typeName) { Counts() }
+            when (p.classification) {
+                DiffClass.ADDED -> c.added++
+                DiffClass.REMOVED -> c.removed++
+                DiffClass.MODIFIED -> c.modified++
+                DiffClass.MOVED -> c.moved++
+                DiffClass.IDENTICAL -> Unit
+            }
         }
     }
     fun methodSummary(name: String): String? = counts[name]?.let { c ->
@@ -347,7 +392,7 @@ internal fun diffClrTypes(left: ClrSide, right: ClrSide, methods: ClrMethodDiff)
             "+${c.added}".takeIf { c.added > 0 },
             "-${c.removed}".takeIf { c.removed > 0 },
             "~${c.modified}".takeIf { c.modified > 0 },
-            "${c.moved} renamed".takeIf { c.moved > 0 },
+            "${c.moved} renamed or moved".takeIf { c.moved > 0 },
         ).joinToString(" ").let { "methods $it" }
     }
 
@@ -373,7 +418,7 @@ internal fun diffClrTypes(left: ClrSide, right: ClrSide, methods: ClrMethodDiff)
 }
 
 private fun headerKeys(side: ClrSide, type: ClrIlType): List<String> =
-    clrIlTypeHeaderRows(side.metadata, type).let(::clrIlLines).map { it.key }
+    clrIlLines(clrIlTypeHeaderRows(side.qualified, type)).map { it.key }
 
 private fun memberText(type: ClrIlType): String = "${type.memberCount} ${if (type.memberCount == 1) "member" else "members"}"
 
@@ -504,17 +549,18 @@ internal class ClrDetailSource(private val assemblies: ClrAssemblyDiff) : DiffDe
             if (isType) {
                 val lt = ref.leftIndex?.let { l.types.getOrNull(it) }
                 val rt = ref.rightIndex?.let { r.types.getOrNull(it) }
-                val a = lt?.let { clrIlLines(clrIlTypeRows(l.metadata, l.bytes, it)) }.orEmpty()
+                val a = lt?.let { clrIlLines(clrIlTypeRows(l.metadata, l.bytes, it), clrIlTypeRows(l.qualified, l.bytes, it)) }.orEmpty()
                 yield()
-                Triple(a, rt?.let { clrIlLines(clrIlTypeRows(r.metadata, r.bytes, it)) }.orEmpty(), name)
+                val b = rt?.let { clrIlLines(clrIlTypeRows(r.metadata, r.bytes, it), clrIlTypeRows(r.qualified, r.bytes, it)) }.orEmpty()
+                Triple(a, b, name)
             } else {
                 val lm = ref.leftIndex?.let { l.metadata.methods.getOrNull(it) }
                 val rm = ref.rightIndex?.let { r.metadata.methods.getOrNull(it) }
                 val sizes = listOfNotNull(lm?.let { "base IL ${sizeText(l.ilSize(it))}" }, rm?.let { "head IL ${sizeText(r.ilSize(it))}" })
                 val title = if (sizes.isEmpty()) name else "$name    (${sizes.joinToString("  →  ")})"
                 Triple(
-                    lm?.let { clrIlLines(clrIlMethodRows(l.metadata, l.bytes, it)) }.orEmpty(),
-                    rm?.let { clrIlLines(clrIlMethodRows(r.metadata, r.bytes, it)) }.orEmpty(),
+                    lm?.let { clrIlLines(clrIlMethodRows(l.metadata, l.bytes, it), clrIlMethodRows(l.qualified, l.bytes, it)) }.orEmpty(),
+                    rm?.let { clrIlLines(clrIlMethodRows(r.metadata, r.bytes, it), clrIlMethodRows(r.qualified, r.bytes, it)) }.orEmpty(),
                     title,
                 )
             }

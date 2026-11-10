@@ -33,6 +33,7 @@ Expected outputs include:
 - `test-data/pe/sample_cpp.coff`
 - `test-data/pe/sample-clr.exe` (see below; not built by the Docker image)
 - `test-data/pe/sample-clr-v2.exe` (see below; not built by the Docker image)
+- `test-data/pe/sample-clr-review-base.dll`, `sample-clr-review-head.dll` (see below; not built by the Docker image)
 - `test-data/pe/sample-clr-portable.exe` + `sample-clr-portable.pdb` (see below; not built by the Docker image)
 - `test-data/pe/sample-clr-embedded.exe` (see below; not built by the Docker image)
 - `test-data/manifest.txt`
@@ -69,6 +70,10 @@ rm strings.resources
 `plugins-shared`): `src/clr/diff/SampleV2.cs` is `Sample.cs` with a changed method body, a removed property, an added
 `switch` case, enum member and type. Build it the same way, with `-nowarn:67 -out:../../test-data/pe/sample-clr-v2.exe
 diff/SampleV2.cs`.
+
+`test-data/pe/sample-clr-review-base.dll` and `sample-clr-review-head.dll` are `src/clr/diff/Review.cs` built as a
+library without and with `-define:HEAD` (`-target:library`, same flags otherwise); they pin assembly diff cases: the
+same short type name from another namespace, a user string reading like an RVA comment, a method moved between types.
 
 The parser tests cross-check it against `monodis --typedef`, `--method`, `--memberref` and `--manifest` output,
 and the IL tests against `ikdasm sample-clr.exe`. Update `ClrFixtureParserTest`, `ClrIlDecoderTest`,
