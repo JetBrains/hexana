@@ -186,3 +186,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-10 — `entities/partial-views` — web `ByteArray.toCommonByteBuffer()` wraps only the view (offset views from Node's pool broke small files in VS Code UI tests).
 - 2026-11-10 — `entities/binary-diff-provider`, `entities/clr-metadata` — .NET assembly diff: `ClrDiffProvider` (Types/Methods tabs, IL side-by-side detail, token-renumbering-insensitive comparison), fixture `sample-clr-v2.exe`.
 - 2026-11-10 — `entities/binary-diff-provider` — .NET diff review fixes: qualified-name resolver (`ClrMetadata.qualifiedTokens`) for pairing/fingerprints, token-kind masking, cross-type moves mark both types.
+- 2026-11-10 — `entities/editor-tabs-dock` — IntelliJ editor tabs panel can dock right of the hex view with a vertical tab list (`HexanaSettings.tabsPanelOnRight`, `HorizontalSplitPanel`).

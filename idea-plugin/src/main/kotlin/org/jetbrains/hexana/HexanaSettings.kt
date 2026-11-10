@@ -1,5 +1,6 @@
 package org.jetbrains.hexana
 
+import androidx.compose.runtime.mutableStateOf
 import com.intellij.openapi.components.*
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
@@ -57,6 +58,21 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
         get() = true //state.showOffsets
         set(value) {
             state.showOffsets = value?:false
+        }
+
+    /**
+     * Compose-observable mirror of [HexanaSettingsState.tabsPanelOnRight], so every open editor
+     * moves its tabs panel when one of them toggles it. Created on first read, after the state
+     * has been loaded.
+     */
+    private val tabsPanelOnRightState by lazy { mutableStateOf(state.tabsPanelOnRight) }
+
+    /** Whether editors dock their analysis tabs to the right of the hex view (vertical tab list). */
+    var tabsPanelOnRight: Boolean
+        get() = tabsPanelOnRightState.value
+        set(value) {
+            state.tabsPanelOnRight = value
+            tabsPanelOnRightState.value = value
         }
 
     var showSemanticHighlighting: Boolean
@@ -149,6 +165,8 @@ class HexanaSettingsState : BaseState() {
     var feedbackPromptDisabled: Boolean by property(false)
     var showWhatsNewOnNewVersion: Boolean by property(true)
     var lastShownWhatsNewVersion: String? by string()
+    /** Analysis tabs docked to the right of the hex view instead of below it. */
+    var tabsPanelOnRight: Boolean by property(false)
 }
 
 class HexanaConfigurableProvider : ConfigurableProvider() {

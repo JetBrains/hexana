@@ -1,6 +1,14 @@
 package org.jetbrains.hexana.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
+import androidx.compose.ui.text.style.TextOverflow
+import org.jetbrains.hexana.HexanaSettings
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -737,6 +745,8 @@ internal fun BinaryEditorView(
             }
         }
 
+        val hexanaSettings = HexanaSettings.getInstance()
+        val tabsOnRight = hexanaSettings.tabsPanelOnRight
         VerticalSplitPanel(state, northPanel = {
             Column(modifier = Modifier.fillMaxSize()) {
                 FileDescriptionBar(
@@ -845,7 +855,9 @@ internal fun BinaryEditorView(
                 HexViewStatusBar(state = state, totalBytes = shownBytes.size)
             }
         }, southPanel = {
-            TabsPanel(panels, state.currentState.value, scriptTabIndices = scriptTabIndices, onExpand = { expanded ->
+            TabsPanel(panels, state.currentState.value, scriptTabIndices = scriptTabIndices, verticalTabs = tabsOnRight, onToggleDock = {
+                hexanaSettings.tabsPanelOnRight = !tabsOnRight
+            }, onExpand = { expanded ->
                 if (expanded) {
                     state.setTopFraction(0f)
                 } else {
@@ -887,15 +899,21 @@ internal fun BinaryEditorView(
             // hex view gets the whole editor instead of sharing it with empty space. The
             // list is observable, so a late decompiled panel still brings the split back.
             showSouthPanel = panels.isNotEmpty(),
+            sideBySide = tabsOnRight,
         )
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun TabsPanel(
     panels: List<Panel>,
     state: HexViewState,
     scriptTabIndices: Set<Int> = emptySet(),
+    /** Docked to the right of the hex view: the tabs are a vertical list beside the content. */
+    verticalTabs: Boolean = false,
+    /** Moves the panel between the bottom and the right of the hex view. */
+    onToggleDock: () -> Unit = {},
     onExpand: (Boolean) -> Unit,
     onTabSelect: (Int) -> Unit,
     onAddScriptTab: () -> Unit = {},
@@ -956,12 +974,25 @@ private fun TabsPanel(
                     )
                 }
             }
-            ScrollableTabStrip(
-                tabs = tabs,
-                selectedIndex = state.tabIndex,
-                resetKey = panels,
-                modifier = Modifier.weight(1f),
-            )
+            if (verticalTabs) {
+                Spacer(modifier = Modifier.weight(1f))
+            } else {
+                ScrollableTabStrip(
+                    tabs = tabs,
+                    selectedIndex = state.tabIndex,
+                    resetKey = panels,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Tooltip(tooltip = { Text(if (verticalTabs) "Move tabs below the hex view" else "Move tabs to the right of the hex view") }) {
+                IconButton(onClick = onToggleDock) {
+                    Icon(
+                        if (verticalTabs) AllIconsKeys.Actions.MoveToBottomLeft else AllIconsKeys.Actions.MoveToRightTop,
+                        contentDescription = if (verticalTabs) "Move tabs below the hex view" else "Move tabs to the right of the hex view",
+                        iconClass = AllIcons::class.java,
+                    )
+                }
+            }
             IconButton(onClick = onAddScriptTab) {
                 Icon(
                     AllIconsKeys.General.Add,
@@ -973,18 +1004,97 @@ private fun TabsPanel(
 
         Divider(orientation = org.jetbrains.jewel.ui.Orientation.Horizontal)
 
-        Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-            // The panel list shrinks when liveProvider rebuilds from
-            // file-aware → plain (Phase A.1a). The LaunchedEffect clamp
-            // runs asynchronously, so on the FIRST recomposition after
-            // shrinkage state.tabIndex can still point past the new end.
-            // Defensive coerce here so we never throw IndexOutOfBounds —
-            // the LaunchedEffect catches up on the next composition.
-            val safeIndex = state.tabIndex.coerceIn(0, panels.size - 1)
-            panels.get(safeIndex).render()
+        // The panel list shrinks when liveProvider rebuilds from
+        // file-aware → plain (Phase A.1a). The LaunchedEffect clamp
+        // runs asynchronously, so on the FIRST recomposition after
+        // shrinkage state.tabIndex can still point past the new end.
+        // Defensive coerce here so we never throw IndexOutOfBounds —
+        // the LaunchedEffect catches up on the next composition.
+        val safeIndex = state.tabIndex.coerceIn(0, panels.size - 1)
+        if (verticalTabs) {
+            // The list sits on the outer (right) edge, like an IDE tool window stripe.
+            Row(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.weight(1f).fillMaxHeight().padding(8.dp)) {
+                    panels[safeIndex].render()
+                }
+                Divider(
+                    orientation = org.jetbrains.jewel.ui.Orientation.Vertical,
+                    thickness = 1.dp,
+                    modifier = Modifier.fillMaxHeight(),
+                )
+                VerticalTabList(
+                    titles = panels.map { it.description },
+                    selectedIndex = safeIndex,
+                    closableIndices = scriptTabIndices,
+                    onSelect = onTabSelect,
+                    onClose = onCloseScriptTab,
+                )
+            }
+        } else {
+            Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+                panels[safeIndex].render()
+            }
         }
     }
 }
+
+/**
+ * The tab list of a panel docked beside the hex view, on its right edge: one row per tab, as wide as the
+ * longest title (capped, longer ones are ellipsized), scrolling when they do not all fit.
+ * A docked panel is tall and narrow, where a horizontal strip would show only two or three tabs.
+ */
+@Composable
+private fun VerticalTabList(
+    titles: List<String>,
+    selectedIndex: Int,
+    closableIndices: Set<Int>,
+    onSelect: (Int) -> Unit,
+    onClose: (Int) -> Unit,
+) {
+    val scroll = rememberScrollState()
+    val accent = JewelTheme.globalColors.outlines.focused
+    Box(modifier = Modifier.fillMaxHeight().width(IntrinsicSize.Max).widthIn(max = VERTICAL_TAB_LIST_MAX_WIDTH)) {
+        Column(modifier = Modifier.fillMaxHeight().verticalScroll(scroll)) {
+            titles.forEachIndexed { index, title ->
+                val selected = index == selectedIndex
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min)
+                        .background(if (selected) accent.copy(alpha = 0.18f) else Color.Transparent)
+                        .clickable { onSelect(index) }
+                        .pointerHoverIcon(PointerIcon.Hand),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(start = 12.dp, end = 8.dp, top = 5.dp, bottom = 5.dp),
+                    )
+                    if (index in closableIndices) {
+                        IconButton(onClick = { onClose(index) }, modifier = Modifier.padding(end = 4.dp)) {
+                            Icon(AllIconsKeys.Actions.Close, contentDescription = "Close $title", iconClass = AllIcons::class.java)
+                        }
+                    }
+                    // Selection marker on the outer edge, like the underline of a horizontal tab.
+                    Box(
+                        modifier = Modifier
+                            .width(3.dp)
+                            .fillMaxHeight()
+                            .background(if (selected) accent else Color.Transparent),
+                    )
+                }
+            }
+        }
+        VerticalScrollbar(
+            scrollState = scroll,
+            modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight(),
+        )
+    }
+}
+
+private val VERTICAL_TAB_LIST_MAX_WIDTH = 220.dp
 
 /**
  * A tab strip that keeps every tab at its natural width and, when they do not all fit,

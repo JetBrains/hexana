@@ -68,3 +68,12 @@
 ### 4.16 Expand/collapse tab area
 **Steps:** Click the expand/collapse icon button to the left of the tab bar.
 **Expected:** Hex viewer hides; tabs fill the entire editor area. Click again restores the split layout.
+
+### 4.17 Dock tabs to the right
+**Steps:** Open a `.wasm` file. Click the **Move tabs to the right of the hex view** button (right of the tab bar, before
+**+**). Drag the vertical divider; select tabs in the list; add a script tab and close it from the list. Open a second
+binary, then restart the IDE.
+**Expected:** The tabs panel moves beside the hex view and lists its tabs vertically (selected one marked, long names
+ellipsized, the list scrolls when it does not fit). The divider resizes the two sides; expand/collapse still works. The
+second file and the restarted IDE open with the tabs on the right too. Clicking the button again (**Move tabs below the
+hex view**) restores the bottom layout with the horizontal tab strip, in every open editor.
