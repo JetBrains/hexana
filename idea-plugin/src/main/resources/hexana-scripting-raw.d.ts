@@ -506,6 +506,7 @@ interface ArchiveBinaryProvider extends NativeBinaryProvider {
       };
     }[];
   };
+  fileSize: number;
   members: {
     contentRange: {
       end: number;
@@ -536,6 +537,9 @@ interface ArchiveBinaryProvider extends NativeBinaryProvider {
   }[];
   nativeFormat: {
     displayName: string;
+  };
+  source: {
+    size: number;
   };
   structureRanges: {
     label: string;

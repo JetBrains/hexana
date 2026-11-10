@@ -180,3 +180,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-09 — `entities/partial-views` — large-file notice moved from the IntelliJ notification bar and VS Code strip into an "Editing disabled" toolbar badge with the full notice as tooltip.
 - 2026-11-09 — `entities/partial-views` — `ParseCoverage`: large-file warnings only when the parser missed structures (PE overlay, pcap cap, unknown formats covered); `ar` archives parse past 2 GiB.
 - 2026-11-09 — `entities/partial-views` — VS Code: whole-file parsers run over `SparseLargeBytes` (zero-filled misses, fetched in rounds by `StructureBytesFetcher`, 256 MiB / 64-round caps).
+- 2026-11-10 — `entities/partial-views` — VS Code paged hex view: rows re-render when pages arrive (`loadStamp` passed to `HexRow`), fetch queue capped at 4 newest-first, prefetch of neighbour pages, stale queued pages dropped.

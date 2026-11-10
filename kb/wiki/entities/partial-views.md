@@ -104,7 +104,11 @@ coverage)` / `partialViewNotice(loaded, fileSize, coverage)` and the label from 
   (default 512, ≤ `MAX_LOADABLE_BYTES`, test-checked against the Kotlin constant); tabs parse the head.
 - **Paged hex view**: `web-ui` `HexBytes` (`BufferHexBytes` for in-memory files — webapp unchanged —
   and `PagedHexBytes`: head from memory, 64 KiB pages fetched from the host, ≤ 512 cached, a
-  `loadStamp` state re-renders rows; unloaded bytes show `··`). Host messages `read-byte-range` →
+  `loadStamp` state re-renders rows; unloaded bytes show `··`). `loadStamp` must be passed into
+  `HexRow` as a parameter: Compose's strong skipping otherwise skips rows whose arguments did not
+  change, so arrived pages stayed `··` until the row index changed. Fetches are capped at 4 in flight,
+  newest request first; `HexBytes.prefetch(window)` (from a `LaunchedEffect` on the visible rows)
+  queues the shown pages plus one neighbour page each side and drops queued pages scrolled past. Host messages `read-byte-range` →
   `byte-range-content` and `search-bytes` → `search-bytes-result` (`readRange`/`searchFile`, exactly
   one reply each; webview `HostRequests` with deadlines, caught before the composable handler).
 - **Scroll model** (`HexScroller`): rows are drawn pinned to the viewport top from an authoritative

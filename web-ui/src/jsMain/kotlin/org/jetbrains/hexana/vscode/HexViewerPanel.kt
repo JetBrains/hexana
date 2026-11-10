@@ -403,8 +403,7 @@ fun HexViewerPanel(
 ) {
     val totalBytes = bytes.size
     val totalRows = (totalBytes + BYTES_PER_ROW - 1) / BYTES_PER_ROW
-    // Re-render the rows when fetched pages arrive.
-    @Suppress("UNUSED_VARIABLE")
+    // Re-render the rows when fetched pages arrive; passed to every row so none is skipped.
     val loadStamp = bytes.loadStamp
     // Script regions overlay the base parser's, so the ranges may overlap.
     val structureLookup = remember(structureRanges) { StructureRangeLookup(structureRanges) }
@@ -503,6 +502,11 @@ fun HexViewerPanel(
 
     val firstVisibleRow = scroller.topRow.coerceAtMost((totalRows - 1).coerceAtLeast(0))
     val lastVisibleRow = (scroller.topRow + scroller.visibleRows + OVERSCAN_ROWS).coerceAtMost(totalRows - 1)
+
+    // Fetch the shown window and its surroundings before rows scroll onto them.
+    LaunchedEffect(bytes, firstVisibleRow, lastVisibleRow) {
+        bytes.prefetch(firstVisibleRow * BYTES_PER_ROW, (lastVisibleRow + 1) * BYTES_PER_ROW)
+    }
 
     // Keyboard handler.
     DisposableEffect(Unit) {
@@ -838,7 +842,7 @@ fun HexViewerPanel(
                     if (totalRows > 0) {
                         var row = firstVisibleRow
                         while (row <= lastVisibleRow) {
-                            HexRow(bytes, row, offsetDigits, offsetColumnPx, selection, hexSearchState, editState, editStamp, pendingDigit, structureRanges, structureLookup, onTabChangeRequest) { ox, oy ->
+                            HexRow(bytes, loadStamp, row, offsetDigits, offsetColumnPx, selection, hexSearchState, editState, editStamp, pendingDigit, structureRanges, structureLookup, onTabChangeRequest) { ox, oy ->
                                 dragState.pendingOriginX = ox
                                 dragState.pendingOriginY = oy
                             }
@@ -1068,6 +1072,8 @@ private fun HexSearchBar(
 @Composable
 private fun HexRow(
     bytes: HexBytes,
+    /** [HexBytes.loadStamp]: a change re-renders the row, so bytes that arrived replace their placeholders. */
+    @Suppress("UNUSED_PARAMETER") loadStamp: Int,
     row: Long,
     offsetDigits: Int,
     offsetColumnPx: Int,

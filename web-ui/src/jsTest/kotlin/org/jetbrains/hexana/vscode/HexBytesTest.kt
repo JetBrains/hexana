@@ -72,6 +72,49 @@ class HexBytesTest {
         }
     }
 
+    /** A fake host that answers only when told to, so the fetch queue can be observed. */
+    private class ManualHost {
+        val requests = mutableListOf<Long>()
+        private val replies = mutableMapOf<Long, () -> Unit>()
+        fun fetch(offset: Long, length: Int): Promise<ByteArray> {
+            requests += offset
+            return Promise { resolve, _ -> replies[offset] = { resolve(ByteArray(length) { (offset + it).toByte() }) } }
+        }
+        fun answer(offset: Long) = replies.remove(offset)!!.invoke()
+    }
+
+    @Test
+    fun aFastScrollFetchesThePageNowShownFirst(): Promise<Unit> {
+        val host = ManualHost()
+        val bytes = PagedHexBytes(ByteArray(16).toCommonByteBuffer(), size, host::fetch)
+        // Scrolled past pages 10..19; only four are fetched at once.
+        for (p in 10L..19L) bytes.byteOrNull(p * page)
+        assertEquals(PagedHexBytes.MAX_IN_FLIGHT, host.requests.size)
+        // The view settles on page 19: the queued pages it scrolled past are dropped.
+        bytes.prefetch(19 * page, 19 * page + 512)
+        host.answer(host.requests.first())
+        return Promise.resolve(Unit).then {
+            assertEquals(19 * page, host.requests[PagedHexBytes.MAX_IN_FLIGHT], "the shown page goes next")
+            assertTrue(host.requests.none { it in (14 * page)..(17 * page) }, "pages scrolled past are not fetched")
+        }
+    }
+
+    @Test
+    fun prefetchFetchesTheNeighbouringPages() {
+        val host = FakeHost()
+        val bytes = PagedHexBytes(ByteArray(16).toCommonByteBuffer(), size, host::fetch)
+        bytes.prefetch(5 * page + 100, 5 * page + 900)
+        assertEquals(listOf(5 * page, 6 * page, 4 * page), host.requests.map { it.first })
+    }
+
+    @Test
+    fun prefetchSkipsTheHeadAndTheEndOfTheFile() {
+        val host = FakeHost()
+        val bytes = PagedHexBytes(ByteArray(page.toInt() * 2).toCommonByteBuffer(), page * 3, host::fetch)
+        bytes.prefetch(page + 10, page * 3)
+        assertEquals(listOf(page * 2), host.requests.map { it.first })
+    }
+
     @Test
     fun bufferBytesAreTheWholeFile() {
         val bytes = BufferHexBytes(byteArrayOf(1, 2, 3).toCommonByteBuffer())
