@@ -403,8 +403,6 @@ fun HexViewerPanel(
 ) {
     val totalBytes = bytes.size
     val totalRows = (totalBytes + BYTES_PER_ROW - 1) / BYTES_PER_ROW
-    // Re-render the rows when fetched pages arrive; passed to every row so none is skipped.
-    val loadStamp = bytes.loadStamp
     // Script regions overlay the base parser's, so the ranges may overlap.
     val structureLookup = remember(structureRanges) { StructureRangeLookup(structureRanges) }
     // Offsets past 4 GiB need more than eight hex digits.
@@ -842,7 +840,7 @@ fun HexViewerPanel(
                     if (totalRows > 0) {
                         var row = firstVisibleRow
                         while (row <= lastVisibleRow) {
-                            HexRow(bytes, loadStamp, row, offsetDigits, offsetColumnPx, selection, hexSearchState, editState, editStamp, pendingDigit, structureRanges, structureLookup, onTabChangeRequest) { ox, oy ->
+                            HexRow(bytes, row, offsetDigits, offsetColumnPx, selection, hexSearchState, editState, editStamp, pendingDigit, structureRanges, structureLookup, onTabChangeRequest) { ox, oy ->
                                 dragState.pendingOriginX = ox
                                 dragState.pendingOriginY = oy
                             }
@@ -1072,8 +1070,6 @@ private fun HexSearchBar(
 @Composable
 private fun HexRow(
     bytes: HexBytes,
-    /** [HexBytes.loadStamp]: a change re-renders the row, so bytes that arrived replace their placeholders. */
-    @Suppress("UNUSED_PARAMETER") loadStamp: Int,
     row: Long,
     offsetDigits: Int,
     offsetColumnPx: Int,
@@ -1089,7 +1085,8 @@ private fun HexRow(
 ) {
     val offset = row * BYTES_PER_ROW
     val end = minOf(offset + BYTES_PER_ROW, bytes.size)
-    // A byte still being fetched reads null and shows as a placeholder until its page arrives.
+    // A byte still being fetched reads null and shows as a placeholder; the miss subscribes the
+    // reading scope to HexBytes.loadStamp, so it re-renders when the page arrives.
     fun byteAt(i: Long): Byte? = if (editState != null) editState.getByte(i.toInt()) else bytes.byteOrNull(i)
 
     // Determine structure color for the offset column (use the first byte's range)

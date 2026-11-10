@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.vscode
 
+import androidx.compose.runtime.snapshots.Snapshot
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import kotlin.js.Promise
 import kotlin.test.Test
@@ -113,6 +114,26 @@ class HexBytesTest {
         val bytes = PagedHexBytes(ByteArray(page.toInt() * 2).toCommonByteBuffer(), page * 3, host::fetch)
         bytes.prefetch(page + 10, page * 3)
         assertEquals(listOf(page * 2), host.requests.map { it.first })
+    }
+
+    /** How many snapshot state reads [block] makes, as a composition scope running it would record. */
+    private fun stateReads(block: () -> Unit): Int {
+        var reads = 0
+        Snapshot.observe(readObserver = { reads++ }, block = block)
+        return reads
+    }
+
+    @Test
+    fun aMissSubscribesTheReaderToArrivals(): Promise<Unit> {
+        val host = FakeHost()
+        val bytes = PagedHexBytes(ByteArray(16).toCommonByteBuffer(), size, host::fetch)
+        // The scope that drew a placeholder must be invalidated when the page lands, whichever
+        // nested composable lambda it is; so the miss itself is a state read.
+        assertTrue(stateReads { bytes.byteOrNull(9 * page) } > 0, "a miss reads loadStamp")
+        return Promise.resolve(Unit).then {
+            assertEquals(0, stateReads { bytes.byteOrNull(9 * page) }, "a hit does not")
+            assertEquals(0, stateReads { bytes.byteOrNull(3) }, "nor does the head")
+        }
     }
 
     @Test

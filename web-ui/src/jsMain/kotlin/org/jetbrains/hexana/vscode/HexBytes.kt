@@ -10,13 +10,18 @@ import kotlin.js.Promise
  * The bytes the hex view, the data inspector and the status bar show, addressed with [Long]
  * offsets: the whole file, which can be far larger than the buffer the tabs were parsed from.
  *
- * Reads are synchronous and may miss: [byteOrNull] answers `null` for a byte still being fetched,
- * and [loadStamp] changes when fetched bytes arrive, so a composable that reads it re-renders.
+ * Reads are synchronous and may miss: [byteOrNull] answers `null` for a byte still being fetched.
+ * A miss reads [loadStamp], which changes when fetched bytes arrive, so whatever composition scope
+ * drew the placeholder re-renders by itself; nothing has to thread the stamp down to it.
  */
 interface HexBytes {
     val size: Long
 
-    /** The byte at [offset], or `null` while it is not loaded yet. Requests it when missing. */
+    /**
+     * The byte at [offset], or `null` while it is not loaded yet. Requests it when missing, and a
+     * miss is a read of [loadStamp] (a snapshot state read), so the caller's scope is invalidated
+     * when bytes arrive.
+     */
     fun byteOrNull(offset: Long): Byte?
 
     /** Changes whenever more bytes become available; read it in composition to follow loading. */
@@ -84,6 +89,9 @@ class PagedHexBytes(
         if (bytes == null) {
             enqueue(page, first = true)
             pump()
+            // Subscribe the calling scope to arrivals. Only misses read it, so rows already showing
+            // their bytes are not re-rendered by every page that lands elsewhere.
+            loadStamp
             return null
         }
         // Touch for LRU order.

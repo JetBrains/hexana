@@ -18,9 +18,6 @@ fun DataInspectorPanel(
 ) {
     val offset = selection.cursorIndex
     val totalBytes = bytes.size
-    // Re-render when the bytes under the cursor arrive from the host.
-    @Suppress("UNUSED_VARIABLE")
-    val loadStamp = bytes.loadStamp
 
     var littleEndian by remember { mutableStateOf(true) }
 
