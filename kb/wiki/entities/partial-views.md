@@ -139,6 +139,12 @@ coverage)` / `partialViewNotice(loaded, fileSize, coverage)` and the label from 
   asks the host for one match at a time (label "at 0x…").
 - `messageBytesOrNull` views a posted `Uint8Array` in place; test the type on an expression
   (`payload.unsafeCast<Any>() is Uint8Array`) — a smart cast on the `dynamic` broke the array path.
+  **The view keeps the sender's `byteOffset`:** a small file read by `readHead`
+  (`Buffer.allocUnsafe` < 4 KiB) is a slice of Node's 8 KiB pool, and VS Code transfers the whole
+  pool `ArrayBuffer` plus the offset. So on JS a `ByteArray` may be an offset view; the web
+  `ByteArray.toCommonByteBuffer()` must wrap only the view (it wrapped `.buffer`, read the pool from
+  byte 0, and every small `.wasm` opened as "generic" — VS Code UI tests failed with first byte `5b`).
+  Never use `ByteArray.toInt8Array().buffer` / `unsafeCast<Int8Array>().buffer` without the offset.
 - Webapp parser-worker wire protocol stays `Int` (50 MB cap); it narrows bounded offsets.
 - `EditorToolbar` shows the same "Editing disabled" badge after the format badge
   (`editingDisabledNotice`: `largeFileNotice` with a paged hex view, else `partialViewNotice`, as the

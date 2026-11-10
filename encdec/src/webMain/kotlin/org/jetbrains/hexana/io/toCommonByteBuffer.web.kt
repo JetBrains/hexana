@@ -6,7 +6,22 @@ import org.khronos.webgl.DataView
 import org.khronos.webgl.Int8Array
 import org.khronos.webgl.get
 
-actual fun ByteArray.toCommonByteBuffer(): CommonByteBuffer = WebByteBuffer(toInt8Array().buffer)
+/**
+ * On JS a [ByteArray] is an `Int8Array`, which can be a view into a larger buffer — bytes posted
+ * by the VS Code extension host arrive as a view into Node's shared allocation pool. Only the view's
+ * own bytes are wrapped: its buffer as is when the view covers all of it (no copy), else a copy of
+ * just the view. Wrapping `.buffer` regardless read the pool from its start.
+ */
+actual fun ByteArray.toCommonByteBuffer(): CommonByteBuffer {
+    val view = toInt8Array()
+    val buffer = view.buffer
+    val own = if (view.byteOffset == 0 && view.length == buffer.byteLength) {
+        buffer
+    } else {
+        buffer.slice(view.byteOffset, view.byteOffset + view.length)
+    }
+    return WebByteBuffer(own)
+}
 
 actual fun allocateCommonByteBuffer(size: Int): CommonByteBuffer = WebByteBuffer(ArrayBuffer(size))
 
