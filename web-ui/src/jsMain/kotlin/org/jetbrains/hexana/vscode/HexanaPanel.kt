@@ -544,9 +544,7 @@ fun HexanaPanel(
             )
         }
 
-        // Movable: the two docks call it from different places, and a plain call would recreate
-        // the open tab — its scroll position, folds and search — whenever the panel is re-docked.
-        val tabContentImpl: @Composable () -> Unit = {
+        val tabContent: @Composable () -> Unit = {
             val currentTab = tabs.firstOrNull { it.id == activeTab }
             var tabContentRef by remember { mutableStateOf<HTMLElement?>(null) }
 
@@ -601,30 +599,26 @@ fun HexanaPanel(
                 }
             }
         }
-        val currentTabContent by rememberUpdatedState(tabContentImpl)
-        val tabContent = remember { movableContentOf { currentTabContent() } }
-        if (dockedRight) {
-            Div({
-                style {
-                    display(DisplayStyle.Flex)
-                    property("flex-direction", "row")
-                    property("flex", "1")
-                    property("min-height", "0")
-                }
-            }) {
-                tabContent()
-                if (showTabList) {
-                    VerticalTabList(
-                        tabs = tabs,
-                        activeTab = activeTab,
-                        onActiveTabChange = onActiveTabChange,
-                        closableTabs = scriptTabLabels,
-                        onCloseTab = closeScriptTab,
-                    )
-                }
+        // The same wrapper in both docks, so the open tab's elements stay where they are when the
+        // panel is re-docked: re-parented, they would be recreated or lose their scroll position.
+        Div({
+            style {
+                display(DisplayStyle.Flex)
+                property("flex-direction", "row")
+                property("flex", "1")
+                property("min-height", "0")
             }
-        } else {
+        }) {
             tabContent()
+            if (dockedRight && showTabList) {
+                VerticalTabList(
+                    tabs = tabs,
+                    activeTab = activeTab,
+                    onActiveTabChange = onActiveTabChange,
+                    closableTabs = scriptTabLabels,
+                    onCloseTab = closeScriptTab,
+                )
+            }
         }
     }
 }

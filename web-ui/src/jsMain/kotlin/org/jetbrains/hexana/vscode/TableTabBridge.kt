@@ -515,6 +515,10 @@ fun TableTabContent(
                 // Account for the sticky <thead> so that scrollIntoView
                 // positions rows below the header, not behind it.
                 property("scroll-padding-top", "${rowHeight}px")
+                // The virtual window positions rows itself. Scroll anchoring would "correct"
+                // scrollTop each time the window moves, which moves the window again: the table
+                // kept scrolling on its own after the wheel stopped.
+                property("overflow-anchor", "none")
             }
             ref { tableWrapper ->
                 viewportHeight = tableWrapper.clientHeight.toDouble()
@@ -526,8 +530,15 @@ fun TableTabContent(
                     scrollTop = tableWrapper.scrollTop
                 }
                 tableWrapper.addEventListener("scroll", listener)
+                // A resize without a scroll (re-docked, expanded, divider dragged) changes how many
+                // rows must be rendered; re-read the offset too, which the browser may have clamped.
+                val stopObserving = observeResize(tableWrapper) {
+                    viewportHeight = tableWrapper.clientHeight.toDouble()
+                    scrollTop = tableWrapper.scrollTop
+                }
                 onDispose {
                     tableWrapper.removeEventListener("scroll", listener)
+                    stopObserving()
                     flatTableWrapper = null
                 }
             }
@@ -593,6 +604,7 @@ fun TableTabContent(
                         val isHighlighted = isRowHighlighted(index)
 
                         PanelTableRow(
+                            heightPx = rowHeight,
                             isHighlighted = isHighlighted,
                             backgroundColor = descriptor.rowTintProvider?.invoke(index)?.let(::rowTintCss),
                             onClick = {
@@ -1799,6 +1811,10 @@ private fun TreeTableBody(
                 // Account for the sticky <thead> so that scrollIntoView
                 // positions rows below the header, not behind it.
                 property("scroll-padding-top", "${rowHeight}px")
+                // The virtual window positions rows itself. Scroll anchoring would "correct"
+                // scrollTop each time the window moves, which moves the window again: the table
+                // kept scrolling on its own after the wheel stopped.
+                property("overflow-anchor", "none")
             }
             ref { tableWrapper ->
                 tableWrapperElement = tableWrapper
@@ -1864,8 +1880,20 @@ private fun TreeTableBody(
                     }
                 }
                 tableWrapper.addEventListener("scroll", listener)
+                // See the flat table: a resize without a scroll must re-sync the rendered window.
+                val stopObserving = observeResize(tableWrapper) {
+                    val newViewportHeight = tableWrapper.clientHeight.toDouble()
+                    if (kotlin.math.abs(newViewportHeight - viewportHeight) >= 1.0 ||
+                        kotlin.math.abs(tableWrapper.scrollTop - committedScrollTop[0]) >= rowHeight
+                    ) {
+                        committedScrollTop[0] = tableWrapper.scrollTop
+                        viewportHeight = newViewportHeight
+                        scrollTop = tableWrapper.scrollTop
+                    }
+                }
                 onDispose {
                     tableWrapper.removeEventListener("scroll", listener)
+                    stopObserving()
                     tableWrapperElement = null
                 }
             }
@@ -1946,6 +1974,7 @@ private fun TreeTableBody(
                         }
 
                         PanelTableRow(
+                            heightPx = rowHeight,
                             isHighlighted = isHighlighted,
                             attrs = if (isHighlighted) mapOf("data-focused" to "") else emptyMap(),
                             onClick = {

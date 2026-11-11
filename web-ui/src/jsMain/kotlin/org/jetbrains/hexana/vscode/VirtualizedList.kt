@@ -84,10 +84,19 @@ internal fun VirtualizedList(
                 if (h > 0) viewportHeight = h
             }
 
+            // A resize without a scroll (re-docked, expanded, divider dragged) changes how many rows
+            // must be rendered; re-read the offset too, which the browser may have clamped.
+            val stopObserving = observeResize(element) {
+                scrollTop = element.scrollTop
+                val h = element.clientHeight.toDouble()
+                if (h > 0) viewportHeight = h
+            }
+
             onDispose {
                 container = null
                 element.removeEventListener("scroll", scrollListener)
                 kotlinx.browser.window.cancelAnimationFrame(rafId)
+                stopObserving()
             }
         }
     }) {

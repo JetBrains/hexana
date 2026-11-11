@@ -469,6 +469,12 @@ fun PanelTableRow(
     onSelect: (() -> Unit)? = null,
     onActivate: (() -> Unit)? = null,
     onContextMenu: ((x: Int, y: Int) -> Unit)? = null,
+    /**
+     * Fixed row height, for virtualized tables: their spacers stand in for off-screen rows at
+     * exactly this height, so a row of any other height shifts the content whenever the
+     * rendered window moves. `null` leaves the height to the content.
+     */
+    heightPx: Int? = null,
     content: @Composable () -> Unit,
 ) {
     // Keep a stable callbacks holder across recompositions; update its
@@ -485,6 +491,10 @@ fun PanelTableRow(
         tabIndex(0)
         style {
             property("cursor", "pointer")
+            if (heightPx != null) {
+                property("height", "${heightPx}px")
+                property("box-sizing", "border-box")
+            }
             if (isHighlighted && backgroundColor != null) {
                 // Layer the selection highlight over the classification background
                 property("background", "linear-gradient(var(--hexana-selection, rgba(156, 183, 255, 0.2)), var(--hexana-selection, rgba(156, 183, 255, 0.2))), $backgroundColor")

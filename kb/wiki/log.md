@@ -192,3 +192,5 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-10 — `entities/editor-tabs-dock` — expand in the right-docked layout collapses the hex pane to a 12 dp strip (`COLLAPSED_PANE_WIDTH`).
 - 2026-11-11 — `entities/editor-tabs-dock` — review fixes: settings reload sync, movable panes across docking, derived expand state, selected vertical tab into view, scrollbar gutters, width reset on fold.
 - 2026-11-11 — `entities/editor-tabs-dock` — VS Code: `hexana.tabsPanelPosition`, right-docked panel with vertical tabs and expand, table min-width and natural-width listing rows; `DockedTabsLayoutDomTest`.
+- 2026-11-11 — `entities/editor-tabs-dock` — VS Code re-dock fix: no DOM moves (flex-direction switch instead of movableContentOf), ResizeObserver resync for virtualized tables/lists; `DockedTabsRedockDomTest`.
+- 2026-11-11 — `entities/editor-tabs-dock` — web virtualized tables: fixed 24 px rows + overflow-anchor:none stop scroll drift; `LargeTableScrollDomTest`.

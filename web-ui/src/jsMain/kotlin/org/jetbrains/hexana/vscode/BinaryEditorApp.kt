@@ -449,50 +449,71 @@ fun BinaryEditorContent(
             },
             parseCoverage = parseCoverage,
         )
-        // Movable: the two docks place them under different parents, and plain calls would
-        // recreate the hex view and the open tab — scroll positions, folds, running work — on
-        // every re-dock. The latest lambdas are read through rememberUpdatedState.
-        val hexAreaImpl: @Composable () -> Unit = {
+        // One element tree for both docks, switched by `flex-direction` alone: moving the hex view
+        // or the panel to another parent would recreate them or, moved as nodes, reset the scroll
+        // position of every scrolled element inside (the browser does that to a moved element),
+        // leaving virtualized tables rendering rows for an offset they are no longer at.
+        Div({
+            classes("hexana-editor-split")
+            style {
+                display(DisplayStyle.Flex)
+                property("flex-direction", if (dockedRight) "row" else "column")
+                property("flex", "1 1 0")
+                property("min-height", "0")
+                property("overflow", "hidden")
+            }
+        }) {
             Div({
+                classes("hexana-hex-area")
                 style {
                     display(DisplayStyle.Flex)
+                    property("flex-direction", "column")
                     property("flex", "1 1 0")
-                    property("overflow", "hidden")
                     property("min-height", "0")
+                    // Lets an expanded right-docked panel squeeze the hex view down to a thin strip.
+                    property("min-width", "0")
+                    property("overflow", "hidden")
                 }
             }) {
-                HexViewerPanel(
-                    bytes = shownBytes,
-                    onSearchFile = onSearchFile,
+                Div({
+                    style {
+                        display(DisplayStyle.Flex)
+                        property("flex", "1 1 0")
+                        property("overflow", "hidden")
+                        property("min-height", "0")
+                    }
+                }) {
+                    HexViewerPanel(
+                        bytes = shownBytes,
+                        onSearchFile = onSearchFile,
+                        selection = selection,
+                        editState = editState,
+                        structureRanges = remember(provider, initialStructureRanges, showSemanticHighlighting, scriptStructureRanges) {
+                            if (showSemanticHighlighting) {
+                                ((initialStructureRanges ?: provider.structureRanges) + scriptStructureRanges).sortedBy { it.offset }
+                            } else {
+                                emptyList()
+                            }
+                        },
+                        onTabChangeRequest = { tabName -> activeTab = tabName },
+                    )
+                    if (showDataInspector) {
+                        DataInspectorPanel(bytes = shownBytes, selection = selection)
+                    }
+                    // A second, independent column: the row detail panel shows bytes
+                    // that are not in the file, so it has nothing to do with the
+                    // inspector's view of the cursor and neither one closes the other.
+                    if (selection.showRowDetail) {
+                        RowDetailPanel(selection = selection)
+                    }
+                }
+                SelectionStatusBar(
                     selection = selection,
-                    editState = editState,
-                    structureRanges = remember(provider, initialStructureRanges, showSemanticHighlighting, scriptStructureRanges) {
-                        if (showSemanticHighlighting) {
-                            ((initialStructureRanges ?: provider.structureRanges) + scriptStructureRanges).sortedBy { it.offset }
-                        } else {
-                            emptyList()
-                        }
-                    },
-                    onTabChangeRequest = { tabName -> activeTab = tabName },
+                    totalBytes = shownBytes.size,
+                    showDataInspector = showDataInspector,
+                    onToggleDataInspector = { showDataInspector = !showDataInspector },
                 )
-                if (showDataInspector) {
-                    DataInspectorPanel(bytes = shownBytes, selection = selection)
-                }
-                // A second, independent column: the row detail panel shows bytes
-                // that are not in the file, so it has nothing to do with the
-                // inspector's view of the cursor and neither one closes the other.
-                if (selection.showRowDetail) {
-                    RowDetailPanel(selection = selection)
-                }
             }
-            SelectionStatusBar(
-                selection = selection,
-                totalBytes = shownBytes.size,
-                showDataInspector = showDataInspector,
-                onToggleDataInspector = { showDataInspector = !showDataInspector },
-            )
-        }
-        val panelImpl: @Composable () -> Unit = {
             HexanaPanel(
                 provider = liveProvider,
                 selection = selection,
@@ -532,39 +553,6 @@ fun BinaryEditorContent(
                     panelWidth = (currentWidth - deltaX).coerceAtLeast(MIN_PANEL_WIDTH)
                 },
             )
-        }
-        val currentHexArea by rememberUpdatedState(hexAreaImpl)
-        val currentPanel by rememberUpdatedState(panelImpl)
-        val hexArea = remember { movableContentOf { currentHexArea() } }
-        val tabsPanel = remember { movableContentOf { currentPanel() } }
-        if (dockedRight) {
-            Div({
-                classes("hexana-editor-split-row")
-                style {
-                    display(DisplayStyle.Flex)
-                    property("flex-direction", "row")
-                    property("flex", "1 1 0")
-                    property("min-height", "0")
-                    property("overflow", "hidden")
-                }
-            }) {
-                Div({
-                    style {
-                        display(DisplayStyle.Flex)
-                        property("flex-direction", "column")
-                        property("flex", "1 1 0")
-                        // Lets an expanded panel squeeze the hex view down to a thin strip.
-                        property("min-width", "0")
-                        property("overflow", "hidden")
-                    }
-                }) {
-                    hexArea()
-                }
-                tabsPanel()
-            }
-        } else {
-            hexArea()
-            tabsPanel()
         }
     }
 

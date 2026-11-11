@@ -52,9 +52,14 @@ The analysis tabs of the IntelliJ single-file editor (`ui/BinaryEditorView.kt`) 
 - **Plumbing:** `web-ui` `LocalTabsPanelDock` (`TabsPanelDock(onRight, setOnRight)`), provided only by the VS Code
   webview (`Main.kt`) — so the many webapp `BinaryEditorContent` call sites need no change, and the webapp keeps the
   bottom layout with no dock button.
-- **Layout:** `BinaryEditorContent` puts the hex area and the panel in a row when docked right; both are
-  `movableContentOf` (latest lambdas through `rememberUpdatedState`), as is `HexanaPanel`'s tab content, so
-  re-docking keeps scroll positions and open-tab state. `HexanaPanel(dockedRight, widthPx, expanded, …)`: left
+- **Layout:** one element tree for both docks — `BinaryEditorContent`'s `.hexana-editor-split` switches
+  `flex-direction` (column / row) around the hex area and the panel, and `HexanaPanel` keeps its tab content in the
+  same row wrapper either way (the vertical list is a sibling added after it). **Not `movableContentOf`:** moving
+  DOM nodes resets the moved elements' `scrollTop` to 0 while the virtualized tables' Compose state kept the old
+  offset, so a scrolled table rendered rows 2973–3022 off-screen and showed nothing until its tab was recreated
+  (reported; reproduced by `DockedTabsRedockDomTest`). Virtualized tables (flat and tree) and `VirtualizedList`
+  also re-read viewport height and offset on resize (`observeResize`, a `ResizeObserver`), since re-docking,
+  expanding and divider drags resize them without a scroll event. `HexanaPanel(dockedRight, widthPx, expanded, …)`: left
   `ColumnResizeDivider`, `DockedPanelHeader` (expand, dock, "+"), content + `VerticalTabList` on the right edge
   (≤ 220 px, ellipsized, active row `scrollIntoView({block: 'nearest'})`). Expanded = `calc(100% - 12px)`; a drag from
   there starts at the panel's measured width. Icons are SVG masks in `editor.css` (`hexana-icon-*`), like the debug
@@ -69,4 +74,12 @@ The analysis tabs of the IntelliJ single-file editor (`ui/BinaryEditorView.kt`) 
 - **Pinned by** `webapp` `DockedTabsLayoutDomTest` (Chrome, real `editor.css` and `sample-clr.exe` served from
   `layout-fixtures` via `jsTestProcessResources` + `karma.config.d/web/config.js`); the table and IL checks failed
   before the fixes.
+- **Large-table drift (2026-11-11, not dock-specific):** the virtualized tables in `TableTabBridge` size their
+  spacers at `rowHeight = 24` px per off-screen row, but no CSS made rows 24 px: with `editor.css` they render at
+  ~18 px (12 px font + padding). Each move of the rendered window shifted the content, Chrome's scroll anchoring
+  "corrected" `scrollTop`, which moved the window again — the table kept scrolling by itself (~96 px/frame) after
+  input stopped; small tables are not virtualized, so they were fine. Fixed by fixed-height virtual rows
+  (`PanelTableRow(heightPx = rowHeight)`) and `overflow-anchor: none` on both virtual scroll wrappers.
+  `LargeTableScrollDomTest` pins it (flat table failed before; the tree table's pin/settle logic already absorbed
+  the corrections, so its variant is a guard only).
 

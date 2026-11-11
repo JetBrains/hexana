@@ -18,6 +18,13 @@ import org.jetbrains.hexana.vscode.LocalHost
 import org.jetbrains.hexana.vscode.LocalTabsPanelDock
 import org.jetbrains.hexana.vscode.TabsPanelDock
 import org.jetbrains.hexana.vscode.computeExtraTabs
+import org.jetbrains.hexana.vscode.PanelTab
+import org.jetbrains.hexana.vscode.TableTabContent
+import org.jetbrains.hexana.shared.CellValue
+import org.jetbrains.hexana.shared.ColumnDescriptor
+import org.jetbrains.hexana.shared.ColumnWidth
+import org.jetbrains.hexana.shared.TableTabDescriptor
+import androidx.compose.runtime.mutableStateOf
 import org.khronos.webgl.Int8Array
 import org.w3c.fetch.RequestInit
 import org.w3c.dom.HTMLDivElement
@@ -112,9 +119,154 @@ class DockedTabsLayoutDomTest {
     }
 }
 
+
+/** A large virtualized table must keep showing rows when the panel is re-docked mid-scroll. */
+@OptIn(DelicateCoroutinesApi::class)
+class DockedTabsRedockDomTest {
+
+    @Test
+    fun scrolledTableStillShowsRowsAfterRedocking(): Promise<Unit> = GlobalScope.promise {
+        val onRight = mutableStateOf(false)
+        val bigTable = TableTabDescriptor(
+            name = "Big",
+            columns = listOf(
+                ColumnDescriptor("Name", ColumnWidth.Fill()) { i -> CellValue("row $i") },
+                ColumnDescriptor("Value", ColumnWidth.Measured("0000000")) { i -> CellValue(i, i.toString()) },
+            ),
+            rowCount = 5000,
+        )
+        val extraTabs = listOf(
+            PanelTab("Big") { sel -> TableTabContent(bigTable, sel) },
+            PanelTab("Plain") { _ -> org.jetbrains.compose.web.dom.Text("not a table") },
+        )
+        withEditor(
+            content = { provider ->
+                CompositionLocalProvider(
+                    LocalHost provides LayoutTestHost(),
+                    LocalTabsPanelDock provides TabsPanelDock(onRight.value) { onRight.value = it },
+                ) {
+                    BinaryEditorContent(fileName = "sample-clr.exe", provider = provider, extraTabs = extraTabs, initialActiveTab = "Big")
+                }
+            },
+        ) { root ->
+            awaitElement(root, "the Big table") { visibleRows(root).takeIf { it.isNotEmpty() } }
+            val scroller = tableScroller(root)
+            scroller.scrollTop = scroller.scrollHeight * 0.6
+            scroller.dispatchEvent(org.w3c.dom.events.Event("scroll"))
+            awaitElement(root, "rows far down the table") {
+                visibleRows(root).firstOrNull { (it.textContent.orEmpty().substringAfter("row ").takeWhile(Char::isDigit).toIntOrNull() ?: 0) > 1000 }
+            }
+
+            for (dock in listOf(true, false, true)) {
+                onRight.value = dock
+                delay(100)
+                val rows = visibleRows(root)
+                val sc = tableScroller(root)
+                val rendered = elements(sc, "tbody tr").filter { it.textContent.orEmpty().contains("row ") }
+                assertTrue(
+                    rows.isNotEmpty(),
+                    "no table row is visible after docking ${if (dock) "right" else "below"}: scrollTop=${sc.scrollTop} " +
+                        "clientHeight=${sc.clientHeight} scrollHeight=${sc.scrollHeight}, rendered " +
+                        "${rendered.firstOrNull()?.textContent} .. ${rendered.lastOrNull()?.textContent} (${rendered.size})",
+                )
+                // Not just some rows: the same place in the table, since the elements were not moved.
+                val firstShown = rows.first().textContent.orEmpty().substringAfter("row ").takeWhile(Char::isDigit).toInt()
+                assertTrue(firstShown > 1000, "the table jumped back to row $firstShown after docking ${if (dock) "right" else "below"}")
+            }
+        }
+    }
+}
+
+/** One scroll of a large virtualized table must stay where it was put — no drift once input stops. */
+@OptIn(DelicateCoroutinesApi::class)
+class LargeTableScrollDomTest {
+
+    @Test
+    fun scrollSettlesInsteadOfDrifting(): Promise<Unit> = GlobalScope.promise { assertScrollSettles(tree = false) }
+
+    /** Tree tables (expandable rows, e.g. Types) have their own virtual window. */
+    @Test
+    fun treeTableScrollSettlesInsteadOfDrifting(): Promise<Unit> = GlobalScope.promise { assertScrollSettles(tree = true) }
+
+    private suspend fun assertScrollSettles(tree: Boolean) {
+        val bigTable = TableTabDescriptor(
+            name = "Big",
+            columns = listOf(
+                ColumnDescriptor("Name", ColumnWidth.Fill()) { i -> CellValue("row $i") },
+                ColumnDescriptor("Value", ColumnWidth.Measured("0000000")) { i -> CellValue(i, i.toString()) },
+            ),
+            rowCount = 5000,
+            childrenProvider = if (tree) ({ _ -> null }) else null,
+        )
+        val extraTabs = listOf(PanelTab("Big") { sel -> TableTabContent(bigTable, sel) })
+        withEditor(
+            content = { provider ->
+                CompositionLocalProvider(LocalHost provides LayoutTestHost()) {
+                    BinaryEditorContent(fileName = "sample-clr.exe", provider = provider, extraTabs = extraTabs, initialActiveTab = "Big")
+                }
+            },
+        ) { root ->
+            awaitElement(root, "the Big table") { visibleRows(root).takeIf { it.isNotEmpty() } }
+            val scroller = tableScroller(root)
+            val rowHeight = visibleRows(root).first().rect().height
+            // Wheel-like steps; after each one the position must stay where it was put. A virtual
+            // window whose spacers disagree with the real row height shifts the content under the
+            // browser's scroll anchoring, which "corrects" scrollTop, which moves the window again.
+            for (step in 1..5) {
+                val target = scroller.scrollTop + 600.0
+                scroller.scrollTop = target
+                val trace = ArrayList<Double>()
+                repeat(6) {
+                    afterFrame()
+                    trace += scroller.scrollTop
+                }
+                assertTrue(
+                    trace.all { kotlin.math.abs(it - target) < 1.0 },
+                    "step $step: scrollTop kept moving after being set to $target (rows are ${rowHeight}px): $trace",
+                )
+            }
+        }
+    }
+}
+
+private suspend fun afterFrame() = kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
+    window.requestAnimationFrame { cont.resumeWith(Result.success(Unit)) }
+}
+
+/** Rows of the shown table that intersect its scrolling viewport. */
+private fun visibleRows(root: HTMLElement): List<HTMLElement> {
+    val scroller = (root.querySelector("table.hexana-panel-table") as? HTMLElement)?.parentElement as? HTMLElement ?: return emptyList()
+    val view = scroller.rect()
+    return elements(scroller, "tbody tr").filter { row ->
+        val r = row.rect()
+        r.height > 0 && r.bottom > view.top + 25 && r.top < view.bottom && row.textContent.orEmpty().contains("row ")
+    }
+}
+
+private fun tableScroller(root: HTMLElement): HTMLElement =
+    (root.querySelector("table.hexana-panel-table") as HTMLElement).parentElement as HTMLElement
+
 private const val MIN_READABLE_COLUMN_PX = 40.0
 
 private suspend fun withDockedEditor(block: suspend (HTMLElement) -> Unit) {
+    withEditor(
+        content = { provider ->
+            val extraTabs = computeExtraTabs(provider.bytes.duplicate().position(0), provider)
+            CompositionLocalProvider(
+                LocalHost provides LayoutTestHost(),
+                LocalTabsPanelDock provides TabsPanelDock(onRight = true) {},
+            ) {
+                BinaryEditorContent(fileName = "sample-clr.exe", provider = provider, extraTabs = extraTabs)
+            }
+        },
+        block = block,
+    )
+}
+
+private suspend fun withEditor(
+    content: @androidx.compose.runtime.Composable (org.jetbrains.hexana.providers.BinaryProvider) -> Unit,
+    block: suspend (HTMLElement) -> Unit,
+) {
     val css = window.fetch("/kotlin/layout-fixtures/editor.css", js("({})").unsafeCast<RequestInit>()).await().text().await()
     val style = (document.createElement("style") as HTMLStyleElement).also {
         it.textContent = css
@@ -125,7 +277,6 @@ private suspend fun withDockedEditor(block: suspend (HTMLElement) -> Unit) {
         ByteArray(array.length) { i -> array.asDynamic()[i] as Byte }
     }
     val provider = nativeOrGenericBinaryProvider(bytes.toCommonByteBuffer())
-    val extraTabs = computeExtraTabs(provider.bytes.duplicate().position(0), provider)
     val root = document.createElement("div").unsafeCast<HTMLDivElement>().also {
         it.id = "docked-tabs-test-root-${dockedDomRootSequence++}"
         it.style.width = "1000px"
@@ -136,14 +287,7 @@ private suspend fun withDockedEditor(block: suspend (HTMLElement) -> Unit) {
     document.body!!.appendChild(root)
     var composition: Composition? = null
     try {
-        composition = renderComposable(rootElementId = root.id) {
-            CompositionLocalProvider(
-                LocalHost provides LayoutTestHost(),
-                LocalTabsPanelDock provides TabsPanelDock(onRight = true) {},
-            ) {
-                BinaryEditorContent(fileName = "sample-clr.exe", provider = provider, extraTabs = extraTabs)
-            }
-        }
+        composition = renderComposable(rootElementId = root.id) { content(provider) }
         block(root)
     } finally {
         composition?.dispose()
