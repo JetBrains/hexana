@@ -40,7 +40,10 @@ Re-sending an HTTP/1.x request captured in a PCAP, optionally edited, from the I
   - `HttpClientReplayExport` — no compile-time dependency on the HTTP Client plugin
     (`com.jetbrains.restClient`); offered only when `PluginManagerCore.isLoaded`. Writes a scratch
     `hexana-replay-packet-N.http` (+ a `.bin` sidecar in the scratch root for file bodies).
-  - Wired in `BinaryEditorView.enrichPcapPacketsTab` as two row context-menu items.
+  - Wired in `BinaryEditorView.enrichPcapPacketsTab` as two row context-menu items, plus a run-icon
+    gutter (`rowAction`, `RowActionKind.Run`) that opens `HttpReplayDialog`; its tooltip provider
+    returns `null` (icon hidden) unless `HttpReplay.mayHoldRequest` says the row may hold a request.
+    VS Code's `enrichPcapPacketsTab` adds the same gutter when `Host.canReplayHttp`.
 
 - VS Code (`web-ui` + `vscode-plugin`):
   - `web-ui/.../HttpReplayDialog.kt` — Compose HTML dialog (overlay click does not close it);
@@ -63,3 +66,16 @@ Re-sending an HTTP/1.x request captured in a PCAP, optionally edited, from the I
   short and marked incomplete. HTTP/2 is not recognised by the dissector, so it is not replayable.
 - The browser webapp has no replay. VS Code replays use Node's TLS store, not VS Code's, so a
   self-signed server needs `NODE_EXTRA_CA_CERTS`.
+
+## Protocol filter (Packets tab)
+
+`PcapTableTabs.protocolFilters` gives the shared Packets tab one `PredefinedFilter` per protocol family
+(`pcapProtocolFamily`: all TLS versions → `TLS`), listed from the header-only `PcapDissector.protocolInfo`
+pass, with `defaultFilterShowAll = true` (no filter by default). A row matches if its wire family *or* its
+displayed Protocol cell family matches, so a decrypted HTTPS row is under both TLS and HTTP; HTTP is
+offered whenever TLS is present and a key log is loaded. No filter when only one family is present.
+The displayed-protocol fallback decrypts, so a TLS-wire row consults it only for the HTTP filter (other
+filters decide TLS rows by wire family); non-TLS rows still consult it, since `isHttpPayload` (2-byte
+prefix) is looser than the column's parsed HTTP head, and they never decrypt.
+Host enrichers rebuild the descriptor field by field, so they must carry `defaultFilterShowAll` too.
+

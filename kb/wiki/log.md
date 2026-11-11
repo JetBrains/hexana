@@ -195,3 +195,5 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-11 — `entities/editor-tabs-dock` — VS Code re-dock fix: no DOM moves (flex-direction switch instead of movableContentOf), ResizeObserver resync for virtualized tables/lists; `DockedTabsRedockDomTest`.
 - 2026-11-11 — `entities/editor-tabs-dock` — web virtualized tables: fixed 24 px rows + overflow-anchor:none stop scroll drift; `LargeTableScrollDomTest`.
 - 2026-11-11 — `entities/editor-tabs-dock` — VS Code review fixes: application-scoped dock setting, divider drag measured once at mouse-down.
+- 2026-11-11 — pcap-http-replay: Packets tab gained a replay run-icon gutter (IntelliJ + VS Code) and a protocol-family filter dropdown (default Show all).
+- 2026-11-12 — `entities/pcap-http-replay` — review fix: protocol filters no longer decrypt TLS rows except for the HTTP filter.

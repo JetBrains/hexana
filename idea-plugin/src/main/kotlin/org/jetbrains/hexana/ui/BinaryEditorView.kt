@@ -108,6 +108,7 @@ import org.jetbrains.hexana.providers.TarBinaryProvider
 import org.jetbrains.hexana.providers.memory.isMemoryBudgetEligible
 import org.jetbrains.hexana.providers.ZipBinaryProvider
 import org.jetbrains.hexana.shared.RowContextMenuItemDescriptor
+import org.jetbrains.hexana.shared.RowActionDescriptor
 import org.jetbrains.hexana.tar.TarEntry
 import org.jetbrains.hexana.zip.ZipEntry
 import org.jetbrains.hexana.shared.APK_CLASSES_TAB_NAME
@@ -1927,32 +1928,44 @@ private fun PcapBinaryProvider.enrichPcapPacketsTab(
         }
     }
 
+    fun replay(index: Int, open: suspend (CapturedHttpRequest) -> Unit) {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val captured = HttpReplay.capturedRequest(provider.bytes, packets, index, linkType) {
+                    decryptedPlaintext(index)
+                } ?: return@launch
+                open(captured)
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                HexanaLog.LOG.warn("Failed to rebuild the HTTP request in packet ${index + 1}", t)
+            }
+        }
+    }
+
     fun replayItem(label: String, open: suspend (CapturedHttpRequest) -> Unit) =
         RowContextMenuItemDescriptor(
             labelProvider = { label },
-            action = { index ->
-                scope.launch(Dispatchers.IO) {
-                    try {
-                        val captured = HttpReplay.capturedRequest(provider.bytes, packets, index, linkType) {
-                            decryptedPlaintext(index)
-                        } ?: return@launch
-                        open(captured)
-                    } catch (c: CancellationException) {
-                        throw c
-                    } catch (t: Throwable) {
-                        HexanaLog.LOG.warn("Failed to rebuild the HTTP request in packet ${index + 1}", t)
-                    }
-                }
-            },
+            action = { index -> replay(index, open) },
             isVisible = { index -> isReplayable(index) },
         )
 
+    val openReplayDialog: suspend (CapturedHttpRequest) -> Unit = { captured ->
+        withContext(Dispatchers.EDT) {
+            if (!project.isDisposed) HttpReplayDialog(project, captured).show()
+        }
+    }
+
+    // The gutter's run icon opens the same dialog as the context menu, on the
+    // rows that hold a request; a null tooltip hides the icon everywhere else.
+    val replayAction = RowActionDescriptor(
+        label = "Replay HTTP Request",
+        tooltipProvider = { index -> if (isReplayable(index)) "Replay HTTP request…" else null },
+        action = { index -> replay(index, openReplayDialog) },
+    )
+
     val replayItems = buildList {
-        add(replayItem("Replay HTTP Request…") { captured ->
-            withContext(Dispatchers.EDT) {
-                if (!project.isDisposed) HttpReplayDialog(project, captured).show()
-            }
-        })
+        add(replayItem("Replay HTTP Request…", openReplayDialog))
         if (HttpClientReplayExport.isAvailable) {
             add(replayItem("Open Request in HTTP Client") { captured ->
                 HttpClientReplayExport.open(project, captured, captured.request)
@@ -1967,7 +1980,7 @@ private fun PcapBinaryProvider.enrichPcapPacketsTab(
         defaultSortColumn = tab.defaultSortColumn,
         defaultSortAscending = tab.defaultSortAscending,
         rowSelectionProvider = tab.rowSelectionProvider,
-        rowAction = tab.rowAction,
+        rowAction = replayAction,
         contextMenuItems = tab.contextMenuItems + openBodyItem + replayItems,
         rowClickAction = tab.rowClickAction,
         rowDoubleClickAction = tab.rowDoubleClickAction,
@@ -1980,6 +1993,7 @@ private fun PcapBinaryProvider.enrichPcapPacketsTab(
         showIdColumn = tab.showIdColumn,
         priority = tab.priority,
         predefinedFilters = tab.predefinedFilters,
+        defaultFilterShowAll = tab.defaultFilterShowAll,
         // Rebuilt field by field, so anything the shared tab set has to be
         // carried over by hand - the decrypted-plaintext panel included.
         rowDetailProvider = tab.rowDetailProvider,

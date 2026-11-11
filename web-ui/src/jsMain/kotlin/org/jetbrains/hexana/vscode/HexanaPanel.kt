@@ -26,6 +26,7 @@ import org.jetbrains.hexana.shared.ApkDexClasses
 import org.jetbrains.hexana.shared.DEX_SMALI_TAB_NAME
 import org.jetbrains.hexana.shared.isApkFileName
 import org.jetbrains.hexana.shared.RowContextMenuItemDescriptor
+import org.jetbrains.hexana.shared.RowActionDescriptor
 import org.jetbrains.hexana.shared.buildInvokeOption
 import org.jetbrains.hexana.shared.TableTabDescriptor
 import org.jetbrains.hexana.shared.TableTabsContext
@@ -1257,6 +1258,25 @@ private fun enrichPcapPacketsTab(
         emptyList()
     }
 
+    // The gutter's run icon opens the replay dialog on rows that hold a
+    // request; a null tooltip hides it on the rest.
+    val replayAction = if (host.canReplayHttp) {
+        RowActionDescriptor(
+            label = "Replay HTTP Request",
+            tooltipProvider = { index -> if (isReplayable(index)) "Replay HTTP request…" else null },
+            action = { index ->
+                try {
+                    HttpReplay.capturedRequest(provider.bytes, packets, index, linkType) { decryptedPlaintext(index) }
+                        ?.let(onReplay)
+                } catch (_: Exception) {
+                    // The row did not hold a request after all.
+                }
+            },
+        )
+    } else {
+        tab.rowAction
+    }
+
     return TableTabDescriptor(
         name = tab.name,
         columns = tab.columns,
@@ -1264,7 +1284,7 @@ private fun enrichPcapPacketsTab(
         defaultSortColumn = tab.defaultSortColumn,
         defaultSortAscending = tab.defaultSortAscending,
         rowSelectionProvider = tab.rowSelectionProvider,
-        rowAction = tab.rowAction,
+        rowAction = replayAction,
         contextMenuItems = tab.contextMenuItems + openBodyItem + replayItems,
         rowClickAction = tab.rowClickAction,
         rowDoubleClickAction = tab.rowDoubleClickAction,
@@ -1277,6 +1297,7 @@ private fun enrichPcapPacketsTab(
         showIdColumn = tab.showIdColumn,
         priority = tab.priority,
         predefinedFilters = tab.predefinedFilters,
+        defaultFilterShowAll = tab.defaultFilterShowAll,
         // Rebuilt field by field, so anything the shared tab set has to be
         // carried over by hand - the decrypted-plaintext panel included.
         rowDetailProvider = tab.rowDetailProvider,

@@ -3,6 +3,7 @@ package org.jetbrains.hexana.shared
 import org.jetbrains.hexana.pcap.PcapDissectedPacket
 import org.jetbrains.hexana.pcap.PcapDissector
 import org.jetbrains.hexana.pcap.PcapFile
+import org.jetbrains.hexana.pcap.PcapPacketRecord
 import org.jetbrains.hexana.pcap.TlsDecryptionContext
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.providers.PcapBinaryProvider
@@ -185,6 +186,10 @@ private fun pcapPacketsTab(
     val rowDetailProvider: ((Int) -> RowDetailData?)? =
         if (decryptionContext == null) null else ({ i: Int -> decryptedRowDetail(dissected(i), i) })
 
+    val protocolFilters = protocolFilters(provider, packets, linkType, decryptionContext != null) { i ->
+        dissected(i).protocol
+    }
+
     val prologueText = if (hasKeyLog) {
         decryptionPrologue(provider.sslKeyLog.sessionCount, decryptionContext)
     } else {
@@ -208,7 +213,67 @@ private fun pcapPacketsTab(
             RowSelectionData(offset, size)
         },
         rowDetailProvider = rowDetailProvider,
+        predefinedFilters = protocolFilters,
+        // Nothing is hidden until the user picks a protocol.
+        defaultFilterShowAll = true,
     )
+}
+
+/**
+ * The protocol family a Protocol cell belongs to: every TLS version is one
+ * entry, so the dropdown does not list "TLSv1.2" and "TLSv1.3" apart.
+ */
+internal fun pcapProtocolFamily(protocol: String): String = if (protocol.startsWith("TLS")) "TLS" else protocol
+
+/**
+ * One filter per protocol family present in the capture, for the dropdown
+ * above the Packets table. Families come from [PcapDissector.protocolInfo],
+ * which reads headers only, so listing them costs no info-string building and
+ * no decryption.
+ *
+ * A row matches when either the family it travelled as or the family its
+ * Protocol cell shows equals the filter's: a decrypted HTTPS record is both
+ * TLS on the wire and HTTP in the table, and is listed under each. Since a
+ * record only becomes HTTP once it opens, "HTTP" is offered whenever TLS is
+ * present and a key log could open it.
+ *
+ * [displayedProtocol] decrypts TLS application data, so it is consulted for a
+ * TLS row only by the HTTP filter, the one answer decryption can change; every
+ * other filter decides a TLS row from its wire family. Other rows still check
+ * the Protocol cell, which never decrypts them, because the header-only HTTP
+ * test is looser than the table's (two bytes against a parsed request line).
+ *
+ * Returns no filters for a capture with a single family, where the dropdown
+ * would have nothing to narrow.
+ */
+internal fun protocolFilters(
+    provider: PcapBinaryProvider,
+    packets: List<PcapPacketRecord>,
+    linkType: Long,
+    canDecrypt: Boolean,
+    displayedProtocol: (Int) -> String,
+): List<PredefinedFilter> {
+    val wireFamilies = Array(packets.size) { i ->
+        try {
+            PcapDissector.protocolInfo(provider.bytes, packets[i], linkType)?.let(::pcapProtocolFamily)
+        } catch (_: Exception) {
+            null
+        }
+    }
+    val families = wireFamilies.filterNotNullTo(LinkedHashSet())
+    if (canDecrypt && "TLS" in families) families += "HTTP"
+    if (families.size < 2) return emptyList()
+    return families.sorted().map { family ->
+        PredefinedFilter(family) { i ->
+            val wire = wireFamilies.getOrNull(i)
+            when {
+                wire == family -> true
+                wire == "TLS" -> canDecrypt && family == "HTTP" &&
+                    pcapProtocolFamily(displayedProtocol(i)) == family
+                else -> pcapProtocolFamily(displayedProtocol(i)) == family
+            }
+        }
+    }
 }
 
 /**

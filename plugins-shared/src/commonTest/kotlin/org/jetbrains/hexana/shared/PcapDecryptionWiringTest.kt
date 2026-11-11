@@ -163,6 +163,71 @@ class PcapDecryptionWiringTest {
         assertNull(provider.singleTab("Packets", empty, TableTabsContext()))
     }
 
+    @Test
+    fun `a single-protocol capture offers no protocol filter`() {
+        assertEquals(emptyList(), packetsTab(pcapProvider(payloads = listOf(ByteArray(0), ByteArray(0)))).predefinedFilters)
+    }
+
+    @Test
+    fun `protocol filters list the families present and nothing is filtered by default`() {
+        val packets = packetsTab(pcapProvider(payloads = listOf(ByteArray(0), HTTP_REQUEST, TLS_APP_DATA, TLS_APP_DATA)))
+        assertTrue(packets.defaultFilterShowAll)
+        val filters = packets.predefinedFilters.associateBy { it.label }
+        assertEquals(listOf("HTTP", "TCP", "TLS"), packets.predefinedFilters.map { it.label })
+        fun rows(label: String) = (0 until packets.rowCount).filter(assertNotNull(filters[label]).predicate)
+        assertEquals(listOf(0), rows("TCP"))
+        assertEquals(listOf(1), rows("HTTP"))
+        assertEquals(listOf(2, 3), rows("TLS"))
+    }
+
+    @Test
+    fun `with a key log HTTP is offered for a TLS-only capture`() {
+        val pcap = pcapProvider(payloads = listOf(ByteArray(0), TLS_APP_DATA))
+        assertEquals(listOf("TCP", "TLS"), packetsTab(pcap).predefinedFilters.map { it.label })
+        pcap.sslKeyLog = keyLog(sessions = 1)
+        assertEquals(listOf("HTTP", "TCP", "TLS"), packetsTab(pcap).predefinedFilters.map { it.label })
+    }
+
+    /**
+     * The synthetic records here never decrypt, so the displayed protocol is
+     * stubbed: row 1 is TLS on the wire and shows as HTTP once opened.
+     */
+    @Test
+    fun `a decrypted TLS row is listed under both TLS and HTTP`() {
+        val pcap = pcapProvider(payloads = listOf(ByteArray(0), TLS_APP_DATA))
+        val parsed = assertNotNull(pcap.parsedPcapFile)
+        val filters = protocolFilters(pcap, parsed.packets, parsed.header.network, canDecrypt = true) { i ->
+            if (i == 1) "HTTP" else "TCP"
+        }.associateBy { it.label }
+        assertTrue(assertNotNull(filters["TLS"]).predicate(1))
+        assertTrue(assertNotNull(filters["HTTP"]).predicate(1))
+        assertFalse(assertNotNull(filters["TCP"]).predicate(1))
+    }
+
+    /** Asking for the displayed protocol of a TLS row may decrypt it. */
+    @Test
+    fun `only the HTTP filter asks for a TLS row's displayed protocol`() {
+        val pcap = pcapProvider(payloads = listOf(ByteArray(0), TLS_APP_DATA))
+        val parsed = assertNotNull(pcap.parsedPcapFile)
+        val asked = mutableListOf<Int>()
+        val filters = protocolFilters(pcap, parsed.packets, parsed.header.network, canDecrypt = true) { i ->
+            asked += i
+            "TCP"
+        }.associateBy { it.label }
+        assertFalse(assertNotNull(filters["TCP"]).predicate(1))
+        assertFalse(assertNotNull(filters["TLS"]).predicate(0))
+        assertEquals(listOf(0), asked)
+        assertFalse(assertNotNull(filters["HTTP"]).predicate(1))
+        assertEquals(listOf(0, 1), asked)
+    }
+
+    @Test
+    fun `every TLS version is one protocol family`() {
+        assertEquals("TLS", pcapProtocolFamily("TLSv1.2"))
+        assertEquals("TLS", pcapProtocolFamily("TLS 1.3"))
+        assertEquals("DNS", pcapProtocolFamily("DNS"))
+    }
+
     // ---- fixture ----
 
     private fun packetsTab(pcap: PcapBinaryProvider): TableTabDescriptor =
@@ -232,5 +297,12 @@ class PcapDecryptionWiringTest {
         tcp[12] = 0x50 // data offset 5 words
         tcp[13] = 0x18 // PSH | ACK
         return ethernet + ip + tcp + payload
+    }
+
+    private companion object {
+        val HTTP_REQUEST = "GET / HTTP/1.1\r\nHost: example.com\r\n\r\n".encodeToByteArray()
+
+        /** A TLS 1.2 application-data record header plus three bytes of body. */
+        val TLS_APP_DATA = byteArrayOf(0x17, 0x03, 0x03, 0x00, 0x03, 1, 2, 3)
     }
 }
