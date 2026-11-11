@@ -371,6 +371,7 @@ fun Table(
             modifier = if (maxVisibleRows == null) Modifier.weight(1f).fillMaxWidth() else Modifier.fillMaxWidth(),
         ) {
         val contentWidth = if (constraints.hasBoundedWidth) maxOf(maxWidth, minContentWidth) else minContentWidth
+        val scrollsHorizontally = constraints.hasBoundedWidth && contentWidth > maxWidth
         Column(
             modifier = Modifier
                 .horizontalScroll(horizontalScroll)
@@ -484,11 +485,13 @@ fun Table(
         }
 
         val rowHeight = rememberTableRowHeight()
+        // The horizontal scrollbar overlays the bottom edge; keep the last row clear of it.
+        val scrollbarGutter = if (scrollsHorizontally) HORIZONTAL_SCROLLBAR_GUTTER else 0.dp
         val bodyModifier = if (maxVisibleRows == null) {
-            Modifier.weight(1f)
+            Modifier.weight(1f).padding(bottom = scrollbarGutter)
         } else {
             val visibleRows = maxOf(minOf(viewData.size, maxVisibleRows), 1)
-            Modifier.height(rowHeight * visibleRows + BODY_VERTICAL_PADDING * 2)
+            Modifier.height(rowHeight * visibleRows + BODY_VERTICAL_PADDING * 2 + scrollbarGutter).padding(bottom = scrollbarGutter)
         }
 
         Box(modifier = bodyModifier) {
@@ -634,7 +637,7 @@ fun Table(
         }
         // Outside the scrolled content, so they stay on the visible edges.
         VerticalScrollbar(lazyListState, modifier = Modifier.align(Alignment.CenterEnd))
-        if (constraints.hasBoundedWidth && contentWidth > maxWidth) {
+        if (scrollsHorizontally) {
             HorizontalScrollbar(horizontalScroll, modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth())
         }
         }
@@ -675,6 +678,9 @@ private fun minTableContentWidth(
     }
     return fixed + weightedShare
 }
+
+/** Room reserved below the rows for the overlaying horizontal scrollbar, as in `RowDetailPanel`. */
+private val HORIZONTAL_SCROLLBAR_GUTTER = 10.dp
 
 /** Narrowest a weighted (fill) column may get, in monospace characters. */
 private const val MIN_WEIGHTED_COLUMN_CHARS = 12

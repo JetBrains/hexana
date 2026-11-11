@@ -34,3 +34,12 @@ The analysis tabs of the IntelliJ single-file editor (`ui/BinaryEditorView.kt`) 
   intrinsic measurement per composed row.
 - Not covered: the diff editor (`BinaryDiffEditorView`) and VS Code keep their bottom layout.
 - Manual QA: `idea-plugin/QA/04-analysis-tabs.md` 4.17.
+- **Review fixes (2026-11-11):** `HexanaSettings.loadState` re-syncs the Compose mirror (Settings Sync / external
+  reload). `VerticalSplitPanel` wraps both panes in `movableContentOf` (latest lambdas via `rememberUpdatedState`),
+  so docking elsewhere or the tabs appearing keeps pane state instead of recreating it; the expand icon is derived
+  from `topFraction <= 0` instead of a `remember`ed flag that reset on re-docking. The vertical tab list brings the
+  selected row into view (`BringIntoViewRequester`). Table and listing reserve a 10 dp bottom gutter while their
+  horizontal scrollbar shows; the listing's width tracker resets on fold changes. Not changed: the claim that a
+  growing `widest` rebuilds the O(n) lazy-list DSL — with strong skipping the content lambda's captures are stable,
+  so `LazyColumn` keeps the same content instance and only re-measures.
+

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -49,8 +50,17 @@ fun VerticalSplitPanel(
      */
     sideBySide: Boolean = false,
 ) {
+    // The panes are movable content: the three layouts below call them from different places, and
+    // plain calls would dispose and recreate each pane — hex scroll position, folds, table state,
+    // running effects — whenever the tabs are docked elsewhere or appear. The latest lambdas are
+    // read through rememberUpdatedState, so the remembered wrappers never go stale.
+    val currentNorth by rememberUpdatedState(northPanel)
+    val currentSouth by rememberUpdatedState(southPanel)
+    val north = remember { movableContentOf { currentNorth() } }
+    val south = remember { movableContentOf { currentSouth() } }
+
     if (!showSouthPanel) {
-        Box(modifier = Modifier.fillMaxSize()) { northPanel() }
+        Box(modifier = Modifier.fillMaxSize()) { north() }
         return
     }
     // Delegate to the stateless core; the state holder is read live inside the
@@ -63,8 +73,8 @@ fun VerticalSplitPanel(
             onDragFraction = { delta ->
                 state.setTopFraction((state.topFraction + delta).coerceIn(0f, 1f - MIN_BOTTOM_FRACTION))
             },
-            westPanel = northPanel,
-            eastPanel = southPanel,
+            westPanel = north,
+            eastPanel = south,
         )
     } else {
         VerticalSplitPanel(
@@ -72,8 +82,8 @@ fun VerticalSplitPanel(
             onDragFraction = { delta ->
                 state.setTopFraction((state.topFraction + delta).coerceIn(MIN_TOP_FRACTION, 1f - MIN_BOTTOM_FRACTION))
             },
-            northPanel = northPanel,
-            southPanel = southPanel,
+            northPanel = north,
+            southPanel = south,
         )
     }
 }

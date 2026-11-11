@@ -1,7 +1,10 @@
 package org.jetbrains.hexana.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.graphics.Color
@@ -904,7 +907,7 @@ internal fun BinaryEditorView(
     }
 }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TabsPanel(
     panels: List<Panel>,
@@ -929,7 +932,9 @@ private fun TabsPanel(
         return
     }
 
-    var expanded by remember { mutableStateOf(false) }
+    // Derived from the split rather than remembered here: the expand button sets the hex pane's
+    // share to 0, and anything else that moves the divider (a drag, the size badge) ends it.
+    val expanded = state.topFraction <= 0f
     val tabs by remember(state.tabIndex, panels, scriptTabIndices) {
         derivedStateOf {
             panels.mapIndexed { index, panel ->
@@ -964,8 +969,7 @@ private fun TabsPanel(
                 contentAlignment = Alignment.Center
             ) {
                 IconButton(onClick = {
-                    expanded = !expanded
-                    onExpand(expanded)
+                    onExpand(!expanded)
                 }) {
                     Icon(
                         if (expanded) AllIconsKeys.General.CollapseComponent else AllIconsKeys.General.ExpandComponent,
@@ -1043,6 +1047,7 @@ private fun TabsPanel(
  * longest title (capped, longer ones are ellipsized), scrolling when they do not all fit.
  * A docked panel is tall and narrow, where a horizontal strip would show only two or three tabs.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun VerticalTabList(
     titles: List<String>,
@@ -1057,8 +1062,15 @@ private fun VerticalTabList(
         Column(modifier = Modifier.fillMaxHeight().verticalScroll(scroll)) {
             titles.forEachIndexed { index, title ->
                 val selected = index == selectedIndex
+                // Selection can move without a click — a script tab is added and selected, a
+                // section label or navigation picks a tab — so scroll the selected row into view.
+                val bringIntoView = remember { BringIntoViewRequester() }
+                if (selected) {
+                    LaunchedEffect(selectedIndex, titles.size) { bringIntoView.bringIntoView() }
+                }
                 Row(
                     modifier = Modifier
+                        .bringIntoViewRequester(bringIntoView)
                         .fillMaxWidth()
                         .height(IntrinsicSize.Min)
                         .background(if (selected) accent.copy(alpha = 0.18f) else Color.Transparent)

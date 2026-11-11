@@ -62,10 +62,16 @@ class HexanaSettings : SimplePersistentStateComponent<HexanaSettingsState>(Hexan
 
     /**
      * Compose-observable mirror of [HexanaSettingsState.tabsPanelOnRight], so every open editor
-     * moves its tabs panel when one of them toggles it. Created on first read, after the state
-     * has been loaded.
+     * moves its tabs panel when one of them toggles it. Kept in sync by [loadState], which also
+     * runs when the settings are reloaded later (Settings Sync, an external edit of `hexana.xml`).
      */
-    private val tabsPanelOnRightState by lazy { mutableStateOf(state.tabsPanelOnRight) }
+    private val tabsPanelOnRightState = mutableStateOf(HexanaSettingsState().tabsPanelOnRight)
+
+    override fun loadState(state: HexanaSettingsState) {
+        super.loadState(state)
+        // Snapshot state writes are thread-safe; open editors pick the value up on their next frame.
+        tabsPanelOnRightState.value = state.tabsPanelOnRight
+    }
 
     /** Whether editors dock their analysis tabs to the right of the hex view (vertical tab list). */
     var tabsPanelOnRight: Boolean

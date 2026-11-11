@@ -2,6 +2,9 @@ package org.jetbrains.hexana.ui.panel
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.drop
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyItemScope
@@ -334,8 +337,13 @@ internal fun VirtualizedChunkPanel(
         SelectionContainer(modifier = Modifier.fillMaxWidth().weight(1f)) {
           // Rows keep their natural width and the listing scrolls sideways when it is wider than
           // the pane (e.g. tabs docked beside the hex view), instead of wrapping each row into a
-          // narrow column. The list is as wide as the widest row laid out so far.
+          // narrow column. The list is as wide as the widest row laid out since the last fold change.
           val rowWidths = remember(chunkTree) { ChunkRowWidthTracker() }
+          // Folding can hide the row that set the width; start over, and the rows still shown
+          // report their widths again as the narrower list re-measures them.
+          LaunchedEffect(rowWidths, foldedSectionsState) {
+              snapshotFlow { foldedSectionsState.value }.drop(1).collect { rowWidths.widest = 0 }
+          }
           val horizontalScroll = rememberScrollState()
           BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val viewportPx = constraints.maxWidth
@@ -345,6 +353,8 @@ internal fun VirtualizedChunkPanel(
             LazyColumn(
                 state = effectiveListState,
                 modifier = Modifier.width(with(density) { contentPx.toDp() }).fillMaxHeight(),
+                // The horizontal scrollbar overlays the bottom edge; keep the last row clear of it.
+                contentPadding = PaddingValues(bottom = if (contentPx > viewportPx) HORIZONTAL_SCROLLBAR_GUTTER else 0.dp),
             ) {
             with(WidthTrackingLazyListScope(this, rowWidths)) {
                 // `hidden` tracks the nearest section header's fold state (flat).
@@ -431,7 +441,10 @@ internal fun VirtualizedChunkPanel(
 // Row widths (horizontal scrolling)
 // ---------------------------------------------------------------------------
 
-/** The widest natural row width, in px, of a listing; only grows, reset with the chunk tree. */
+/** Room reserved below the rows for the overlaying horizontal scrollbar, as in `RowDetailPanel`. */
+private val HORIZONTAL_SCROLLBAR_GUTTER = 10.dp
+
+/** The widest natural row width, in px, of a listing; grows as rows are laid out, reset on fold changes. */
 private class ChunkRowWidthTracker {
     var widest by mutableIntStateOf(0)
 }
