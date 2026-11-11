@@ -82,4 +82,10 @@ The analysis tabs of the IntelliJ single-file editor (`ui/BinaryEditorView.kt`) 
   (`PanelTableRow(heightPx = rowHeight)`) and `overflow-anchor: none` on both virtual scroll wrappers.
   `LargeTableScrollDomTest` pins it (flat table failed before; the tree table's pin/settle logic already absorbed
   the corrections, so its variant is a guard only).
+- **Review fixes (2026-11-11, VS Code):** `hexana.tabsPanelPosition` is `"scope": "application"` — at the default
+  (window) scope a workspace value shadowed the button's Global write and the change listener moved the editor
+  straight back. Divider drags are measured once at mouse-down (`DividerDrag`: start width + accumulated delta,
+  reported as an absolute width): reading `offsetWidth` on every move fed back the width before the previous move
+  had been applied, and the content-box border added a pixel too (now `box-sizing: border-box`) — a drag ending
+  where it started left the panel 2–3 px wider (`draggingTheDividerThereAndBackRestoresTheWidth`).
 

@@ -30,6 +30,8 @@ import org.w3c.fetch.RequestInit
 import org.w3c.dom.HTMLDivElement
 import org.w3c.dom.HTMLElement
 import org.w3c.dom.HTMLStyleElement
+import org.w3c.dom.events.MouseEvent
+import org.w3c.dom.events.MouseEventInit
 import org.w3c.fetch.Response
 import kotlin.js.Promise
 import kotlin.test.Test
@@ -104,6 +106,26 @@ class DockedTabsLayoutDomTest {
     }
 
     @Test
+    fun draggingTheDividerThereAndBackRestoresTheWidth(): Promise<Unit> = GlobalScope.promise {
+        withDockedEditor { root ->
+            val panel = awaitElement(root, "the docked panel") { root.querySelector(".hexana-panel-docked-right") as? HTMLElement }
+            val divider = awaitElement(root, "the column divider") { root.querySelector(".hexana-resize-divider-column") as? HTMLElement }
+            val before = panel.rect().width
+            val x = divider.rect().left + 2
+            val y = divider.rect().top + 50
+            divider.dispatchEvent(MouseEvent("mousedown", MouseEventInit(bubbles = true, cancelable = true, button = 0, clientX = x.toInt(), clientY = y.toInt())))
+            afterFrame() // the divider listens for moves once the drag effect has run
+            for (dx in listOf(1, 0, 1, 0, 1, 0)) {
+                window.dispatchEvent(MouseEvent("mousemove", MouseEventInit(bubbles = true, cancelable = true, clientX = x.toInt() + dx, clientY = y.toInt())))
+                afterFrame()
+            }
+            window.dispatchEvent(MouseEvent("mouseup", MouseEventInit(bubbles = true)))
+            afterFrame()
+            assertEquals(before, panel.rect().width, "a drag that ends where it started changed the panel width")
+        }
+    }
+
+    @Test
     fun expandingLeavesOnlyAStripOfTheHexView(): Promise<Unit> = GlobalScope.promise {
         withDockedEditor { root ->
             val panel = awaitElement(root, "the docked panel") { root.querySelector(".hexana-panel-docked-right") as? HTMLElement }
@@ -115,6 +137,22 @@ class DockedTabsLayoutDomTest {
             delay(50)
             val hexColumnWidth = panel.rect().left - root.rect().left
             assertTrue(hexColumnWidth in 8.0..20.0, "the hex view keeps ${hexColumnWidth}px")
+
+            // Dragging from the expanded state starts at the panel's real width, not the stored one.
+            val expandedWidth = panel.rect().width
+            val divider = root.querySelector(".hexana-resize-divider-column") as HTMLElement
+            val x = divider.rect().left.toInt() + 2
+            val y = divider.rect().top.toInt() + 50
+            divider.dispatchEvent(MouseEvent("mousedown", MouseEventInit(bubbles = true, cancelable = true, button = 0, clientX = x, clientY = y)))
+            afterFrame() // the divider listens for moves once the drag effect has run
+            for (dx in listOf(25, 50, 75, 100)) {
+                window.dispatchEvent(MouseEvent("mousemove", MouseEventInit(bubbles = true, cancelable = true, clientX = x + dx, clientY = y)))
+                afterFrame()
+            }
+            window.dispatchEvent(MouseEvent("mouseup", MouseEventInit(bubbles = true)))
+            afterFrame()
+            assertEquals(expandedWidth - 100, panel.rect().width, "a drag from the expanded state did not start at its width")
+            assertNotNull(root.querySelector("[title='Expand the tabs over the hex view']"), "dragging did not end the expanded state")
         }
     }
 }

@@ -82,10 +82,11 @@ internal fun ResizeDivider(onDrag: (deltaY: Double) -> Unit) {
 
 /**
  * The vertical counterpart of [ResizeDivider]: a thin divider between two side-by-side panes,
- * dragged horizontally. [onDrag] receives the horizontal pixel delta since the previous move.
+ * dragged horizontally. [onDragStart] is called on mouse-down, [onDrag] with the horizontal pixel
+ * delta since the previous move.
  */
 @Composable
-internal fun ColumnResizeDivider(onDrag: (deltaX: Double) -> Unit) {
+internal fun ColumnResizeDivider(onDragStart: () -> Unit = {}, onDrag: (deltaX: Double) -> Unit) {
     var dragging by remember { mutableStateOf(false) }
     var startX by remember { mutableStateOf(0.0) }
 
@@ -128,6 +129,7 @@ internal fun ColumnResizeDivider(onDrag: (deltaX: Double) -> Unit) {
             if (event.nativeEvent.asDynamic().button as Int != 0) return@onMouseDown
             event.preventDefault()
             startX = (event.nativeEvent as MouseEvent).clientX.toDouble()
+            onDragStart()
             dragging = true
         }
     }) {

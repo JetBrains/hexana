@@ -1235,8 +1235,9 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             } else if (message.type === "open-text-file") {
                 this.openTextFile(message.fileName as string, message.content as string);
             } else if (message.type === "set-tabs-panel-position") {
-                // Global: one choice for every editor, like the IntelliJ plugin's. The change event
-                // below pushes it to the other open editors.
+                // Global: one choice for every editor, like the IntelliJ plugin's. The setting is
+                // application-scoped in package.json, so no workspace value can shadow this write and
+                // flip the editor straight back. The change event below pushes it to the other editors.
                 const position = message.position === "right" ? "right" : "bottom";
                 void vscode.workspace.getConfiguration("hexana").update(
                     "tabsPanelPosition",

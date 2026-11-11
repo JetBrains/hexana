@@ -546,11 +546,11 @@ fun BinaryEditorContent(
                 expanded = panelExpanded,
                 onToggleExpanded = { panelExpanded = !panelExpanded },
                 onToggleDock = dock?.let { d -> { d.setOnRight(!d.onRight) } },
-                // Dragging right shrinks the panel, which sits right of the divider. A drag from the
-                // expanded state starts at the panel's real width, so the divider follows the pointer.
-                onResizeWidth = { deltaX, currentWidth ->
+                // A drag from the expanded state starts at the panel's real width (HexanaPanel measures
+                // it at mouse-down), so the divider follows the pointer.
+                onResizeWidth = { newWidth ->
                     panelExpanded = false
-                    panelWidth = (currentWidth - deltaX).coerceAtLeast(MIN_PANEL_WIDTH)
+                    panelWidth = newWidth.coerceAtLeast(MIN_PANEL_WIDTH)
                 },
             )
         }

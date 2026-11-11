@@ -194,3 +194,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-11 — `entities/editor-tabs-dock` — VS Code: `hexana.tabsPanelPosition`, right-docked panel with vertical tabs and expand, table min-width and natural-width listing rows; `DockedTabsLayoutDomTest`.
 - 2026-11-11 — `entities/editor-tabs-dock` — VS Code re-dock fix: no DOM moves (flex-direction switch instead of movableContentOf), ResizeObserver resync for virtualized tables/lists; `DockedTabsRedockDomTest`.
 - 2026-11-11 — `entities/editor-tabs-dock` — web virtualized tables: fixed 24 px rows + overflow-anchor:none stop scroll drift; `LargeTableScrollDomTest`.
+- 2026-11-11 — `entities/editor-tabs-dock` — VS Code review fixes: application-scoped dock setting, divider drag measured once at mouse-down.

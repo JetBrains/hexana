@@ -123,8 +123,8 @@ fun HexanaPanel(
     onToggleExpanded: (() -> Unit)? = null,
     /** Moves the panel between the bottom and the right of the hex view; `null` hides the button. */
     onToggleDock: (() -> Unit)? = null,
-    /** Drags of the divider on the left of a right-docked panel, with the panel's current width. */
-    onResizeWidth: ((deltaX: Double, currentWidthPx: Double) -> Unit)? = null,
+    /** The width a drag of the divider on the left of a right-docked panel asks for. */
+    onResizeWidth: ((newWidthPx: Double) -> Unit)? = null,
 ) {
     val host = LocalHost.current
     val pendingRun = rememberPendingRunState()
@@ -459,9 +459,23 @@ fun HexanaPanel(
         }
     }
     var panelRef by remember { mutableStateOf<HTMLElement?>(null) }
+    // A drag is measured once, at mouse-down, and then follows the pointer from there. Reading the
+    // width on every move fed back a value the previous move's width had not reached yet, so a drag
+    // that ended where it started left the panel wider. Measuring rather than using [widthPx] makes a
+    // drag from the expanded state, or from a width clamped by a narrow window, start where it is.
+    val drag = remember { DividerDrag() }
     if (dockedRight) {
         if (!tabsEmpty && onResizeWidth != null) {
-            ColumnResizeDivider { deltaX -> onResizeWidth(deltaX, panelRef?.offsetWidth?.toDouble() ?: widthPx) }
+            ColumnResizeDivider(
+                onDragStart = {
+                    drag.startWidth = panelRef?.offsetWidth?.toDouble() ?: widthPx
+                    drag.totalDeltaX = 0.0
+                },
+            ) { deltaX ->
+                drag.totalDeltaX += deltaX
+                // The panel is right of the divider: dragging right narrows it.
+                onResizeWidth(drag.startWidth - drag.totalDeltaX)
+            }
         }
     } else if (!tabsEmpty && onResize != null) {
         ResizeDivider(onResize)
@@ -473,6 +487,9 @@ fun HexanaPanel(
         style {
             if (dockedRight) {
                 property("border-left", "1px solid var(--hexana-border, #333)")
+                // The width includes the border, so the offsetWidth a divider drag starts from is the
+                // width stored back: with content-box sizing every drag event added the border's pixel.
+                property("box-sizing", "border-box")
                 property("flex", "0 0 auto")
                 // Expanded leaves a strip of the hex view wide enough to grab the divider.
                 property("width", if (expanded) "calc(100% - ${COLLAPSED_HEX_WIDTH_PX}px)" else "${widthPx}px")
@@ -815,6 +832,9 @@ private fun ScrollableTabBar(
         }
     }
 }
+
+/** The divider drag in progress; plain fields, since nothing renders them. */
+private class DividerDrag(var startWidth: Double = 0.0, var totalDeltaX: Double = 0.0)
 
 /** Width of the hex view strip a right-docked, expanded panel leaves to grab the divider by. */
 private const val COLLAPSED_HEX_WIDTH_PX = 12

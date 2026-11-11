@@ -1991,6 +1991,7 @@ interface PeBinaryProvider extends NativeBinaryProvider {
       methodsWithSequencePoints: number;
       sequencePointReader: Function1;
     };
+    qualifiedTokens: ClrTokenResolver;
     readyToRun: boolean;
     root?: {
       flags: number;
@@ -5665,6 +5666,7 @@ interface PortablePdbBinaryProvider extends PdbSymbolsBinaryProvider {
       methodsWithSequencePoints: number;
       sequencePointReader: Function1;
     };
+    qualifiedTokens: ClrTokenResolver;
     readyToRun: boolean;
     root?: {
       flags: number;
@@ -8339,6 +8341,7 @@ interface ClrMetadata {
     methodsWithSequencePoints: number;
     sequencePointReader: Function1;
   };
+  qualifiedTokens: ClrTokenResolver;
   readyToRun: boolean;
   root?: {
     flags: number;
@@ -8818,7 +8821,7 @@ interface ClrMetadata {
       start: number;
     };
     severity: "Info" | "Warning" | "Error";
-  }[], tokens: ClrTokenResolver, portablePdb: {
+  }[], tokens: ClrTokenResolver, qualifiedTokens: ClrTokenResolver, portablePdb: {
     documents: {
       hash: string;
       hashAlgorithm?: string;
@@ -9212,6 +9215,7 @@ interface ClrMetadata {
       methodsWithSequencePoints: number;
       sequencePointReader: Function1;
     };
+    qualifiedTokens: ClrTokenResolver;
     readyToRun: boolean;
     root?: {
       flags: number;
@@ -10985,6 +10989,23 @@ interface ClrTokenResolver {
     signature: string;
     token: number;
   } | null): string | null;
+  fieldType(field: {
+    declaringTypeRow: number;
+    flags: number;
+    name: string;
+    recordRange: {
+      end: number;
+      endExclusive: number;
+      fitsInt: boolean;
+      length: number;
+      offset: number;
+      size: number;
+      start: number;
+    };
+    row: number;
+    token: number;
+    type: string;
+  }): string;
   localVariableTypes(method: {
     body?: {
       codeRange: {
@@ -11048,6 +11069,69 @@ interface ClrTokenResolver {
     signature: string;
     token: number;
   }): string[];
+  methodSignature(method: {
+    body?: {
+      codeRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      codeSize: number;
+      exceptionClauses: {
+        catchType?: string;
+        filterOffset?: number;
+        handlerLength: number;
+        handlerOffset: number;
+        kind: "Catch" | "Filter" | "Finally" | "Fault";
+        tryLength: number;
+        tryOffset: number;
+      }[];
+      exceptionSectionsRange?: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      hasExceptionSections: boolean;
+      initLocals: boolean;
+      isFat: boolean;
+      localVarSigToken: number;
+      maxStack: number;
+      range: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+    };
+    declaringTypeRow: number;
+    flags: number;
+    implFlags: number;
+    name: string;
+    recordRange: {
+      end: number;
+      endExclusive: number;
+      fitsInt: boolean;
+      length: number;
+      offset: number;
+      size: number;
+      start: number;
+    };
+    row: number;
+    rva: number;
+    signature: string;
+    token: number;
+  }): string;
 }
 
 interface ClrTypeDef {

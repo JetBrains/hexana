@@ -333,6 +333,7 @@
             "To the right of the hex view, with the tabs listed vertically."
           ],
           "default": "bottom",
+          "scope": "application",
           "description": "Where the Hexana editor shows its analysis tabs. The button next to the tabs' \"+\" switches it for every open editor."
         },
         "hexana.showSemanticHighlighting": {
