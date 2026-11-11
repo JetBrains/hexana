@@ -318,6 +318,11 @@ async function readRuntimeTargetsJson(scope?: vscode.Uri): Promise<string> {
  * those the `hexana.wasmEditor` custom editor claims in `package.json`, plus the native ones
  * the compare dialog offers.
  */
+/** Whether `hexana.tabsPanelPosition` docks the editor's analysis tabs to the right of the hex view. */
+function tabsPanelOnRight(): boolean {
+    return vscode.workspace.getConfiguration("hexana").get<string>("tabsPanelPosition", "bottom") === "right";
+}
+
 const HEXANA_DIFF_EXTENSIONS = new Set([
     "wasm", "elf", "exe", "so", "o", "a", "dll", "dylib", "jar", "zip", "war", "apk", "class", "dex", "arsc",
     "resources", "gguf", "safetensors", "desc", "protoset", "pcap", "cap", "pcapng", "parquet", "arrow", "arrows", "pb", "tar", "tgz", "gz",
@@ -1078,6 +1083,12 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 return;
             }
             if (message.type === "ready") {
+                // Where the analysis tabs sit; the webview moves them when this changes.
+                webviewPanel.webview.postMessage({
+                    type: "update-setting",
+                    key: "tabsPanelOnRight",
+                    value: tabsPanelOnRight(),
+                });
                 // Check if this is a diff view.
                 const diffKey = document.uri.toString();
                 const diff = pendingDiffs.get(diffKey);
@@ -1223,6 +1234,15 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 this.showWatEditor(document, message);
             } else if (message.type === "open-text-file") {
                 this.openTextFile(message.fileName as string, message.content as string);
+            } else if (message.type === "set-tabs-panel-position") {
+                // Global: one choice for every editor, like the IntelliJ plugin's. The change event
+                // below pushes it to the other open editors.
+                const position = message.position === "right" ? "right" : "bottom";
+                void vscode.workspace.getConfiguration("hexana").update(
+                    "tabsPanelPosition",
+                    position,
+                    vscode.ConfigurationTarget.Global,
+                );
             } else if (message.type === "tab-selected") {
                 extensionLib?.captureHexTabSelected(message.tabName, "wasm");
             } else if (message.type === "update-runtime-setting") {
@@ -1313,8 +1333,16 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
             }
         });
 
-        // Push semantic highlighting setting changes to the webview in real time.
-        vscode.workspace.onDidChangeConfiguration((e) => {
+        // Push setting changes to the webview in real time. Disposed with the panel: posting to a
+        // closed webview throws, and every closed editor would otherwise leave a listener behind.
+        const configListener = vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration("hexana.tabsPanelPosition")) {
+                webviewPanel.webview.postMessage({
+                    type: "update-setting",
+                    key: "tabsPanelOnRight",
+                    value: tabsPanelOnRight(),
+                });
+            }
             if (e.affectsConfiguration("hexana.showSemanticHighlighting")) {
                 const enabled = vscode.workspace.getConfiguration("hexana").get<boolean>("showSemanticHighlighting", true);
                 webviewPanel.webview.postMessage({
@@ -1324,6 +1352,7 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 });
             }
         });
+        webviewPanel.onDidDispose(() => configListener.dispose());
     }
 
     /**

@@ -143,6 +143,13 @@ config.files.push({
     served: true,
     watched: false,
 });
+// The real editor.css and a .NET assembly, for DockedTabsLayoutDomTest.
+config.files.push({
+    pattern: path.resolve(config.basePath, "kotlin", "layout-fixtures", "*"),
+    included: false,
+    served: true,
+    watched: false,
+});
 config.proxies = {
     ...(config.proxies || {}),
     "/kotlin": "/base/kotlin/",

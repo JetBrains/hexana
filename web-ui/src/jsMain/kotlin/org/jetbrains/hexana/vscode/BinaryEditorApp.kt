@@ -139,6 +139,8 @@ fun computeExtraTabs(
 
 private const val MIN_PANEL_HEIGHT = 80.0
 private const val DEFAULT_PANEL_HEIGHT = 250.0
+private const val MIN_PANEL_WIDTH = 160.0
+private const val DEFAULT_PANEL_WIDTH = 480.0
 
 @Composable
 fun BinaryEditorContent(
@@ -294,6 +296,11 @@ fun BinaryEditorContent(
         }
     }
     var panelHeight by remember { mutableStateOf(DEFAULT_PANEL_HEIGHT) }
+    // Docked to the right of the hex view (VS Code's `hexana.tabsPanelPosition`); see TabsPanelDock.
+    val dock = LocalTabsPanelDock.current
+    val dockedRight = dock?.onRight == true
+    var panelWidth by remember { mutableStateOf(DEFAULT_PANEL_WIDTH) }
+    var panelExpanded by remember { mutableStateOf(false) }
     var activeTab by remember(tabStateKey ?: provider, initialActiveTab) { mutableStateOf(initialActiveTab) }
     var showDataInspector by remember { mutableStateOf(false) }
 
@@ -442,72 +449,123 @@ fun BinaryEditorContent(
             },
             parseCoverage = parseCoverage,
         )
-        Div({
-            style {
-                display(DisplayStyle.Flex)
-                property("flex", "1 1 0")
-                property("overflow", "hidden")
-                property("min-height", "0")
+        // Movable: the two docks place them under different parents, and plain calls would
+        // recreate the hex view and the open tab — scroll positions, folds, running work — on
+        // every re-dock. The latest lambdas are read through rememberUpdatedState.
+        val hexAreaImpl: @Composable () -> Unit = {
+            Div({
+                style {
+                    display(DisplayStyle.Flex)
+                    property("flex", "1 1 0")
+                    property("overflow", "hidden")
+                    property("min-height", "0")
+                }
+            }) {
+                HexViewerPanel(
+                    bytes = shownBytes,
+                    onSearchFile = onSearchFile,
+                    selection = selection,
+                    editState = editState,
+                    structureRanges = remember(provider, initialStructureRanges, showSemanticHighlighting, scriptStructureRanges) {
+                        if (showSemanticHighlighting) {
+                            ((initialStructureRanges ?: provider.structureRanges) + scriptStructureRanges).sortedBy { it.offset }
+                        } else {
+                            emptyList()
+                        }
+                    },
+                    onTabChangeRequest = { tabName -> activeTab = tabName },
+                )
+                if (showDataInspector) {
+                    DataInspectorPanel(bytes = shownBytes, selection = selection)
+                }
+                // A second, independent column: the row detail panel shows bytes
+                // that are not in the file, so it has nothing to do with the
+                // inspector's view of the cursor and neither one closes the other.
+                if (selection.showRowDetail) {
+                    RowDetailPanel(selection = selection)
+                }
             }
-        }) {
-            HexViewerPanel(
-                bytes = shownBytes,
-                onSearchFile = onSearchFile,
+            SelectionStatusBar(
                 selection = selection,
-                editState = editState,
-                structureRanges = remember(provider, initialStructureRanges, showSemanticHighlighting, scriptStructureRanges) {
-                    if (showSemanticHighlighting) {
-                        ((initialStructureRanges ?: provider.structureRanges) + scriptStructureRanges).sortedBy { it.offset }
-                    } else {
-                        emptyList()
-                    }
-                },
-                onTabChangeRequest = { tabName -> activeTab = tabName },
+                totalBytes = shownBytes.size,
+                showDataInspector = showDataInspector,
+                onToggleDataInspector = { showDataInspector = !showDataInspector },
             )
-            if (showDataInspector) {
-                DataInspectorPanel(bytes = shownBytes, selection = selection)
-            }
-            // A second, independent column: the row detail panel shows bytes
-            // that are not in the file, so it has nothing to do with the
-            // inspector's view of the cursor and neither one closes the other.
-            if (selection.showRowDetail) {
-                RowDetailPanel(selection = selection)
-            }
         }
-        SelectionStatusBar(
-            selection = selection,
-            totalBytes = shownBytes.size,
-            showDataInspector = showDataInspector,
-            onToggleDataInspector = { showDataInspector = !showDataInspector },
-        )
-        HexanaPanel(
-            provider = liveProvider,
-            selection = selection,
-            fileName = fileName,
-            filePath = filePath,
-            heightPx = panelHeight,
-            activeTab = activeTab,
-            onActiveTabChange = { activeTab = it },
-            extraTabs = extraTabs,
-            capabilities = capabilities,
-            scriptTabs = scriptTabs,
-            dialogPickedPath = dialogPickedPath,
-            dialogPickedContent = dialogPickedContent,
-            onDialogPickedPathConsumed = onDialogPickedPathConsumed,
-            onScriptTabConfirmed = onScriptTabConfirmed,
-            onScriptTabRemoved = onScriptTabRemoved,
-            scriptExecution = scriptExecution,
-            sslKeyLogGeneration = sslKeyLogGeneration,
-            runtimeCompatibility = runtimeCompatibility,
-            onConfigureRuntimes = if (host.canEditRuntimeTargets) {
-                { showRuntimeTargetsDialog = true }
-            } else {
-                null
-            },
-            tableRowSelection = tableRowSelection,
-            // Dragging down shrinks the panel, which sits below the divider.
-            onResize = { deltaY -> panelHeight = (panelHeight - deltaY).coerceAtLeast(MIN_PANEL_HEIGHT) },
-        )
+        val panelImpl: @Composable () -> Unit = {
+            HexanaPanel(
+                provider = liveProvider,
+                selection = selection,
+                fileName = fileName,
+                filePath = filePath,
+                heightPx = panelHeight,
+                activeTab = activeTab,
+                onActiveTabChange = { activeTab = it },
+                extraTabs = extraTabs,
+                capabilities = capabilities,
+                scriptTabs = scriptTabs,
+                dialogPickedPath = dialogPickedPath,
+                dialogPickedContent = dialogPickedContent,
+                onDialogPickedPathConsumed = onDialogPickedPathConsumed,
+                onScriptTabConfirmed = onScriptTabConfirmed,
+                onScriptTabRemoved = onScriptTabRemoved,
+                scriptExecution = scriptExecution,
+                sslKeyLogGeneration = sslKeyLogGeneration,
+                runtimeCompatibility = runtimeCompatibility,
+                onConfigureRuntimes = if (host.canEditRuntimeTargets) {
+                    { showRuntimeTargetsDialog = true }
+                } else {
+                    null
+                },
+                tableRowSelection = tableRowSelection,
+                // Dragging down shrinks the panel, which sits below the divider.
+                onResize = { deltaY -> panelHeight = (panelHeight - deltaY).coerceAtLeast(MIN_PANEL_HEIGHT) },
+                dockedRight = dockedRight,
+                widthPx = panelWidth,
+                expanded = panelExpanded,
+                onToggleExpanded = { panelExpanded = !panelExpanded },
+                onToggleDock = dock?.let { d -> { d.setOnRight(!d.onRight) } },
+                // Dragging right shrinks the panel, which sits right of the divider. A drag from the
+                // expanded state starts at the panel's real width, so the divider follows the pointer.
+                onResizeWidth = { deltaX, currentWidth ->
+                    panelExpanded = false
+                    panelWidth = (currentWidth - deltaX).coerceAtLeast(MIN_PANEL_WIDTH)
+                },
+            )
+        }
+        val currentHexArea by rememberUpdatedState(hexAreaImpl)
+        val currentPanel by rememberUpdatedState(panelImpl)
+        val hexArea = remember { movableContentOf { currentHexArea() } }
+        val tabsPanel = remember { movableContentOf { currentPanel() } }
+        if (dockedRight) {
+            Div({
+                classes("hexana-editor-split-row")
+                style {
+                    display(DisplayStyle.Flex)
+                    property("flex-direction", "row")
+                    property("flex", "1 1 0")
+                    property("min-height", "0")
+                    property("overflow", "hidden")
+                }
+            }) {
+                Div({
+                    style {
+                        display(DisplayStyle.Flex)
+                        property("flex-direction", "column")
+                        property("flex", "1 1 0")
+                        // Lets an expanded panel squeeze the hex view down to a thin strip.
+                        property("min-width", "0")
+                        property("overflow", "hidden")
+                    }
+                }) {
+                    hexArea()
+                }
+                tabsPanel()
+            }
+        } else {
+            hexArea()
+            tabsPanel()
+        }
     }
 
     if (showRuntimeTargetsDialog) {

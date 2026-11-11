@@ -534,6 +534,8 @@ fun TableTabContent(
         }) {
             Table({
                 classes("hexana-panel-table")
+                // Narrower than this, the wrapper scrolls sideways instead of squeezing columns.
+                style { property("min-width", panelTableMinWidth(headers, columnWidthsCh)) }
             }) {
                 // Header
                 Thead {
@@ -1870,6 +1872,8 @@ private fun TreeTableBody(
         }) {
             Table({
                 classes("hexana-panel-table")
+                // Narrower than this, the wrapper scrolls sideways instead of squeezing columns.
+                style { property("min-width", panelTableMinWidth(headers, columnWidthsCh)) }
             }) {
                 // Header
                 Thead {

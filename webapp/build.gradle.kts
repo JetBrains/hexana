@@ -99,6 +99,11 @@ tasks.named<Copy>("jsTestProcessResources") {
     from(parserWorkerOutputDir) {
         include("parser-worker.js")
     }
+    // The real editor stylesheet and a .NET assembly, for the docked-tabs layout test.
+    into("layout-fixtures") {
+        from(rootProject.file("vscode-plugin/media/editor.css"))
+        from(rootProject.file("parsing/native-fixtures/test-data/pe/sample-clr.exe"))
+    }
     into("parser-worker-fixtures") {
         from(rootProject.file("wasmParser/src/commonTest/resources/snippets/addition.wasm"))
         from(rootProject.file("wasmParser/src/commonTest/resources/component/composed.wasm"))

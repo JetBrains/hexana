@@ -36,6 +36,8 @@ fun BinaryEditorApp() {
     var dialogPickedContent by remember { mutableStateOf("") }
     var pickedKeyLogContent by remember { mutableStateOf("") }
     var showSemanticHighlighting by remember { mutableStateOf(true) }
+    // `hexana.tabsPanelPosition` is "right"; pushed by the host on ready and on every change.
+    var tabsPanelOnRight by remember { mutableStateOf(false) }
     var isDecompressed by remember { mutableStateOf(false) }
     // Size on disk when the host loaded only the head of the file; see `hexana.maxLoadedFileSizeMB`.
     var partialFileSize by remember { mutableStateOf<Long?>(null) }
@@ -61,7 +63,15 @@ fun BinaryEditorApp() {
     PanelTableRowKeyboardHandler()
 
     val vscodeHost = remember(canRunApk) { VscodeHost(canRunApk = canRunApk) }
-    CompositionLocalProvider(LocalHost provides vscodeHost) {
+    // Moving the tabs updates this editor at once; the host persists the setting and pushes it
+    // to every other open editor.
+    val tabsPanelDock = remember(tabsPanelOnRight) {
+        TabsPanelDock(tabsPanelOnRight) { onRight ->
+            tabsPanelOnRight = onRight
+            postSetTabsPanelPositionToHost(onRight)
+        }
+    }
+    CompositionLocalProvider(LocalHost provides vscodeHost, LocalTabsPanelDock provides tabsPanelDock) {
         val host = LocalHost.current
 
         VscodeMessageListener { message ->
@@ -133,6 +143,9 @@ fun BinaryEditorApp() {
                 "update-setting" -> {
                     if (message.settingKey == "showSemanticHighlighting") {
                         showSemanticHighlighting = message.settingValue
+                    }
+                    if (message.settingKey == "tabsPanelOnRight") {
+                        tabsPanelOnRight = message.settingValue
                     }
                 }
                 // Both kinds render the same view, which picks the format from the bytes. The

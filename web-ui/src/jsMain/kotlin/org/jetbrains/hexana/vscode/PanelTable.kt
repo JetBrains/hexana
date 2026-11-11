@@ -373,6 +373,8 @@ internal fun PanelTable(
 ) {
     Table({
         classes("hexana-panel-table")
+        // Narrower than this, the scrolling parent scrolls sideways instead of squeezing columns.
+        style { property("min-width", panelTableMinWidth(headers, emptyList())) }
     }) {
         Thead {
             Tr({
@@ -418,6 +420,28 @@ internal fun PanelTable(
         }
     }
 }
+
+/**
+ * The narrowest a `table-layout: fixed` panel table may get: measured columns at their `ch`
+ * width, and every other column wide enough for its title (at least [MIN_FILL_COLUMN_CH]), plus
+ * the cells' 8px side padding. Without it a narrow pane — tabs docked beside the hex view —
+ * squeezes fill columns to nothing; with it the table's scrolling parent scrolls sideways.
+ */
+internal fun panelTableMinWidth(headers: List<String>, columnWidthsCh: List<Int?>): String {
+    var ch = 0
+    for ((index, header) in headers.withIndex()) {
+        ch += columnWidthsCh.getOrNull(index) ?: when {
+            header.isEmpty() || header == "ID" -> NARROW_COLUMN_CH
+            else -> maxOf(header.length + SORT_INDICATOR_CH, MIN_FILL_COLUMN_CH)
+        }
+    }
+    return "calc(${ch}ch + ${headers.size * CELL_SIDE_PADDING_PX * 2}px)"
+}
+
+private const val MIN_FILL_COLUMN_CH = 12
+private const val NARROW_COLUMN_CH = 4
+private const val SORT_INDICATOR_CH = 3
+private const val CELL_SIDE_PADDING_PX = 8
 
 /**
  * Mutable holder for row callbacks so that a stable keydown listener

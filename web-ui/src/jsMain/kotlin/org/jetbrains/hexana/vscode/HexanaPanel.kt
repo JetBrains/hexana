@@ -110,6 +110,21 @@ fun HexanaPanel(
      * lagged a frame behind and the switch to "Generic binary" blinked.
      */
     onResize: ((deltaY: Double) -> Unit)? = null,
+    /**
+     * Docked to the right of the hex view: the tabs are a vertical list on the panel's right
+     * edge, the panel is [widthPx] wide (or nearly the whole row when [expanded]), and the
+     * divider is drawn on its left and reported through [onResizeWidth].
+     */
+    dockedRight: Boolean = false,
+    widthPx: Double = 480.0,
+    /** Docked right and widened to leave only a thin strip of the hex view to drag back. */
+    expanded: Boolean = false,
+    /** Toggles [expanded]; `null` hides the button. */
+    onToggleExpanded: (() -> Unit)? = null,
+    /** Moves the panel between the bottom and the right of the hex view; `null` hides the button. */
+    onToggleDock: (() -> Unit)? = null,
+    /** Drags of the divider on the left of a right-docked panel, with the panel's current width. */
+    onResizeWidth: ((deltaX: Double, currentWidthPx: Double) -> Unit)? = null,
 ) {
     val host = LocalHost.current
     val pendingRun = rememberPendingRunState()
@@ -433,38 +448,70 @@ fun HexanaPanel(
     // Panel layout
     // -----------------------------------------------------------------------
     val tabsEmpty = tabs.isEmpty()
-    if (!tabsEmpty && onResize != null) ResizeDivider(onResize)
+    val showTabList = tabs.size > 1 || scriptTabs.isNotEmpty()
+    val closeScriptTab: (String) -> Unit = { label ->
+        val st = scriptTabs.find {
+            it.path.substringAfterLast('/').substringAfterLast('\\') == label
+        }
+        if (st != null) {
+            onScriptTabRemoved(st.path)
+            host.scriptTabRemoved(st.path)
+        }
+    }
+    var panelRef by remember { mutableStateOf<HTMLElement?>(null) }
+    if (dockedRight) {
+        if (!tabsEmpty && onResizeWidth != null) {
+            ColumnResizeDivider { deltaX -> onResizeWidth(deltaX, panelRef?.offsetWidth?.toDouble() ?: widthPx) }
+        }
+    } else if (!tabsEmpty && onResize != null) {
+        ResizeDivider(onResize)
+    }
     // Hidden rather than left out, so the run and replay dialogs composed above keep working.
     Div({
         classes("hexana-panel")
+        if (dockedRight) classes("hexana-panel-docked-right")
         style {
-            property("border-top", "1px solid var(--hexana-border, #333)")
-            property("flex", "0 0 auto")
-            height(heightPx.px)
-            property("min-height", "80px")
+            if (dockedRight) {
+                property("border-left", "1px solid var(--hexana-border, #333)")
+                property("flex", "0 0 auto")
+                // Expanded leaves a strip of the hex view wide enough to grab the divider.
+                property("width", if (expanded) "calc(100% - ${COLLAPSED_HEX_WIDTH_PX}px)" else "${widthPx}px")
+                property("max-width", "calc(100% - ${COLLAPSED_HEX_WIDTH_PX}px)")
+                property("min-width", "${MIN_DOCKED_PANEL_WIDTH_PX}px")
+            } else {
+                property("border-top", "1px solid var(--hexana-border, #333)")
+                property("flex", "0 0 auto")
+                height(heightPx.px)
+                property("min-height", "80px")
+            }
             // One declaration: a later `display` in the same block would override `none`.
             display(if (tabsEmpty) DisplayStyle.None else DisplayStyle.Flex)
             property("flex-direction", "column")
             property("overflow", "hidden")
         }
+        ref { element ->
+            panelRef = element
+            onDispose { panelRef = null }
+        }
     }) {
-        // Tab bar — hidden when there is only a single tab
-        if (tabs.size > 1 || scriptTabs.isNotEmpty()) {
+        if (dockedRight) {
+            // Header: expand on the left, dock and "+" on the right; the tabs are listed below it.
+            DockedPanelHeader(
+                expanded = expanded,
+                onToggleExpanded = onToggleExpanded,
+                onToggleDock = onToggleDock,
+                onAddTab = { showAddScriptDialog = true },
+            )
+        } else if (showTabList) {
+            // Tab bar — hidden when there is only a single tab
             ScrollableTabBar(
                 tabs = tabs,
                 activeTab = activeTab,
                 onActiveTabChange = onActiveTabChange,
                 closableTabs = scriptTabLabels,
-                onCloseTab = { label ->
-                    val st = scriptTabs.find {
-                        it.path.substringAfterLast('/').substringAfterLast('\\') == label
-                    }
-                    if (st != null) {
-                        onScriptTabRemoved(st.path)
-                        host.scriptTabRemoved(st.path)
-                    }
-                },
+                onCloseTab = closeScriptTab,
                 onAddTab = { showAddScriptDialog = true },
+                onToggleDock = onToggleDock,
             )
         }
 
@@ -497,56 +544,87 @@ fun HexanaPanel(
             )
         }
 
-        val currentTab = tabs.firstOrNull { it.id == activeTab }
-        var tabContentRef by remember { mutableStateOf<HTMLElement?>(null) }
+        // Movable: the two docks call it from different places, and a plain call would recreate
+        // the open tab — its scroll position, folds and search — whenever the panel is re-docked.
+        val tabContentImpl: @Composable () -> Unit = {
+            val currentTab = tabs.firstOrNull { it.id == activeTab }
+            var tabContentRef by remember { mutableStateOf<HTMLElement?>(null) }
 
-        // Focus the tab content whenever the active tab changes
-        LaunchedEffect(activeTab) {
-            // Double rAF to ensure the new tab content is rendered before focusing
-            kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
-                window.requestAnimationFrame {
+            // Focus the tab content whenever the active tab changes
+            LaunchedEffect(activeTab) {
+                // Double rAF to ensure the new tab content is rendered before focusing
+                kotlinx.coroutines.suspendCancellableCoroutine<Unit> { cont ->
                     window.requestAnimationFrame {
-                        tabContentRef?.focus()
-                        cont.resumeWith(Result.success(Unit))
+                        window.requestAnimationFrame {
+                            tabContentRef?.focus()
+                            cont.resumeWith(Result.success(Unit))
+                        }
                     }
                 }
             }
-        }
 
-        // Tab content
-        Div({
-            classes("hexana-tab-content")
-            tabIndex(-1)
-            style {
-                property("overflow-y", "auto")
-                if (currentTab?.padding != false) {
-                    property("padding", "8px 12px")
+            // Tab content
+            Div({
+                classes("hexana-tab-content")
+                tabIndex(-1)
+                style {
+                    property("overflow-y", "auto")
+                    if (currentTab?.padding != false) {
+                        property("padding", "8px 12px")
+                    }
+                    property("flex", "1 1 0")
+                    property("min-height", "0")
+                    // Lets the content scroll sideways instead of widening a narrow docked panel.
+                    property("min-width", "0")
+                    property("outline", "none")
+                    display(DisplayStyle.Flex)
+                    property("flex-direction", "column")
                 }
-                property("flex", "1")
-                property("min-height", "0")
-                property("outline", "none")
-                display(DisplayStyle.Flex)
-                property("flex-direction", "column")
-            }
-            onClick { e ->
-                val target = e.target as? HTMLElement ?: return@onClick
-                // Focus the tab content when clicking on empty area (not on interactive children)
-                val tag = target.tagName.uppercase()
-                if (tag != "INPUT" && tag != "BUTTON" && tag != "A" && tag != "SELECT" && tag != "TEXTAREA") {
-                    tabContentRef?.focus()
+                onClick { e ->
+                    val target = e.target as? HTMLElement ?: return@onClick
+                    // Focus the tab content when clicking on empty area (not on interactive children)
+                    val tag = target.tagName.uppercase()
+                    if (tag != "INPUT" && tag != "BUTTON" && tag != "A" && tag != "SELECT" && tag != "TEXTAREA") {
+                        tabContentRef?.focus()
+                    }
+                }
+                ref { element ->
+                    tabContentRef = element
+                    onDispose { tabContentRef = null }
+                }
+            }) {
+                CompositionLocalProvider(
+                    LocalDexSmaliReveal provides dexSmaliReveal,
+                    LocalTableRowSelection provides pendingRowSelection,
+                ) {
+                    currentTab?.content?.invoke(selection)
                 }
             }
-            ref { element ->
-                tabContentRef = element
-                onDispose { tabContentRef = null }
+        }
+        val currentTabContent by rememberUpdatedState(tabContentImpl)
+        val tabContent = remember { movableContentOf { currentTabContent() } }
+        if (dockedRight) {
+            Div({
+                style {
+                    display(DisplayStyle.Flex)
+                    property("flex-direction", "row")
+                    property("flex", "1")
+                    property("min-height", "0")
+                }
+            }) {
+                tabContent()
+                if (showTabList) {
+                    VerticalTabList(
+                        tabs = tabs,
+                        activeTab = activeTab,
+                        onActiveTabChange = onActiveTabChange,
+                        closableTabs = scriptTabLabels,
+                        onCloseTab = closeScriptTab,
+                    )
+                }
             }
-        }) {
-            CompositionLocalProvider(
-                LocalDexSmaliReveal provides dexSmaliReveal,
-                LocalTableRowSelection provides pendingRowSelection,
-            ) {
-                currentTab?.content?.invoke(selection)
-            }
+        } else {
+            tabContent()
         }
     }
 }
@@ -559,6 +637,8 @@ private fun ScrollableTabBar(
     closableTabs: Set<String> = emptySet(),
     onCloseTab: (String) -> Unit = {},
     onAddTab: () -> Unit = {},
+    /** Moves the tabs beside the hex view; `null` hides the button. */
+    onToggleDock: (() -> Unit)? = null,
 ) {
     val host = LocalHost.current
     var tabListRef by remember { mutableStateOf<HTMLElement?>(null) }
@@ -715,6 +795,14 @@ private fun ScrollableTabBar(
             )
         }
 
+        if (onToggleDock != null) {
+            PanelIconButton(
+                iconClass = "hexana-icon-dock-right",
+                title = "Move tabs to the right of the hex view",
+                onClick = onToggleDock,
+            )
+        }
+
         // "+" button to add a script tab
         Div({
             classes("hexana-tab-add")
@@ -731,6 +819,182 @@ private fun ScrollableTabBar(
         }) {
             Text("+")
         }
+    }
+}
+
+/** Width of the hex view strip a right-docked, expanded panel leaves to grab the divider by. */
+private const val COLLAPSED_HEX_WIDTH_PX = 12
+
+/** Narrowest a right-docked panel can be dragged to. */
+private const val MIN_DOCKED_PANEL_WIDTH_PX = 160
+
+/** Widest the vertical tab list grows before titles are ellipsized. */
+private const val VERTICAL_TAB_LIST_MAX_WIDTH_PX = 220
+
+/** The header of a right-docked panel, which has no horizontal tab bar to carry its buttons. */
+@Composable
+private fun DockedPanelHeader(
+    expanded: Boolean,
+    onToggleExpanded: (() -> Unit)?,
+    onToggleDock: (() -> Unit)?,
+    onAddTab: () -> Unit,
+) {
+    Div({
+        classes("hexana-tab-bar", "hexana-docked-panel-header")
+        style {
+            display(DisplayStyle.Flex)
+            property("align-items", "center")
+            property("flex-shrink", "0")
+            property("border-bottom", "1px solid var(--hexana-border, #333)")
+            property("background", "var(--hexana-tab-bg, rgba(255,255,255,0.03))")
+            property("min-height", "28px")
+        }
+    }) {
+        if (onToggleExpanded != null) {
+            PanelIconButton(
+                iconClass = if (expanded) "hexana-icon-collapse" else "hexana-icon-expand",
+                title = if (expanded) "Restore the hex view" else "Expand the tabs over the hex view",
+                onClick = onToggleExpanded,
+            )
+        }
+        Div({ style { property("flex", "1") } })
+        if (onToggleDock != null) {
+            PanelIconButton(
+                iconClass = "hexana-icon-dock-bottom",
+                title = "Move tabs below the hex view",
+                onClick = onToggleDock,
+            )
+        }
+        Div({
+            classes("hexana-tab-add")
+            attr("title", "Add custom script tab")
+            style {
+                property("padding", "4px 8px")
+                property("cursor", "pointer")
+                property("font-size", "14px")
+                property("user-select", "none")
+                property("color", "var(--vscode-tab-inactiveForeground, rgba(255,255,255,0.5))")
+                property("flex-shrink", "0")
+            }
+            onClick { onAddTab() }
+        }) {
+            Text("+")
+        }
+    }
+}
+
+/**
+ * The tabs of a right-docked panel, one per row on the panel's right edge: as wide as the
+ * longest title up to [VERTICAL_TAB_LIST_MAX_WIDTH_PX] (longer ones are ellipsized), scrolling
+ * when they do not all fit. The selected row is kept in view, since selection also changes
+ * without a click (an added script tab, a section label, the size badge).
+ */
+@Composable
+private fun VerticalTabList(
+    tabs: List<PanelTab>,
+    activeTab: String,
+    onActiveTabChange: (String) -> Unit,
+    closableTabs: Set<String>,
+    onCloseTab: (String) -> Unit,
+) {
+    val host = LocalHost.current
+    var listRef by remember { mutableStateOf<HTMLElement?>(null) }
+    val activeIndex = tabs.indexOfFirst { it.id == activeTab }
+    LaunchedEffect(activeIndex, tabs.size, listRef) {
+        val list = listRef ?: return@LaunchedEffect
+        if (activeIndex < 0) return@LaunchedEffect
+        window.requestAnimationFrame {
+            (list.children.item(activeIndex) as? HTMLElement)?.asDynamic()?.scrollIntoView(js("({block: 'nearest'})"))
+        }
+    }
+    Div({
+        classes("hexana-vertical-tab-list")
+        style {
+            display(DisplayStyle.Flex)
+            property("flex-direction", "column")
+            property("flex", "0 0 auto")
+            property("max-width", "${VERTICAL_TAB_LIST_MAX_WIDTH_PX}px")
+            property("overflow-y", "auto")
+            property("overflow-x", "hidden")
+            property("border-left", "1px solid var(--hexana-border, #333)")
+            property("background", "var(--hexana-tab-bg, rgba(255,255,255,0.03))")
+        }
+        ref { element ->
+            listRef = element
+            onDispose { listRef = null }
+        }
+    }) {
+        for (tab in tabs) {
+            val isActive = tab.id == activeTab
+            val isClosable = tab.label in closableTabs
+            Div({
+                classes("hexana-tab", "hexana-vertical-tab")
+                if (isActive) classes("hexana-tab-active")
+                attr("title", tab.label)
+                style {
+                    display(DisplayStyle.Flex)
+                    property("align-items", "center")
+                    property("gap", "4px")
+                    property("padding", "5px 10px 5px 12px")
+                    property("cursor", "pointer")
+                    property("font-size", "12px")
+                    property("user-select", "none")
+                    property("white-space", "nowrap")
+                    // The selection marker sits on the outer edge, like a horizontal tab's underline.
+                    property("border-right", if (isActive) "2px solid var(--vscode-focusBorder, #007FD4)" else "2px solid transparent")
+                    property("color", if (isActive) "var(--hexana-fg)" else "var(--vscode-tab-inactiveForeground, rgba(255,255,255,0.5))")
+                    property("background", if (isActive) "var(--hexana-tab-active-bg, rgba(255,255,255,0.06))" else "transparent")
+                }
+                onClick {
+                    onActiveTabChange(tab.id)
+                    host.tabSelected(tab.label)
+                }
+            }) {
+                Span({
+                    style {
+                        property("flex", "1 1 auto")
+                        property("min-width", "0")
+                        property("overflow", "hidden")
+                        property("text-overflow", "ellipsis")
+                    }
+                }) { Text(tab.label) }
+                if (isClosable) {
+                    Span({
+                        classes("hexana-tab-close")
+                        attr("title", "Close tab")
+                        style {
+                            property("font-size", "10px")
+                            property("opacity", "0.6")
+                            property("cursor", "pointer")
+                            property("padding", "0 2px")
+                        }
+                        onClick { event ->
+                            event.stopPropagation()
+                            onCloseTab(tab.label)
+                        }
+                    }) {
+                        Text("\u2715")
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A small icon button for panel headers; [iconClass] is an SVG mask defined in `editor.css`. */
+@Composable
+private fun PanelIconButton(iconClass: String, title: String, onClick: () -> Unit) {
+    Div({
+        classes("hexana-panel-icon-button")
+        attr("title", title)
+        attr("aria-label", title)
+        attr("role", "button")
+        onClick { event ->
+            event.stopPropagation()
+            onClick()
+        }
+    }) {
+        Span({ classes("hexana-panel-icon", iconClass) })
     }
 }
 

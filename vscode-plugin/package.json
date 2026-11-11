@@ -322,6 +322,19 @@
           "default": "",
           "description": "Custom path to the lldb executable, used for WAMR remote debugging. When empty, the extension searches the system PATH."
         },
+        "hexana.tabsPanelPosition": {
+          "type": "string",
+          "enum": [
+            "bottom",
+            "right"
+          ],
+          "enumDescriptions": [
+            "Below the hex view, as a horizontal tab bar.",
+            "To the right of the hex view, with the tabs listed vertically."
+          ],
+          "default": "bottom",
+          "description": "Where the Hexana editor shows its analysis tabs. The button next to the tabs' \"+\" switches it for every open editor."
+        },
         "hexana.showSemanticHighlighting": {
           "type": "boolean",
           "default": true,

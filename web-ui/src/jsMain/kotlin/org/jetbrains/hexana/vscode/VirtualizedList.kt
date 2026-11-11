@@ -27,6 +27,13 @@ internal fun VirtualizedList(
     itemHeightPx: Int,
     overscan: Int = 5,
     reveal: ListReveal? = null,
+    /**
+     * Rows keep their natural, unwrapped width — at least the viewport's — and the list scrolls
+     * sideways when one is wider. For code listings, whose fixed-height lines must not wrap into
+     * the next one in a narrow pane. Off by default: rows sized in percentages of the viewport
+     * (the side-by-side diff) would have nothing to resolve against.
+     */
+    naturalWidthRows: Boolean = false,
     content: @Composable (index: Int) -> Unit,
 ) {
     val totalHeight = itemCount.toLong() * itemHeightPx
@@ -102,7 +109,13 @@ internal fun VirtualizedList(
                             position(Position.Absolute)
                             property("top", "${topPx}px")
                             property("left", "0")
-                            property("right", "0")
+                            if (naturalWidthRows) {
+                                property("min-width", "100%")
+                                property("width", "max-content")
+                                property("white-space", "nowrap")
+                            } else {
+                                property("right", "0")
+                            }
                             height(itemHeightPx.px)
                         }
                     }) {

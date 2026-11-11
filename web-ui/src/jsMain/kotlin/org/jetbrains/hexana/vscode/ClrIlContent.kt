@@ -157,7 +157,7 @@ private fun ClrIlTab(metadata: ClrMetadata, bytes: CommonByteBuffer, pdb: ClrPor
             return@Div
         }
 
-        VirtualizedList(itemCount = itemIndex.size, itemHeightPx = IL_ROW_HEIGHT_PX) { index ->
+        VirtualizedList(itemCount = itemIndex.size, itemHeightPx = IL_ROW_HEIGHT_PX, naturalWidthRows = true) { index ->
             when (val item = itemIndex.at(index)) {
                 is ClrIlItem.Header -> ClrTypeHeaderRow(item) {
                     expanded = if (item.type.index in expanded) expanded - item.type.index else expanded + item.type.index

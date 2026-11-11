@@ -79,3 +79,70 @@ internal fun ResizeDivider(onDrag: (deltaY: Double) -> Unit) {
         })
     }
 }
+
+/**
+ * The vertical counterpart of [ResizeDivider]: a thin divider between two side-by-side panes,
+ * dragged horizontally. [onDrag] receives the horizontal pixel delta since the previous move.
+ */
+@Composable
+internal fun ColumnResizeDivider(onDrag: (deltaX: Double) -> Unit) {
+    var dragging by remember { mutableStateOf(false) }
+    var startX by remember { mutableStateOf(0.0) }
+
+    DisposableEffect(dragging) {
+        if (!dragging) return@DisposableEffect onDispose {}
+
+        val moveHandler: (Event) -> Unit = { event ->
+            val me = event as? MouseEvent
+            if (me != null) {
+                me.preventDefault()
+                val delta = me.clientX.toDouble() - startX
+                startX = me.clientX.toDouble()
+                onDrag(delta)
+            }
+        }
+        val upHandler: (Event) -> Unit = { dragging = false }
+
+        window.addEventListener("mousemove", moveHandler)
+        window.addEventListener("mouseup", upHandler)
+        onDispose {
+            window.removeEventListener("mousemove", moveHandler)
+            window.removeEventListener("mouseup", upHandler)
+        }
+    }
+
+    Div({
+        classes("hexana-resize-divider", "hexana-resize-divider-column")
+        style {
+            property("flex-shrink", "0")
+            width(5.px)
+            property("cursor", "col-resize")
+            property("background", "transparent")
+            property("position", "relative")
+            property("z-index", "2")
+            // Make the hit target a bit larger than what is visually shown
+            property("margin", "0 -2px")
+            property("padding", "0 2px")
+        }
+        onMouseDown { event ->
+            if (event.nativeEvent.asDynamic().button as Int != 0) return@onMouseDown
+            event.preventDefault()
+            startX = (event.nativeEvent as MouseEvent).clientX.toDouble()
+            dragging = true
+        }
+    }) {
+        Div({
+            classes("hexana-resize-divider-line")
+            style {
+                width(1.px)
+                height(100.percent)
+                property("background", "var(--hexana-border, #333)")
+                property("position", "absolute")
+                property("left", "50%")
+                property("top", "0")
+                property("transform", "translateX(-50%)")
+            }
+        })
+    }
+}
+

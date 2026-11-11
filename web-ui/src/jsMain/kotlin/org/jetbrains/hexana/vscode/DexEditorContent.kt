@@ -255,7 +255,7 @@ private fun DexSmaliTab(dex: DexFile, bytes: CommonByteBuffer, selection: HexSel
             return@Div
         }
 
-        VirtualizedList(itemCount = itemIndex.size, itemHeightPx = SMALI_ROW_HEIGHT_PX, reveal = listReveal) { index ->
+        VirtualizedList(itemCount = itemIndex.size, itemHeightPx = SMALI_ROW_HEIGHT_PX, reveal = listReveal, naturalWidthRows = true) { index ->
             when (val item = itemIndex.at(index)) {
                 is DexSmaliItem.Header -> DexClassHeaderRow(item) {
                     expanded = if (item.cls.index in expanded) {

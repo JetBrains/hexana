@@ -172,6 +172,14 @@ fun postRunExportToHost(
  *
  * [tabName] is the display label of the selected tab (e.g. "Functions").
  */
+/** Persists where the analysis tabs sit (`hexana.tabsPanelPosition`); see [TabsPanelDock]. */
+fun postSetTabsPanelPositionToHost(onRight: Boolean) {
+    val msg = js("{}")
+    msg.type = "set-tabs-panel-position"
+    msg.position = if (onRight) "right" else "bottom"
+    vscodeApi.postMessage(msg)
+}
+
 fun postTabSelectedToHost(tabName: String) {
     val msg = js("{}")
     msg.type = "tab-selected"

@@ -32,7 +32,8 @@ The analysis tabs of the IntelliJ single-file editor (`ui/BinaryEditorView.kt`) 
   with the chunk tree) and lays it out at the list's width so backgrounds span it. Rows that cannot answer intrinsics
   (subcompose/lazy content) throw `IllegalStateException`, which is caught: they just take the list width. Cost: one
   intrinsic measurement per composed row.
-- Not covered: the diff editor (`BinaryDiffEditorView`) and VS Code keep their bottom layout.
+- Not covered: the diff editors (IntelliJ `BinaryDiffEditorView`, web `BinaryDiffView`/`HexDiffView`) keep their
+  bottom layout.
 - Manual QA: `idea-plugin/QA/04-analysis-tabs.md` 4.17.
 - **Review fixes (2026-11-11):** `HexanaSettings.loadState` re-syncs the Compose mirror (Settings Sync / external
   reload). `VerticalSplitPanel` wraps both panes in `movableContentOf` (latest lambdas via `rememberUpdatedState`),
@@ -42,4 +43,30 @@ The analysis tabs of the IntelliJ single-file editor (`ui/BinaryEditorView.kt`) 
   horizontal scrollbar shows; the listing's width tracker resets on fold changes. Not changed: the claim that a
   growing `widest` rebuilds the O(n) lazy-list DSL — with strong skipping the content lambda's captures are stable,
   so `LazyColumn` keeps the same content instance and only re-measures.
+
+## VS Code (2026-11-11)
+
+- **Setting:** `hexana.tabsPanelPosition` (`bottom` | `right`, Global). `WasmEditorProvider.ts` posts
+  `update-setting` `tabsPanelOnRight` on every webview `ready` and on configuration change (that listener is now
+  disposed with its panel); the webview's dock button posts `set-tabs-panel-position`, which writes the setting.
+- **Plumbing:** `web-ui` `LocalTabsPanelDock` (`TabsPanelDock(onRight, setOnRight)`), provided only by the VS Code
+  webview (`Main.kt`) — so the many webapp `BinaryEditorContent` call sites need no change, and the webapp keeps the
+  bottom layout with no dock button.
+- **Layout:** `BinaryEditorContent` puts the hex area and the panel in a row when docked right; both are
+  `movableContentOf` (latest lambdas through `rememberUpdatedState`), as is `HexanaPanel`'s tab content, so
+  re-docking keeps scroll positions and open-tab state. `HexanaPanel(dockedRight, widthPx, expanded, …)`: left
+  `ColumnResizeDivider`, `DockedPanelHeader` (expand, dock, "+"), content + `VerticalTabList` on the right edge
+  (≤ 220 px, ellipsized, active row `scrollIntoView({block: 'nearest'})`). Expanded = `calc(100% - 12px)`; a drag from
+  there starts at the panel's measured width. Icons are SVG masks in `editor.css` (`hexana-icon-*`), like the debug
+  icon.
+- **Narrow tables:** `.hexana-panel-table` is `table-layout: fixed; width: 100%`, so fill columns got whatever the
+  measured columns left — 24.6 px for the CLR Methods "Type" column at the default docked width. Tables now get a
+  `min-width` (`panelTableMinWidth`: measured `ch` widths, other columns ≥ title or 12 ch, plus 16 px padding each);
+  their scrolling parent then scrolls sideways.
+- **Listings:** `VirtualizedList(naturalWidthRows = true)` — rows `min-width: 100%; width: max-content;
+  white-space: nowrap` — for IL, Smali and DWARF. The flex type-header rows wrapped to 54 px inside 18 px rows.
+  Opt-in because the side-by-side diff sizes columns in percentages of the row.
+- **Pinned by** `webapp` `DockedTabsLayoutDomTest` (Chrome, real `editor.css` and `sample-clr.exe` served from
+  `layout-fixtures` via `jsTestProcessResources` + `karma.config.d/web/config.js`); the table and IL checks failed
+  before the fixes.
 

@@ -34,8 +34,8 @@ consult-first / write-back rules.
 - [[entities/binary-inspections]] — the shared problems model (`BinaryInspection` →
   `BinaryProblem`) behind the Problems tab, the toolbar count badge, and `inspect-binary`;
   what was migrated into it and why unresolved native records are excluded.
-- [[entities/editor-tabs-dock]] — IntelliJ editor: analysis tabs docked below or right of the hex view (global
-  setting, shared split fraction, vertical tab list).
+- [[entities/editor-tabs-dock]] — IntelliJ and VS Code editors: analysis tabs docked below or right of the hex
+  view (global setting, vertical tab list, expand), and narrow-pane fixes for tables and virtualized listings.
 - [[entities/binary-diff-provider]] — the shared diff model (`BinaryDiffProvider`): tabs,
   detail pane, navigation requests, how IntelliJ and VS Code host it, the hex viewer in the
   IntelliJ diff window (`diff.DiffTool`), native per-function and .NET per-method IL diff.

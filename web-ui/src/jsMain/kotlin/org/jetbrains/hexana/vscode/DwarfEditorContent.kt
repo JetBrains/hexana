@@ -162,6 +162,7 @@ private fun DwarfOutlineTab(section: DwarfOutlineSection, selection: HexSelectio
             itemCount = rows.size,
             itemHeightPx = DWARF_ROW_HEIGHT_PX,
             reveal = reveal,
+            naturalWidthRows = true,
         ) { index ->
             val row = rows.getOrNull(index) ?: return@VirtualizedList
             DwarfOutlineRow(
