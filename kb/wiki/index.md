@@ -57,6 +57,8 @@ consult-first / write-back rules.
   providers, content-only routing, tabs; PE ↔ PDB matching, companion loading, source lines in disassembly/IL.
 - [[entities/dependency-security-audit]] — where external dependency versions live, how to
   audit them (npm audit + OSV batch API), and the 2026-10-27 audit results.
+- [[entities/ci-env-parameters]] — which `HEXANA_*` env variables each CI script requires instead of hardcoded internal
+  targets, and what each does when one is missing.
 
 ## Sources
 
