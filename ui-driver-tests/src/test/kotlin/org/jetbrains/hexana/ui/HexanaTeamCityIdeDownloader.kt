@@ -11,7 +11,7 @@ import kotlin.io.path.exists
 object HexanaTeamCityIdeDownloader : IdeDownloader {
   override fun downloadIdeInstaller(ideInfo: IdeInfo, installerDirectory: Path): IdeInstallerFile {
     val teamCityIdeInfo = ideInfo.copy(
-      buildType = HexanaTeamCityArtifacts.resolveIdeBuildType(ideInfo),
+      buildType = HexanaTeamCityArtifacts.resolveIdeBuildType(),
       buildNumber = "",
       tag = null
     )

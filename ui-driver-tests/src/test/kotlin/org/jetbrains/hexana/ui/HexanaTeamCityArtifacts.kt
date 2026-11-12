@@ -1,7 +1,6 @@
 package org.jetbrains.hexana.ui
 
 import com.intellij.ide.starter.ci.teamcity.TeamCityClient
-import com.intellij.ide.starter.models.IdeInfo
 import com.intellij.ide.starter.path.GlobalPaths
 import com.intellij.ide.starter.utils.HttpClient
 import com.intellij.tools.ide.util.common.logOutput
@@ -21,14 +20,8 @@ import kotlin.io.path.inputStream
 import kotlin.io.path.outputStream
 
 object HexanaTeamCityArtifacts {
-  private const val DEFAULT_IDE_BUILD_TYPE = "IdeInstallers_Idea_Installers"
-  private val DEFAULT_IDE_BUILD_TYPES_BY_PRODUCT_CODE = mapOf(
-    "IU" to DEFAULT_IDE_BUILD_TYPE,
-    "WS" to "IdeInstallers_WebStorm_Installers",
-    "PY" to "IdeInstallers_PyCharm_Installers",
-    "CL" to "IdeInstallers_CIDR_CLion_Installers",
-  )
   private const val IDE_BUILD_TYPE_ENV = "HEXANA_IDE_BUILD_TYPE"
+  private const val PLUGIN_BUILD_TYPE_ENV = "HEXANA_PLUGIN_BUILD_TYPE"
   private const val TEAMCITY_USERNAME_ENV = "TEAMCITY_USERNAME"
   private const val TEAMCITY_PASSWORD_ENV = "TEAMCITY_PASSWORD"
   private const val LEGACY_TEAMCITY_USER = "teamcity.user"
@@ -36,7 +29,6 @@ object HexanaTeamCityArtifacts {
   private const val TEAMCITY_PROPERTIES_FILE_ENV = "HEXANA_TEAMCITY_PROPERTIES"
   private const val DEFAULT_CREDENTIALS_FILE_NAME = "teamcity.local.properties"
 
-  private const val PLUGIN_BUILD_TYPE = "InnoHub_HexFlow_PublishIdeaPluginNightly"
   private val PLUGIN_ARTIFACT_PATTERN = Regex("hexana-.*\\.zip", RegexOption.IGNORE_CASE)
   private val json = Json {
     ignoreUnknownKeys = true
@@ -67,16 +59,13 @@ object HexanaTeamCityArtifacts {
     val children: JsonElement? = null
   )
 
-  fun resolveIdeBuildType(ideInfo: IdeInfo? = null): String {
-    val explicitBuildType = System.getenv(IDE_BUILD_TYPE_ENV).orEmpty().ifBlank { null }
-    if (explicitBuildType != null) return explicitBuildType
+  fun resolveIdeBuildType(): String = requireBuildTypeEnv(IDE_BUILD_TYPE_ENV, "download an IDE installer from TeamCity")
 
-    val productCode = ideInfo?.productCode ?: "IU"
-    return DEFAULT_IDE_BUILD_TYPES_BY_PRODUCT_CODE[productCode]
-      ?: error(
-        "No default TeamCity IDE installer build type is configured for product code '$productCode'. " +
-            "Set $IDE_BUILD_TYPE_ENV explicitly."
-      )
+  private fun pluginBuildType(): String = requireBuildTypeEnv(PLUGIN_BUILD_TYPE_ENV, "download the Hexana plugin from TeamCity")
+
+  internal fun requireBuildTypeEnv(name: String, purpose: String, lookup: (String) -> String? = System::getenv): String {
+    return lookup(name)?.trim()?.ifBlank { null }
+      ?: error("$name is required to $purpose. Set it to the TeamCity build configuration ID, or use a public IDE version / a local plugin ZIP.")
   }
 
   fun resolveLatestSuccessfulBuild(buildTypeId: String, buildNumber: String? = null): BuildRef {
@@ -115,17 +104,18 @@ object HexanaTeamCityArtifacts {
       return downloadPluginFromBuild(buildNumber)
     }
 
-    val successfulBuilds = loadSuccessfulBuilds(PLUGIN_BUILD_TYPE)
+    val pluginBuildType = pluginBuildType()
+    val successfulBuilds = loadSuccessfulBuilds(pluginBuildType)
     if (successfulBuilds.isEmpty()) {
       error(
-        "No successful builds found for TeamCity build type '$PLUGIN_BUILD_TYPE' while searching for " +
+        "No successful builds found for TeamCity build type '$pluginBuildType' while searching for " +
             "artifact pattern '${PLUGIN_ARTIFACT_PATTERN.pattern}'"
       )
     }
 
     logOutput(
       "Searching Hexana plugin artifact pattern '${PLUGIN_ARTIFACT_PATTERN.pattern}' in " +
-          "${successfulBuilds.size} successful builds of '$PLUGIN_BUILD_TYPE' (${authModeDescription()})"
+          "${successfulBuilds.size} successful builds of '$pluginBuildType' (${authModeDescription()})"
     )
 
     val inspections = mutableListOf<BuildArtifactsInspection>()
@@ -178,14 +168,15 @@ object HexanaTeamCityArtifacts {
     }
 
     error(
-      "No artifact matching '${PLUGIN_ARTIFACT_PATTERN.pattern}' found in recent successful builds of '$PLUGIN_BUILD_TYPE'\n" +
+      "No artifact matching '${PLUGIN_ARTIFACT_PATTERN.pattern}' found in recent successful builds of '$pluginBuildType'\n" +
           "Inspected ${inspections.size} builds:\n$inspectionsSummary"
     )
   }
 
   private fun downloadPluginFromBuild(buildNumber: String): Path {
-    logOutput("Resolving Hexana plugin from build number '$buildNumber' of '$PLUGIN_BUILD_TYPE' (${authModeDescription()})")
-    val buildRef = resolveLatestSuccessfulBuild(PLUGIN_BUILD_TYPE, buildNumber)
+    val pluginBuildType = pluginBuildType()
+    logOutput("Resolving Hexana plugin from build number '$buildNumber' of '$pluginBuildType' (${authModeDescription()})")
+    val buildRef = resolveLatestSuccessfulBuild(pluginBuildType, buildNumber)
 
     val allArtifacts = listArtifactFiles(buildRef.buildId).sorted()
     val matchingArtifacts = allArtifacts.filter { artifactPath ->

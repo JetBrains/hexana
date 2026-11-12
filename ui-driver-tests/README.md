@@ -152,13 +152,14 @@ needs new environment variables or artifacts.
 | Variable | Default | Description |
 |---|---|---|
 | `HEXANA_USE_LOCAL_PLUGIN` | disabled | Use a local plugin ZIP. Requires `HEXANA_LOCAL_PLUGIN_ZIP` to be set. |
-| `HEXANA_DOWNLOAD_PLUGIN` | disabled | Download the plugin from TeamCity (`InnoHub_HexFlow_PublishIdeaPluginNightly`). |
+| `HEXANA_DOWNLOAD_PLUGIN` | disabled | Download the plugin from TeamCity. Requires `HEXANA_PLUGIN_BUILD_TYPE`. |
 
 Truthy values: `true`, `1`, `yes` (case-insensitive). If both are enabled or neither is enabled, the test fails with a clear error.
 
 | Variable | Default | Description |
 |---|---|---|
 | `HEXANA_LOCAL_PLUGIN_ZIP` | — | Absolute or relative path to a locally built plugin ZIP. Required when `HEXANA_USE_LOCAL_PLUGIN` is enabled. |
+| `HEXANA_PLUGIN_BUILD_TYPE` | — | TeamCity build configuration ID that publishes the plugin ZIP. Required when `HEXANA_DOWNLOAD_PLUGIN` is enabled; the run fails naming the variable if it is missing. |
 | `HEXANA_PLUGIN_BUILD_NUMBER` | latest | When downloading: target a specific TeamCity build number instead of the latest successful build. |
 
 Examples:
@@ -187,10 +188,8 @@ HEXANA_DOWNLOAD_PLUGIN=true HEXANA_PLUGIN_BUILD_NUMBER=123 \
 - `HEXANA_LARGE_WASM`: path to a large `.wasm` module for `HexanaLargeWasmResponsivenessTest`. Defaults to the
   bundled USD wasm64 fixture (`testData/fixtures/usdviewweb.wasm.gz`, decompressed to `build/fixtures/` on
   first use; see `testData/fixtures/README.md` for provenance).
-- `HEXANA_IDE_BUILD_TYPE`: TeamCity IDE installer build type used when neither public IDE version nor public build
-  number is set. Defaults by selected IDE product:
-  `IdeInstallers_Idea_Installers`, `IdeInstallers_WebStorm_Installers`,
-  `IdeInstallers_PyCharm_Installers`, or `IdeInstallers_CIDR_CLion_Installers`.
+- `HEXANA_IDE_BUILD_TYPE`: TeamCity IDE installer build configuration ID. Required when neither a public IDE version
+  nor a public build number is set; there is no default, and the run fails naming the variable if it is missing.
 - TeamCity credentials (used when guest auth cannot access a private build configuration):
   - `TEAMCITY_USERNAME` + `TEAMCITY_PASSWORD`
   - or Java system properties `teamcity.user` + `teamcity.token`

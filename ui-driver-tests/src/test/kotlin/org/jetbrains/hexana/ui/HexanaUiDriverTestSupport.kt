@@ -266,7 +266,7 @@ internal object HexanaUiDriverTestSupport {
 
         else -> {
             ideInfo(
-                buildType = HexanaTeamCityArtifacts.resolveIdeBuildType(ideProduct),
+                buildType = HexanaTeamCityArtifacts.resolveIdeBuildType(),
                 buildNumber = "",
                 version = "",
                 getInstaller = { StandardInstaller(HexanaTeamCityIdeDownloader) }

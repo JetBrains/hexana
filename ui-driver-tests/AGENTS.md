@@ -126,10 +126,10 @@ Other inputs:
 - `-PtestIdeVersion=<version>` or `HEXANA_IDE_VERSION`: public IDE version to download.
 - `HEXANA_IDE_BUILD_NUMBER`: public IDE build number to download. Set only one of `HEXANA_IDE_VERSION` or
   `HEXANA_IDE_BUILD_NUMBER`.
-- `HEXANA_IDE_BUILD_TYPE`: TeamCity IDE installer build type used when neither public IDE version nor public build
-  number is set. Defaults by selected IDE product:
-  `IdeInstallers_Idea_Installers`, `IdeInstallers_WebStorm_Installers`,
-  `IdeInstallers_PyCharm_Installers`, or `IdeInstallers_CIDR_CLion_Installers`.
+- `HEXANA_IDE_BUILD_TYPE`: TeamCity IDE installer build configuration ID. Required when neither public IDE version nor
+  public build number is set; there is no default, and the run fails naming the variable if it is missing.
+- `HEXANA_PLUGIN_BUILD_TYPE`: TeamCity build configuration ID that publishes the plugin ZIP. Required only with
+  `HEXANA_DOWNLOAD_PLUGIN=true`.
 - TeamCity auth if guest access is insufficient:
   - `TEAMCITY_USERNAME` and `TEAMCITY_PASSWORD`
   - or JVM properties `teamcity.user` and `teamcity.token`
