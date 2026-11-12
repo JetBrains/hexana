@@ -43,6 +43,29 @@ require_env() {
   [ -n "$value" ] || die "Required environment variable $name is not set"
 }
 
+init_leak_guard_internal_names() {
+  local mode="$1"
+
+  if [ -z "${HEXANA_LEAK_GUARD_INTERNAL_NAMES:-}" ]; then
+    [ "$mode" = "optional" ] || die "Required environment variable HEXANA_LEAK_GUARD_INTERNAL_NAMES is not set"
+    log "HEXANA_LEAK_GUARD_INTERNAL_NAMES is not set; checking only the built-in public patterns"
+    LEAK_GUARD_INTERNAL_NAMES_BRANCH=""
+    return
+  fi
+  case "$HEXANA_LEAK_GUARD_INTERNAL_NAMES" in
+    '|'*|*'|'|*'||'*)
+      die "HEXANA_LEAK_GUARD_INTERNAL_NAMES must be a regex alternation without empty branches"
+      ;;
+  esac
+  LEAK_GUARD_INTERNAL_NAMES_BRANCH="|$HEXANA_LEAK_GUARD_INTERNAL_NAMES"
+}
+
+use_self_test_leak_guard_names() {
+  HEXANA_LEAK_GUARD_INTERNAL_NAMES='example-secret-param-a|example-secret-param-b|%example\.'
+  export HEXANA_LEAK_GUARD_INTERNAL_NAMES
+  init_leak_guard_internal_names "required"
+}
+
 to_bool() {
   case "${1:-false}" in
     true|TRUE|True|1|yes|YES|Yes) printf 'true' ;;
@@ -340,9 +363,11 @@ write_release_notes() {
 check_public_github_text_file() {
   local context="$1"
   local file="$2"
-  local forbidden_content='TeamCity|buildserver|git\.jetbrains\.team|/Users/|/private/|PUBLISH_GITHUB_TOKEN_PARAM|TEST_GITHUB_TOKEN_PARAM|GH_TOKEN|GITHUB_TOKEN|TEAMCITY_BUILD|%hexana\.|BEGIN PRIVATE KEY|github_pat_|ghp_|gho_|ghu_|ghs_|sk-|AKIA|password=|secret=|token=|https?://|release/|automation/update-'
+  local forbidden_content
   local matches
   local grep_status
+
+  forbidden_content='TeamCity|buildserver|git\.jetbrains\.team|/Users/|/private/'"${LEAK_GUARD_INTERNAL_NAMES_BRANCH?leak guard internal names are not initialised}"'|GH_TOKEN|GITHUB_TOKEN|TEAMCITY_BUILD|BEGIN PRIVATE KEY|github_pat_|ghp_|gho_|ghu_|ghs_|sk-|AKIA|password=|secret=|token=|https?://|release/|automation/update-'
 
   [ -f "$file" ] || die "$context file is missing: $file"
 
@@ -387,6 +412,8 @@ check_public_github_text() {
 }
 
 self_test_public_github_text_guard() {
+  use_self_test_leak_guard_names
+
   local safe_file
   local unsafe_file
   local scan_status
@@ -407,10 +434,55 @@ self_test_public_github_text_guard() {
   set -e
 
   [ "$scan_status" -eq 1 ] || die "Public GitHub text guard self-test did not reject the unsafe fixture"
+
+  printf 'Published with example-secret-param-b\n' > "$unsafe_file"
+  set +e
+  check_public_github_text_file "Public GitHub text guard self-test env-name fixture" "$unsafe_file" >/dev/null 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -eq 1 ] || die "Public GitHub text guard self-test did not enforce HEXANA_LEAK_GUARD_INTERNAL_NAMES"
+
+  set +e
+  (
+    unset HEXANA_LEAK_GUARD_INTERNAL_NAMES
+    init_leak_guard_internal_names "required"
+  ) >"$unsafe_file" 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "Public GitHub text guard self-test accepted a missing HEXANA_LEAK_GUARD_INTERNAL_NAMES"
+  grep -F -q "HEXANA_LEAK_GUARD_INTERNAL_NAMES" "$unsafe_file" || die "Public GitHub text guard self-test did not name the missing variable"
+
+  set +e
+  (
+    HEXANA_LEAK_GUARD_INTERNAL_NAMES='example-secret-param-a||example-secret-param-b'
+    init_leak_guard_internal_names "required"
+  ) >/dev/null 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "Public GitHub text guard self-test accepted an empty regex branch"
+
+  printf 'internal name example-secret-param-a in a packaged file\n' > "$unsafe_file"
+  set +e
+  (check_artifact_file_content "self-test.zip" "file.txt" "$unsafe_file") >/dev/null 2>&1
+  scan_status=$?
+  set -e
+  [ "$scan_status" -ne 0 ] || die "Public GitHub text guard self-test did not enforce the internal names on packaged files"
+
+  (
+    unset HEXANA_LEAK_GUARD_INTERNAL_NAMES
+    init_leak_guard_internal_names "optional"
+    [ -z "$LEAK_GUARD_INTERNAL_NAMES_BRANCH" ]
+    printf 'Updated from TeamCity build 12345\n' > "$unsafe_file"
+    set +e
+    check_public_github_text_file "Public GitHub text guard self-test public-only fixture" "$unsafe_file" >/dev/null 2>&1
+    [ "$?" -eq 1 ]
+  ) >/dev/null 2>&1 || die "Public GitHub text guard self-test did not keep the built-in patterns without internal names"
   log "Public GitHub text guard self-test passed"
 }
 
 self_test_release_native_artifact_policy() {
+  use_self_test_leak_guard_names
+
   local temp_dir
   local lock_dir
   local artifact_name="hexana-mcp-native-macos-arm64-0.2.0.zip"
@@ -465,6 +537,8 @@ self_test_release_native_artifact_policy() {
 }
 
 self_test_public_bundle_native_policy() {
+  use_self_test_leak_guard_names
+
   local temp_dir
   local plugin_dir
   local scan_status
@@ -539,6 +613,8 @@ self_test_public_bundle_native_policy() {
 }
 
 self_test_release_native_artifact_default() {
+  use_self_test_leak_guard_names
+
   local temp_dir
   local version="0.2.0"
   local scan_status
@@ -630,6 +706,8 @@ self_test_release_native_artifact_default() {
 }
 
 self_test_mcp_changelog_release_notes() {
+  use_self_test_leak_guard_names
+
   local temp_dir
   local release_notes_file
   local scan_status
@@ -711,6 +789,8 @@ EOF
 }
 
 self_test_publication_mode_guard() {
+  use_self_test_leak_guard_names
+
   local scan_status
 
   (
@@ -728,7 +808,7 @@ self_test_publication_mode_guard() {
   set +e
   (
     PUBLICATION_MODE="production"
-    PUBLIC_REPO_SLUG="example-org/hexana-nightly"
+    PUBLIC_REPO_SLUG="example-owner/example-nightly"
     PRODUCTION_PUBLIC_REPO_SLUG="JetBrains/hexana"
     ALLOW_PRODUCTION_TO_NON_CANONICAL_REPO="false"
     AUTO_MERGE="false"
@@ -758,7 +838,7 @@ self_test_publication_mode_guard() {
   set +e
   (
     PUBLICATION_MODE="test-nightly"
-    PUBLIC_REPO_SLUG="example-org/hexana-nightly"
+    PUBLIC_REPO_SLUG="example-owner/example-nightly"
     PRODUCTION_PUBLIC_REPO_SLUG="JetBrains/hexana"
     ALLOW_PRODUCTION_TO_NON_CANONICAL_REPO="false"
     AUTO_MERGE="true"
@@ -772,7 +852,7 @@ self_test_publication_mode_guard() {
 
   (
     PUBLICATION_MODE="test-nightly"
-    PUBLIC_REPO_SLUG="example-org/hexana-nightly"
+    PUBLIC_REPO_SLUG="example-owner/example-nightly"
     PRODUCTION_PUBLIC_REPO_SLUG="JetBrains/hexana"
     ALLOW_PRODUCTION_TO_NON_CANONICAL_REPO="false"
     AUTO_MERGE="false"
@@ -787,6 +867,8 @@ self_test_publication_mode_guard() {
 }
 
 self_test_existing_release_asset_immutability() {
+  use_self_test_leak_guard_names
+
   local temp_dir
   local local_dir
   local existing_dir
@@ -891,7 +973,9 @@ check_artifact_file_content() {
   local zip_name="$1"
   local rel="$2"
   local file="$3"
-  local forbidden_content='(/Users/|/private/|PUBLISH_GITHUB_TOKEN_PARAM|TEST_GITHUB_TOKEN_PARAM|git\.jetbrains\.team|GH_TOKEN|GITHUB_TOKEN|TEAMCITY_BUILD|%hexana\.github|BEGIN PRIVATE KEY|github_pat_|ghp_|gho_|ghu_|ghs_|sk-|AKIA|password=|secret=|token=)'
+  local forbidden_content
+
+  forbidden_content='(/Users/|/private/'"${LEAK_GUARD_INTERNAL_NAMES_BRANCH?leak guard internal names are not initialised}"'|git\.jetbrains\.team|GH_TOKEN|GITHUB_TOKEN|TEAMCITY_BUILD|BEGIN PRIVATE KEY|github_pat_|ghp_|gho_|ghu_|ghs_|sk-|AKIA|password=|secret=|token=)'
 
   if strings "$file" | grep -E -q "$forbidden_content"; then
     die "Release artifact $zip_name contains forbidden string pattern in $rel"
@@ -1657,9 +1741,11 @@ check_staged_symlinks() {
 }
 
 check_secret_patterns() {
-  local regex='BEGIN PRIVATE KEY|github_pat_|ghp_|gho_|ghu_|ghs_|sk-|AKIA|password=|secret=|token=|/Users/|/private/|PUBLISH_GITHUB_TOKEN_PARAM|TEST_GITHUB_TOKEN_PARAM|git\.jetbrains\.team|GH_TOKEN|GITHUB_TOKEN|%hexana\.github'
+  local regex
   local file
   local matches
+
+  regex='BEGIN PRIVATE KEY|github_pat_|ghp_|gho_|ghu_|ghs_|sk-|AKIA|password=|secret=|token=|/Users/|/private/'"${LEAK_GUARD_INTERNAL_NAMES_BRANCH?leak guard internal names are not initialised}"'|git\.jetbrains\.team|GH_TOKEN|GITHUB_TOKEN'
   if [ "${#STAGED_CONTENT_FILES[@]}" -eq 0 ]; then
     return
   fi
@@ -1922,6 +2008,7 @@ publish_public_marketplace_pr() {
 
 main() {
   if [ -n "${RELEASE_ARTIFACT_SECURITY_CHECK_DIR:-}" ]; then
+    init_leak_guard_internal_names "optional"
     require_release_artifact_security_tools
     security_check_release_artifacts "$RELEASE_ARTIFACT_SECURITY_CHECK_DIR"
     return
@@ -1966,6 +2053,7 @@ main() {
   export GH_TOKEN
   require_env "GH_TOKEN"
   require_env "PUBLIC_REPO_SLUG"
+  init_leak_guard_internal_names "required"
 
   mcp_version="$(read_mcp_version)"
   [ -n "$mcp_version" ] || die "Could not read mcpServerVersion from mcp/server/gradle.properties"

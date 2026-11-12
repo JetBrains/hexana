@@ -337,6 +337,13 @@ Required environment variables:
 
 - `GH_TOKEN` or `GITHUB_TOKEN`: fine-grained PAT or GitHub App token. Pass it as a TeamCity password parameter.
 - `PUBLIC_REPO_SLUG`: public GitHub repository, for example `owner/repo`.
+- `HEXANA_LEAK_GUARD_INTERNAL_NAMES`: extended-regex alternation of internal names (CI token parameter names and
+  parameter-reference prefixes) that the public-text, artifact and staged-content guards must reject, for example
+  `name-one|name-two`. No default and no empty branches; a release run exits before any build or publication step
+  without it. In the validation-only `RELEASE_ARTIFACT_SECURITY_CHECK_DIR` mode (used by
+  `:mcp:verifyMcpR8ReleaseArchives`) it is optional so that outside builds keep working: when it is unset the log says
+  so and only the built-in public patterns are checked. Internal CI should set it there too. The self-tests use their
+  own fake names.
 - `PLUGIN_NAME`: marketplace plugin directory name, for example `hexana`.
 - `PLUGIN_VERSION`: version being published.
 - `GENERATED_PUBLIC_DIR`: directory that already contains the public marketplace bundle.
@@ -454,7 +461,7 @@ Test-nightly publication example:
 
 ```bash
 GH_TOKEN=... \
-PUBLIC_REPO_SLUG=example-org/hexana-nightly \
+PUBLIC_REPO_SLUG=<owner>/<test-repo> \
 PUBLICATION_MODE=test-nightly \
 PUBLIC_REPO_BASE_BRANCH=main \
 PLUGIN_NAME=hexana \
@@ -480,6 +487,7 @@ Recommended TeamCity environment:
 
 - `env.GH_TOKEN`: password parameter.
 - `env.PUBLIC_REPO_SLUG`: public repository slug.
+- `env.HEXANA_LEAK_GUARD_INTERNAL_NAMES`: internal names the leak guards reject.
 - `env.PUBLIC_REPO_BASE_BRANCH`: `main`.
 - `env.PLUGIN_NAME`: `hexana`.
 - `env.PLUGIN_VERSION`: release or build version.
