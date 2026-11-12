@@ -35,7 +35,7 @@ for entry in "${MODULES[@]}"; do
     exit 1
   fi
 
-  cargo build --manifest-path "$manifest_path" --target "$TARGET" --release
+  cargo build --locked --manifest-path "$manifest_path" --target "$TARGET" --release
 
   if [ ! -f "$output_path" ]; then
     echo "Expected artifact '$output_path' was not produced" >&2

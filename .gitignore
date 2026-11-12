@@ -12,11 +12,8 @@ kotlin-js-store/
 .intellijPlatform
 /teamcity.local.properties
 wasm-modules/wasmprinter_wrapper/target
-wasm-modules/wasmprinter_wrapper/Cargo.lock
 wasm-modules/disassembler/target
-wasm-modules/disassembler/Cargo.lock
 wasm-modules/webapp_server/target
-wasm-modules/webapp_server/Cargo.lock
 /plugins/hexana/
 ui-driver-tests/allure-results/
 .DS_Store

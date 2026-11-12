@@ -23,6 +23,13 @@ The repo already documents:
 
 There is also a local nightly-Rust flow documented in `wasm-modules/wasmprinter_wrapper/README.md`.
 
+## Dependency Locking
+
+- `Cargo.lock` is committed for every crate (`wasmprinter_wrapper`, `wat2wasm`, `disassembler`, `webapp_server`) and must be updated together with `Cargo.toml`.
+- The wasm-tools git dependencies (`wast`, `wat`) in `wat2wasm/Cargo.toml` are pinned to an exact `rev`; do not switch them back to a branch.
+- The Docker build (`build-wasm.sh`) runs `cargo build --locked`, so a stale lock fails the build instead of silently re-resolving.
+- When a lock changes, regenerate `license/third_party/rust/` (see its `README.md`).
+
 ## Contracts With JVM Wrappers
 
 The Kotlin wrappers in `graalwasm/` expect stable exported functions and memory names.

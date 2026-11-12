@@ -25,3 +25,9 @@ Docker output:
 
 - `wasm-modules/out/wasmprinter_wrapper.wasm`
 - `wasm-modules/out/wat2wasm_full.wasm`
+
+## Dependency locking
+
+`Cargo.lock` is committed for every crate and must be updated together with `Cargo.toml`.
+The wasm-tools git dependencies of `wat2wasm` are pinned to an exact revision, and the Docker build
+(`build-wasm.sh`) runs `cargo build --locked`, so it fails if a lock file is out of date.

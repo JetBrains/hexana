@@ -29,4 +29,3 @@ wasmparser = { version = "0.241.2", fetures = [
 wasmprinter = { version = "0.241.2", features = [
     "validate",
     "component-model"] }
-wee_alloc = "0.4"
