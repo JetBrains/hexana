@@ -68,3 +68,5 @@ consult-first / write-back rules.
   capture policy, and generated-page runtime contract.
 - [[sources/webassembly-features-json]] — WebAssembly's `features.json`: shape, the four-way
   `status` union, version-string quirks, and its HTTP/ETag characteristics.
+- [[sources/public-tip-hygiene]] — rules for keeping the tip publishable: env-var test locations, allowed
+  placeholder paths, no internal references or partner names, no derived dumps or build output in git.

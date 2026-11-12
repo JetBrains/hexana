@@ -199,3 +199,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-12 — `entities/pcap-http-replay` — review fix: protocol filters no longer decrypt TLS rows except for the HTTP filter.
 - 2026-11-12 — `entities/ci-env-parameters` — new: internal CI targets (build types, S3 bucket, Cloud Console/GCP/registry values, endpoints, leak-guard names) moved out of source into `HEXANA_*` env variables; per-script requirements.
 - 2026-11-12 — `entities/analytics-build-key` — PostHog key moved out of source: generated `AnalyticsBuildConfig`, blank key disables analytics, release guard, TeamCity params.
+- 2026-11-12 — `sources/public-tip-hygiene` — new: conventions from the pre-release tip clean-up (paths, internal references, oversized files).
