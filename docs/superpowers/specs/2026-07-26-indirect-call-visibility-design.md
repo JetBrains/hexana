@@ -2,9 +2,9 @@
 
 Date: 2026-07-26
 Status: draft
-Origin: Guy Bedford (an external partner) demo feedback, "it would be interesting to make
-indirect calls more visible". Extended in-session with the WAT-view and diff-view
-asks.
+Origin: feedback from an external Wasm runtime engineer after a demo, "it would be
+interesting to make indirect calls more visible". Extended in-session with the
+WAT-view and diff-view asks.
 
 ## Overview
 
@@ -204,7 +204,7 @@ narrowing remains sound where the index operand is statically evident.
 ## Build order
 
 1. **CandidateIndex + WAT popup.** Smallest demonstrable slice, and the direct
-   answer to the feedback; this is the artifact to show Guy Bedford.
+   answer to the feedback; this is the artifact to show the requester.
 2. **Per-signature hubs** in caller paths + dominators (+ garbage-view "pinned by
    element segment" badge from the reverse view).
 3. **Dispatch-surface diff** section + MCP `dispatch_surface_diff`.

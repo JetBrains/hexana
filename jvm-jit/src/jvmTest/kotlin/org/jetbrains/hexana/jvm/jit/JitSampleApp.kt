@@ -4,7 +4,7 @@ package org.jetbrains.hexana.jvm.jit
  * Tiny program used as the JIT-target subject for
  * [JitDumpIntegrationTest]. Run it under a child JVM with
  * `-agentpath:libjitview.{dylib,so,dll}` — the agent records every
- * compiled method into `mem.userDump` and our [JitFile] parser
+ * compiled method into a dump file and our [JitFile] parser
  * verifies the dump round-trips.
  *
  * [jitTarget] is the method we expect to appear in the dump: it runs

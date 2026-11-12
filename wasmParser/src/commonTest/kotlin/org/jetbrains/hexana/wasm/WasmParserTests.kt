@@ -2055,7 +2055,7 @@ class WasmParserTests {
     }
 
     /**
-     * 0:user@DE-UNIT-1497(0)# dwarfdump --lookup=0x39  utf8-c.dwarf5.wasm
+     * $ dwarfdump --lookup=0x39  utf8-c.dwarf5.wasm
      * utf8-c.dwarf5.wasm: Error in creating MCRegInfo
      * utf8-c.dwarf5.wasm:     file format WASM
      * 0x00000000: Compile Unit: length = 0x0000006b, format = DWARF32, version = 0x0005, unit_type = DW_UT_compile, abbr_offset = 0x0000, addr_size = 0x04 (next unit at 0x0000006f)

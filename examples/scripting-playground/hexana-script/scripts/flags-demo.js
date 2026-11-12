@@ -1,9 +1,9 @@
 // flags-demo.js
-// Requires the Scripting v2 Phase 2A branch (user/scripting-v2-phase2a).
+// Requires the Scripting v2 Phase 2A API.
 // Demonstrates: hexana.defineFlags with a values-enum flag, an int flag,
 //   and a path-typed flag; hexana.args, hexana.flags, hexana.inputs.
 // Binary: any Wasm binary; shown here against bin/hello.wasm.
-// API version: v2 Phase 2A (user/scripting-v2-phase2a).
+// API version: v2 Phase 2A.
 //
 // Run 1 -- defaults only, exit 0:
 //   hexana-cli-script run-script bin/hello.wasm \

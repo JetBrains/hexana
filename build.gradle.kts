@@ -125,7 +125,7 @@ allprojects {
         }
         // See settings.gradle.kts for the cache-redirector rationale —
         // hitting Maven Central directly from TeamCity agents triggers
-        // HTTP 429 (INTERNAL-TICKET / INTERNAL-TICKET).
+        // HTTP 429.
         maven("https://cache-redirector.jetbrains.com/maven-central")
         maven("https://redirector.kotlinlang.org/maven/compose-dev")
     }

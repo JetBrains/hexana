@@ -33,8 +33,7 @@ pluginManagement {
         // Route Maven Central and the Gradle Plugin Portal through the
         // JetBrains cache-redirector. Direct access to repo.maven.apache.org
         // and plugins.gradle.org from TeamCity agents is rate-limited and
-        // returns HTTP 429, breaking dependency resolution. See INTERNAL-TICKET /
-        // INTERNAL-TICKET and #infra-channel.
+        // returns HTTP 429, breaking dependency resolution.
         //
         // Order matters: maven-central must come first. The plugin-portal
         // mirror also proxies Maven Central artifacts (POMs), but its JARs

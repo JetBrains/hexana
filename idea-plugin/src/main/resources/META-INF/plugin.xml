@@ -111,7 +111,7 @@
              (or via the panel's Retry button). -->
         <registryKey key="hexana.disassembly.backend.redline"
                      defaultValue="false"
-                     description="Use chicory-redline (Cranelift-compiled native code via FFI) for the Capstone WASM module instead of Chicory's bytecode AOT. Experimental — see user/capstone-chicory-redline branch."/>
+                     description="Use chicory-redline (Cranelift-compiled native code via FFI) for the Capstone WASM module instead of Chicory's bytecode AOT. Experimental."/>
         <registryKey key="hexana.disassembly.perf.logging"
                      defaultValue="false"
                      description="Emit per-chunk [disasm-perf] timing to idea.log (decodeMs, renderMs, annotatedLen). Fires only when a function body is unfolded — the default-folded UX means no perf log until the user opens a function."/>

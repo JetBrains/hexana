@@ -13,9 +13,7 @@ buildscript {
         // Used by the aotCompileDisassemblerWasm task below.
         classpath("com.dylibso.chicory:build-time-compiler:1.4.0")
         // Used by the redlineCompileDisassemblerWasm task below — experimental
-        // Cranelift-based native AOT alongside the vanilla bytecode AOT. See
-        // `user/capstone-chicory-redline` branch + chicory-redline-expert
-        // agent for rationale.
+        // Cranelift-based native AOT alongside the vanilla bytecode AOT.
         classpath("io.roastedroot:redline-build-time-compiler:0.0.4")
     }
 }

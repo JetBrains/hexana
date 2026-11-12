@@ -7,8 +7,8 @@ Origin: user request — do for exceptions what the indirect-call visibility wor
 `2026-07-28-indirect-candidate-narrowing-design.md`) did for `call_indirect`.
 Exception handling is the same shape of question: a typed reachability relation
 the binary answers statically but no tool surfaces. Aligns with the top item on
-the an external partner feature-fit list (a Rust panic-surface view; Guy Bedford's
-panic-recovery-via-wasm-EH work).
+the feature-fit list from the same external feedback (a Rust panic-surface view,
+built on panic recovery via wasm exception handling).
 
 ## The parallel
 
@@ -107,7 +107,7 @@ Fixed-point over the existing call graph, mirroring the per-signature hub idea:
   exported entry points uncaught") and as a dedicated panel.
 - **Throw/panic-surface panel** (sibling of the dispatch-surface work): rows =
   functions that can throw uncaught, grouped by tag, with code sizes and an
-  entry-point-reachability marker. Bedford's requested panic-surface view.
+  entry-point-reachability marker. The panic-surface view requested in the feedback.
 
 ## E3 — diff + MCP (deferred)
 

@@ -1,12 +1,12 @@
 // check-baseline-demo.js
-// Requires the Scripting v2 Phase 2A branch (user/scripting-v2-phase2a).
+// Requires the Scripting v2 Phase 2A API.
 // Demonstrates: the triage loop for a check that always emits one ERROR finding.
 //   Step 1: run without --update-baselines -> exit 1, baselineState "new".
 //   Step 2: run with --update-baselines   -> exit 0, baseline file written.
 //   Step 3: run without --update-baselines -> exit 0, baselineState "unchanged".
 // Binary: any Wasm binary; shown here against bin/app-debug.wasm.
 // Baselines dir: .hexana/baselines (created in the playground root; gitignored).
-// API version: v2 Phase 2A (user/scripting-v2-phase2a).
+// API version: v2 Phase 2A.
 //
 // Step 1 -- first run, exit 1 expected:
 //   hexana-cli-script run-script bin/app-debug.wasm \

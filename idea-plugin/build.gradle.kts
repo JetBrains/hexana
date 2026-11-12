@@ -90,8 +90,8 @@ dependencies {
             bundledPlugins("JavaScript", "com.intellij.java", "org.jetbrains.idea.maven", "com.intellij.gradle")
         }
 
-        // TODO: whenever composeUI() will be updated, we can safely remove direct dependencies to dekstop runtime
-        // see https://chat.example.invalid/archives/CHANNEL/p1763485226889799
+        // TODO: whenever composeUI() will be updated, we can safely remove direct dependencies to desktop runtime
+        // (the explicit Compose Desktop dependencies below exist only as a workaround until then)
         composeUI()
         zipSigner()
     }
@@ -128,7 +128,7 @@ dependencies {
     implementation(libs.ktor.client.cio.jvm)
     implementation(libs.ktor.client.websockets.jvm)
 
-    // see https://chat.example.invalid/archives/CHANNEL/p1763485226889799
+    // Workaround until composeUI() brings the desktop runtime itself; see the TODO next to composeUI() above.
     compileOnly(compose.desktop.currentOs)
     testImplementation(libs.junit4)
     testImplementation(libs.kotlinx.serialization.json)

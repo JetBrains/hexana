@@ -1,5 +1,5 @@
 // check-demo.js
-// Requires the Scripting v2 Phase 2A branch (user/scripting-v2-phase2a).
+// Requires the Scripting v2 Phase 2A API.
 // Demonstrates: hexana.defineCheck with two checks against bin/app-debug.wasm.
 //   Check 1 (ERROR, funcidx anchor): flag any function whose code body is
 //     fewer than 5 bytes. app-debug.wasm has one such function: __wasm_call_ctors
@@ -9,7 +9,7 @@
 // Expected outcome:
 //   raw mode  -- exit 1 (the ERROR finding); stderr has console.log lines.
 //   sarif mode -- exit 1; stdout is SARIF JSON with ruleId, level, baselineState.
-// API version: v2 Phase 2A (user/scripting-v2-phase2a).
+// API version: v2 Phase 2A.
 //
 // Run (raw, exit 1 expected):
 //   hexana-cli-script run-script bin/app-debug.wasm \

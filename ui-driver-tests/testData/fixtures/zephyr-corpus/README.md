@@ -22,7 +22,7 @@ board, optimization flags, and Kconfig deltas.
   - hello_world for v2m_beetle (unsupported-target: no QEMU/Renode backend, Cortex-M0)
   - hang_unmodeled for nrf52840dk (hangs-on-unmodeled-hw: spins on reserved addr 0x4002F000 before printk)
   - peripheral_hr nrf52840dk-Os-abi-drift (corpus commit d582bf8): the -Os build with an
-    ABI-drift patch (Partner demo pack), diffed against nrf52840dk-Os by
+    ABI-drift patch (demo pack), diffed against nrf52840dk-Os by
     `AbiDriftCaptureTest` and opened by `BreakpointCaptureTest`
   Each variant directory contains `zephyr.elf.gz`, `zephyr.dts`, `.config`, and `manifest.json`
   (emulator backend, machine name, boot-banner regex, negativeKind). Rebuild with the corpus

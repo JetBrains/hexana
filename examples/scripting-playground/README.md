@@ -109,7 +109,7 @@ These scripts use `hexana.defineSlice()`, `binary.functions()`, `binary.imports(
 
 ## Walkthrough part 4: checks, baselines, and flags (Phase 2A)
 
-These scripts require branch `user/scripting-v2-phase2a`. They use
+These scripts require the Scripting v2 Phase 2A API. They use
 `hexana.defineCheck`, `hexana.defineFlags`, `hexana.args`, `hexana.inputs`,
 and `hexana.flags`.
 
@@ -288,13 +288,13 @@ correctly.
 - [ ] .hexana/ appears in .gitignore (baselines dir is not tracked)
 
 Estimated time: under 15 minutes for the v1 and CLI portions. v2 walkthrough requires
-the `feature/scripting-v2-phase1` branch. Phase 2A walkthrough requires
-`user/scripting-v2-phase2a`. Phase 2B (IDE run configurations) requires
-`user/scripting-v2-phase2b`.
+the Scripting v2 Phase 1 API. Phase 2A walkthrough requires
+the Phase 2A API. Phase 2B (IDE run configurations) requires
+the Phase 2B API.
 
 ## Walkthrough part 5: run configurations (IDE)
 
-Requires `user/scripting-v2-phase2b` and a running IDE sandbox (`./gradlew runIde`).
+Requires the Scripting v2 Phase 2B API and a running IDE sandbox (`./gradlew runIde`).
 
 ### Creating a run configuration from a script file
 
@@ -365,7 +365,7 @@ Requires `user/scripting-v2-phase2b` and a running IDE sandbox (`./gradlew runId
 
 ## Walkthrough part 6: test suites (Phase 3A)
 
-Requires the `user/scripting-v2-phase3a` branch and a built CLI:
+Requires the Scripting v2 Phase 3A API and a built CLI:
 
 ```sh
 ./gradlew :cli:hexana-cli-script:installDist
@@ -500,7 +500,7 @@ artifact content, so it stays stable as long as neither changes.
 
 ## Walkthrough part 7: IDE suite runner (Phase 3B)
 
-Requires `user/scripting-v2-phase3b` and a running IDE sandbox (`./gradlew runIde`).
+Requires the Scripting v2 Phase 3B API and a running IDE sandbox (`./gradlew runIde`).
 GraalJS cannot initialize inside the idea-plugin test harness, so IDE outputs below are
 stated as expected values derived from the pinned CLI behavior and unit tests rather
 than observed IDE outputs.
