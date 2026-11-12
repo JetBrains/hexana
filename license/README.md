@@ -2,14 +2,29 @@
 
 This directory holds the licence material of Hexana that is not tied to one source file.
 
+## Licences of Hexana itself
+
+- **Source code: Apache License 2.0.** The text is in `LICENSE.txt` at the repository root (so that GitHub detects it) and
+  in `license/LICENSE.txt`, a byte-identical copy. Both are the exact text of
+  <https://www.apache.org/licenses/LICENSE-2.0.txt>. There is no `NOTICE` file and the source files carry no licence
+  headers.
+- **Official binaries keep their JetBrains licences.** They are distributed by JetBrains under the licences included
+  with them, which this repository keeps unchanged:
+  - `vscode-plugin/LICENSE`, the JetBrains User Agreement, for the VS Code extension (VSIX);
+  - `mcp/packaging/LICENSE.txt`, the JetBrains Free Plugin License, for the MCP and CLI bundles, the Claude and Codex
+    plugins, the MCPB bundles and the native ZIPs.
+
+Third-party components are covered separately, as described below.
+
+## What is in this directory
+
+- `LICENSE.txt` is the Apache-2.0 text of the source code (see above).
 - `third_party/` has one subdirectory per bundled third-party component or licence family that cannot be taken from a
   published Maven or npm package: the licence texts exactly as published upstream, plus the machine-readable indexes the
   notices generator reads.
 - Licence files that belong to a test fixture live next to that fixture, not here (for example
   `wasmParser/src/commonTest/resources/webImage/` and `ui-driver-tests/testData/fixtures/`). Fixtures are test data and
   are not shipped in any release artifact.
-
-The licence of Hexana's own code is not described here yet; it is decided together with JetBrains Legal (HEXANA-33).
 
 ## What each artifact ships
 

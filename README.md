@@ -353,4 +353,4 @@ the MCP server under `mcp/`; and the bundled Rust crates under
 
 ## License
 
-See [LICENSE](LICENSE).
+Source code is licensed under the Apache License 2.0, see [LICENSE.txt](LICENSE.txt). Official binaries are distributed by JetBrains under the licences included with them.
