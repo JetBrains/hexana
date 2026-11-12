@@ -289,8 +289,10 @@ names or personal data are sent. You can opt out at any time:
 - CLI products: `--telemetry-enabled false` or `HEXANA_CLI_TELEMETRY_ENABLED=false`.
 - Web app: use the **Anonymous usage analytics** toggle on the page.
 
-Builds from source do not report anything: the analytics key is injected only by the official release pipeline, and a
-build without it has analytics disabled. See [JetBrains Privacy Notice](https://www.jetbrains.com/legal/docs/privacy/privacy/).
+Builds from source do not report anything: the analytics key is injected only by the official release pipeline, from the
+`hexana.posthog.apiKey` Gradle property or the `HEXANA_POSTHOG_BUILD_API_KEY` environment variable, together with
+`hexana.release=true` (or `HEXANA_RELEASE_BUILD=true`) so a release build without the key fails. A build without the key
+has analytics disabled. See [JetBrains Privacy Notice](https://www.jetbrains.com/legal/docs/privacy/privacy/).
 
 ## Documentation
 
@@ -323,10 +325,6 @@ cd hexana
 ./gradlew :vscode-plugin:assembleExtensionAssets
 cd vscode-plugin && npm install && npm run compile && npm run package
 ```
-
-Analytics are disabled in source builds. Official releases bake the PostHog key in at build time from the
-`hexana.posthog.apiKey` Gradle property or the `HEXANA_POSTHOG_BUILD_API_KEY` environment variable, and set
-`hexana.release=true` (or `HEXANA_RELEASE_BUILD=true`) so a release build without the key fails.
 
 Requirements: JDK 21 (Hexana bundles the JetBrains Runtime as the
 build toolchain), Node.js 18 or newer for the VS Code surface, Rust
