@@ -12,7 +12,7 @@ How the PostHog project key reaches shipped artifacts without being in the sourc
   `:analytics:api:verifyAnalyticsReleaseKey` fail a build without a key. Every shipped artifact compiles `analytics:api`, so
   the guard sits on the generator rather than on each packaging task; `publishPlugin` depends on it explicitly because it
   runs with `-x buildPlugin`. Test lanes, PR checks and forks set neither variable.
-- TeamCity wiring lives in `ci-configuration` (`common/AnalyticsBuildParams.kt`). `Build Idea Plugin` and
+- TeamCity wiring lives in the internal CI configuration (`common/AnalyticsBuildParams.kt`). `Build Idea Plugin` and
   `Build VSCode Plugin` default to a fake key because UI tests assert events on a fake PostHog server.
 - Tests pass an explicit `AnalyticsConfig(apiKey = "test-key")`; the default key depends on the build.
 - Never rotate the key: that revokes it in every shipped build. Removing the old literal from git history is a separate task.
