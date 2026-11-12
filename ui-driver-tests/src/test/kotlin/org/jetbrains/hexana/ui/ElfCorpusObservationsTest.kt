@@ -17,9 +17,9 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Opens 12 Zephyr/ZMK ELF artifacts sequentially in one IDE launch, collects observations
+ * Opens 11 Zephyr/ZMK ELF artifacts sequentially in one IDE launch, collects observations
  * (panel names, provider kind, diff sections), takes screenshots, and writes raw data to
- * hexana-corpus-observations.json in the system temp directory. Fails if fewer than 12
+ * hexana-corpus-observations.json in the system temp directory. Fails if fewer than 11
  * artifact entries are collected.
  *
  * Disassembly panel state is NOT observable via probe: the load result lives in Compose-local
@@ -74,10 +74,6 @@ class ElfCorpusObservationsTest {
         Artifact(
             HexanaUiDriverTestSupport.corpusElf("apps/usb_hid-mouse/nrf52840dk-Os/zephyr.elf"),
             "usb_hid-mouse-nrf52840dk-Os",
-        ),
-        Artifact(
-            HexanaUiDriverTestSupport.corpusElf("external/zmk/xiao-nrf52840-intercom.elf"),
-            "external-zmk-intercom",
         ),
         Artifact(
             HexanaUiDriverTestSupport.corpusElf("external/zmk/xiao-nrf52840-loa-controller.elf"),
@@ -327,9 +323,9 @@ class ElfCorpusObservationsTest {
             writeObservationsJson(artifactObservations, diffObservations)
         }
 
-        // Enforce minimum: all 12 artifacts must have been collected.
-        check(artifactObservations.size == 12) {
-            "Expected 12 artifact observations, got ${artifactObservations.size}"
+        // Enforce minimum: all 11 artifacts must have been collected.
+        check(artifactObservations.size == 11) {
+            "Expected 11 artifact observations, got ${artifactObservations.size}"
         }
         val withErrors = artifactObservations.filter { it.errors.isNotEmpty() }
         if (withErrors.isNotEmpty()) {
@@ -374,8 +370,8 @@ class ElfCorpusObservationsTest {
                 "memcpy",
             ),
             DisasmDrillTarget(
-                HexanaUiDriverTestSupport.corpusElf("external/zmk/xiao-nrf52840-intercom.elf"),
-                "external-zmk-intercom",
+                HexanaUiDriverTestSupport.corpusElf("external/zmk/xiao-nrf52840-loa-controller.elf"),
+                "external-zmk-loa-controller",
                 "memcpy",
             ),
         )
@@ -492,7 +488,7 @@ class ElfCorpusObservationsTest {
             maximizeWindow()
             closeProjectToolWindow()
 
-            // --- all 12 Cortex-M ELFs: global THUMB arch, even addresses, sane fallback rate ---
+            // --- all 11 Cortex-M ELFs: global THUMB arch, even addresses, sane fallback rate ---
             for (artifact in artifacts) {
                 closeAllEditors()
                 Thread.sleep(500)

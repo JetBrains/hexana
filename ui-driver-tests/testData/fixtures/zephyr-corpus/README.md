@@ -1,4 +1,4 @@
-# Zephyr/ZMK ELF corpus fixtures
+# Zephyr ELF corpus fixtures
 
 Gzipped Cortex-M ELF binaries used by `ElfCorpusObservationsTest` (UI harness,
 Thumb-2 decode acceptance) and `ZephyrCorpusB2VerificationTest` (DWARF line-row
@@ -24,13 +24,19 @@ board, optimization flags, and Kconfig deltas.
   - peripheral_hr nrf52840dk-Os-abi-drift (corpus commit d582bf8): the -Os build with an
     ABI-drift patch (demo pack), diffed against nrf52840dk-Os by
     `AbiDriftCaptureTest` and opened by `BreakpointCaptureTest`
-  Each variant directory contains `zephyr.elf.gz`, `zephyr.dts`, `.config`, and `manifest.json`
+  Each variant directory contains `zephyr.elf.gz`, `zephyr.dts`, and `manifest.json`
   (emulator backend, machine name, boot-banner regex, negativeKind). Rebuild with the corpus
   repo's `tools/build-all.sh`.
-- `external/zmk/*.elf` (3 ELFs, DWARF4): public Zephyr BLE firmware images for
-  Seeed XIAO nRF52840 boards (ZMK-adjacent projects; real ZMK CI ships only
-  .uf2). See `external/zmk/README.md` in the corpus repo for the source
-  repositories.
+- `external/zmk/*.elf` (2 ELFs, DWARF4): firmware images for Seeed XIAO nRF52840 boards
+  (`xiao-nrf52840-loa-controller`, `xiao-nrf52840-loa-receiver`), built by the GitHub Actions workflow of the
+  open-source project Little On Air (<https://github.com/sayhiben/little-on-air>, `apps/controller` and
+  `apps/receiver`, board `xiao_ble/nrf52840`; the build paths inside the ELFs are
+  `/home/runner/work/little-on-air/little-on-air/...`). They are plain Zephyr applications: the binaries print
+  "Booting Zephyr OS build 3568e1b6d5cd", which is the Zephyr v4.3.0 commit pinned in the project's `west.yml`
+  (`3568e1b6d5cdd51a6b964a2a1d6d29200fea2056`), compiled with GCC 12.2.0 (`DW_AT_producer`). There is no ZMK code in
+  them (no `zmk` symbol or path in either ELF); the directory name `external/zmk` is historical and is kept
+  because tests refer to it. The exact Little On Air commit is not recorded (UNVERIFIED; needed: the corpus
+  repository's `external/zmk/README.md`, which named the source).
 
 Traits the tests rely on: Thumb symbol addresses with bit 0 set, M profile in
 .ARM.attributes, dotless Zephyr section names, GCC-emitted DWARF v2/v3
@@ -38,8 +44,36 @@ line-program headers inside both DWARF4 and DWARF5 builds, and (peripheral_hr
 at -Os) 6714 DW_TAG_inlined_subroutine entries as the inline-recovery stress
 case.
 
-All Zephyr and ZMK sources are Apache-2.0. The binaries are included solely as
-test inputs.
+## Licences
+
+Not everything in this corpus is Apache-2.0. The binaries are included solely as
+test inputs. Status legend: VERIFIED = checked against the upstream source named
+here (retrieved 2026-11-12); UNVERIFIED = could not be established, the entry says
+what is needed. Licence texts are in [`licenses/`](licenses/).
+
+- `apps/**` (and the ELFs under `budget-samples/` built from the same sources): Zephyr sample applications
+  `hello_world`, `bluetooth/peripheral_hr` and `subsys/usb/hid-mouse`, Zephyr main
+  `v4.4.0-12742-g231e3c5c569` = commit `231e3c5c569b1d2b372a4ed41e5d727d1d2c9e26` (VERIFIED to exist upstream).
+  Zephyr and these three samples are `Apache-2.0` (SPDX headers read at that commit;
+  [`licenses/Zephyr-Apache-2.0-LICENSE.txt`](licenses/Zephyr-Apache-2.0-LICENSE.txt)). The images also contain
+  Zephyr modules pinned by that commit's `west.yml`: `hal_nordic` with nrfx (`BSD-3-Clause`, Nordic Semiconductor,
+  [`licenses/nrfx-BSD-3-Clause-LICENSE.txt`](licenses/nrfx-BSD-3-Clause-LICENSE.txt), taken from the nrfx repository
+  `master`; the `nrfx` sources in `hal_nordic` carry `SPDX-License-Identifier: BSD-3-Clause`), `cmsis_6` (Apache-2.0,
+  repository `LICENSE`) and, in `peripheral_hr`, `tf-psa-crypto` (`Apache-2.0 OR GPL-2.0-or-later`, used under
+  Apache-2.0; [`licenses/TF-PSA-Crypto-000d24cb-LICENSE.txt`](licenses/TF-PSA-Crypto-000d24cb-LICENSE.txt)).
+  The Zephyr SDK / GCC 14.3.0 runtime and C library code that the toolchain links in is not covered here:
+  licences UNVERIFIED (needed: the SDK version's licence list; the README says Zephyr SDK 1.0.1).
+  Not Zephyr sources: `hang_unmodeled`, the `nrf52840dk-Os-abi-drift` patch and everything under `budget-samples/`
+  that is not a Zephyr build output (`firmware.c`, `linker.ld`, `make_fdt.py`) were written for the corpus; their author
+  and licence are UNVERIFIED (needed: the corpus repository authors and its licence; the corpus repository, commit
+  `a30adb9`, is not referenced by URL anywhere in this repository).
+- `external/zmk/*.elf` (`loa-controller`, `loa-receiver`): the application code is Little On Air, `MIT`,
+  Copyright (c) 2026 Ben Menesini
+  ([`licenses/little-on-air-MIT-LICENSE.txt`](licenses/little-on-air-MIT-LICENSE.txt), repository `LICENSE` on `main`,
+  VERIFIED). They are built on Zephyr v4.3.0 (`Apache-2.0`) with nrfx (`BSD-3-Clause`), CMSIS 6 (`Apache-2.0`),
+  Mbed TLS / PSA crypto sources (`Apache-2.0 OR GPL-2.0-or-later`; the Mbed TLS revision pinned by Zephyr v4.3.0
+  and the p256-m sources inside it were not checked: UNVERIFIED). These images are not ZMK builds, and ZMK's
+  licence does not apply to them.
 
 ## budget-samples/
 
@@ -48,7 +82,7 @@ Memory-budget test fixtures, used by the `MemoryBudgetCorpusAcceptanceTest`,
 `binaryProvider/src/jvmTest/`.
 
 Provenance: corpus `budget-samples/` directory (same west workspace as the
-`apps/` and `external/` ELFs above).  ELFs are gzip-compressed (`.elf.gz`);
+`apps/` ELFs above).  ELFs are gzip-compressed (`.elf.gz`);
 maps, DTS files, and JSON reports are stored raw.
 
 ### Positive samples (ELF + map + dts + rom.json + ram.json)

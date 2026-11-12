@@ -1529,17 +1529,17 @@ class WasmParserTests {
 
     @Test
     fun parseThreadsSpecificImportTypes() = runTest {
-        val buffer = resourceAsByteBuffer("threads/bpnode.wasm")
+        val buffer = resourceAsByteBuffer("threads/shared-memory-import.wasm")
         val wasmParseResult = WasmParser().parse(buffer)
 
         assertIs<WasmParseSuccess>(wasmParseResult)
         val wasmModule = wasmParseResult.wasmModule as CoreWasmComponent
 
-        val importRecords =with(wasmModule.importSection!!) {
-             buffer.getImportRecords()
+        val importRecords = with(wasmModule.importSection!!) {
+            buffer.getImportRecords()
         }
-        assertEquals(888, importRecords.size)
-        with(importRecords[0]){
+        assertEquals(4, importRecords.size)
+        with(importRecords[0]) {
             assertEquals("i", prefix)
             assertEquals("memory", name)
             assertEquals(WasmMemType(WasmFixedI32Limits(0x1000, 0x1000, true)), type)

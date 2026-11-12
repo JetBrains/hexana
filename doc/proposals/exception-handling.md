@@ -17,7 +17,7 @@ Final shape of WebAssembly exception handling. Replaces the legacy
 `try`/`catch`/`delegate` block (which the parser still accepts) with a
 flat **`try_table`** instruction that lists all catch handlers up-front,
 along with first-class `exnref`. The legacy form is described in
-[doc/exception-handling/legacy/Exceptions.md](../exception-handling/legacy/Exceptions.md).
+[WebAssembly/exception-handling: legacy/Exceptions.md](https://github.com/WebAssembly/exception-handling/blob/main/proposals/exception-handling/legacy/Exceptions.md).
 
 ## Binary encoding additions
 
@@ -68,4 +68,4 @@ Block body terminates with the standard `0x0B` end byte.
   `CatchAllRef`.
 - Legacy: `OpCodes.legacy.eh.LegacyEH.{Try,Catch,Rethrow,Delegate,CatchAll}`
   — covered in
-  [doc/exception-handling/legacy/Exceptions.md](../exception-handling/legacy/Exceptions.md).
+  [WebAssembly/exception-handling: legacy/Exceptions.md](https://github.com/WebAssembly/exception-handling/blob/main/proposals/exception-handling/legacy/Exceptions.md).

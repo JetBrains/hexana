@@ -225,20 +225,6 @@ class ZephyrCorpusB2VerificationTest {
     }
 
     @Test
-    fun zmkIntercom() {
-        val path = corpusElf("external/zmk/xiao-nrf52840-intercom.elf")
-        val p = providerFor(path)
-        assertTrue(p.summary.lineRowCount > 0,
-            "Expected lineRowCount > 0 for $path, got ${p.summary.lineRowCount}")
-        println("$path: lineRowCount=${p.summary.lineRowCount}")
-
-        // Ground truth: arm-zephyr-eabi-addr2line
-        assertResolvesTo(p, path, 0x27774uL, "main.c", 35)
-        assertResolvesTo(p, path, 0x279fcuL, "esb_radio.c", 77)
-        assertResolvesTo(p, path, 0x27ad8uL, "esb_radio.c", 137)
-    }
-
-    @Test
     fun zmkLoaController() {
         val path = corpusElf("external/zmk/xiao-nrf52840-loa-controller.elf")
         val p = providerFor(path)

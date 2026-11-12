@@ -72,3 +72,5 @@ consult-first / write-back rules.
   `status` union, version-string quirks, and its HTTP/ETag characteristics.
 - [[sources/public-tip-hygiene]] — rules for keeping the tip publishable: env-var test locations, allowed
   placeholder paths, no internal references or partner names, no derived dumps or build output in git.
+- [[sources/third-party-fixture-provenance]] — where the third-party Wasm/ELF/USD fixtures came from,
+  how provenance was established (hash identity, strings, rate limits) and the open licence findings (HEXANA-33).

@@ -14,8 +14,7 @@ import kotlin.test.assertTrue
 /**
  * Tests for the WebAssembly legacy Exception Handling proposal (pre-`try_table`).
  *
- * Spec (local):    `doc/exception-handling/legacy/Exceptions.md`
- * Spec (upstream): https://github.com/WebAssembly/exception-handling/blob/main/proposals/exception-handling/legacy/Exceptions.md
+ * Spec: https://github.com/WebAssembly/exception-handling/blob/main/proposals/exception-handling/legacy/Exceptions.md
  *
  * ### Legacy opcodes (primary opcode space)
  *
