@@ -120,3 +120,29 @@ test("live smoke has source-owned breaking proofs and passes a clean two-host fi
         await rm(temporary, { recursive: true, force: true });
     }
 });
+
+for (const [target, variable, other] of [["master", "HEXANA_WEBAPP_MASTER_ENDPOINTS", "HEXANA_WEBAPP_PRODUCTION_ENDPOINTS"], ["production", "HEXANA_WEBAPP_PRODUCTION_ENDPOINTS", "HEXANA_WEBAPP_MASTER_ENDPOINTS"]]) {
+    test(`${target} smoke requires ${variable} and makes no request without it`, async () => {
+        const outputDir = await mkdtemp(join(tmpdir(), "hexana-live-smoke-env-"));
+        const requests = [];
+        const env = { HEXANA_WEBAPP_SMOKE_TARGET: target, HEXANA_WEBAPP_EXPECTED_VERSION: target === "master" ? goodRevision : "1.2.3", HEXANA_WEBAPP_EXPECTED_REVISION: goodRevision, HEXANA_WEBAPP_EXPECTED_DIGEST: digest, [other]: "https://other.example.invalid/" };
+        try {
+            await assert.rejects(runLiveSmoke(env, { outputDir, fetchImpl: async url => { requests.push(String(url)); throw new Error("unexpected request"); } }), new RegExp(`${variable} is required`));
+            await assert.rejects(runLiveSmoke({ ...env, [variable]: "http://smoke.example.invalid/" }, { outputDir, fetchImpl: async url => { requests.push(String(url)); throw new Error("unexpected request"); } }), /canonical https origins/);
+            assert.deepEqual(requests, []);
+        } finally {
+            await rm(outputDir, { recursive: true, force: true });
+        }
+    });
+}
+
+test("smoke reads its endpoints from the environment", async () => {
+    const outputDir = await mkdtemp(join(tmpdir(), "hexana-live-smoke-env-"));
+    const requests = [];
+    try {
+        await assert.rejects(runLiveSmoke({ HEXANA_WEBAPP_SMOKE_TARGET: "master", HEXANA_WEBAPP_EXPECTED_VERSION: goodRevision, HEXANA_WEBAPP_EXPECTED_REVISION: goodRevision, HEXANA_WEBAPP_EXPECTED_DIGEST: digest, HEXANA_WEBAPP_MASTER_ENDPOINTS: "https://webapp-master.example.invalid/" }, { outputDir, fetchImpl: async url => { requests.push(String(url)); throw new Error("stop after the first request"); } }));
+        assert.ok(requests.length > 0 && requests.every(url => new URL(url).hostname === "webapp-master.example.invalid"), requests.join(", "));
+    } finally {
+        await rm(outputDir, { recursive: true, force: true });
+    }
+});

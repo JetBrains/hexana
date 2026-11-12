@@ -2,22 +2,13 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseEndpointList } from "./endpoint-list.mjs";
 
-const repository = "registry.jetbrains.team/p/hx/containers/hexana-webapp";
 const branchPattern = /^release\/webapp\/(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const revisionPattern = /^[0-9a-f]{40}$/;
 const digestPattern = /^sha256:[0-9a-f]{64}$/;
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const evidenceFiles = ["build-identity.json", "checksums.sha256", "package-manifest.json", "provenance.json", "release-info.json", "resolved-dependencies.json", "sbom.cdx.json"];
-const approvedVcsUrl = "https://example.invalid/hexana/Hexana.git";
-const approvedParameters = Object.freeze({
-    "env.APPLICATION_NAME": "hexana-webapp",
-    "env.K8S_NAMESPACE": "hexana-namespace",
-    "env.IMAGE_PULL_SECRET": "registry-pull-secret",
-    "env.JBCC_GCP_CLUSTER": "example-cluster",
-    "env.JBCC_GCP_PROJECT": "example-gcp-project",
-    "env.JBCC_GCP_REGION": "europe-west1",
-});
 const normalizeGeneratedScript = value => {
     const normalized = [];
     let rawHeredocLines = 0;
@@ -34,13 +25,13 @@ const normalizeGeneratedScript = value => {
     }
     return normalized.join("\n");
 };
-const approvedGeneratedScript = profile => normalizeGeneratedScript(`#!/bin/bash
+const approvedGeneratedScript = (profile, registry) => normalizeGeneratedScript(`#!/bin/bash
 set -euo pipefail
 export PATH=$PATH:/usr/local/custom-bin
 
 echo "Configure helm"
 helm version
-echo %registry.token% | helm registry login registry.jetbrains.team -u %registry.login% --password-stdin
+echo %${registry.tokenParameter}% | helm registry login ${registry.host} -u %${registry.loginParameter}% --password-stdin
 
 echo "Setup kubeconfig"
 export JBCC_TEMP_KUBECONFIG=$(mktemp); chmod 600 "$JBCC_TEMP_KUBECONFIG"; trap 'rm -f "$JBCC_TEMP_KUBECONFIG"' EXIT;
@@ -67,33 +58,55 @@ export const deploymentTiming = Object.freeze({
     readinessTimeoutMs: 300_000,
     pollIntervalMs: 5_000,
 });
-export const productionEndpoints = Object.freeze([
-    "https://hexana-webapp.example.invalid/",
-]);
 export const readinessBodyLimits = Object.freeze({ healthBytes: 0, rootBytes: 1_048_576 });
-export const allowedTarget = Object.freeze({
-    serverUrl: "https://ci.example.invalid",
-    buildTypeId: "HexanaCi_Deploy_HexanaWebapp",
-    vcsRootId: "HexanaCi_Deploy_HexanaWebappSshGitGitJetbrainsTeamHxHexanaGit",
-});
-export function createDeploymentPolicy(specification) {
+const fail = message => { throw new Error(`Webapp deployment refused: ${message}`); };
+const required = (env, name) => typeof env[name] === "string" && env[name].trim() ? env[name].trim() : fail(`${name} is required`);
+const identifierPattern = /^[A-Za-z0-9_.-]+$/;
+const identifierFromEnv = (env, name) => identifierPattern.test(required(env, name)) ? env[name].trim() : fail(`${name} is invalid`);
+const originOf = (env, name) => {
+    const value = required(env, name);
+    let url;
+    try { url = new URL(value); } catch { fail(`${name} is invalid`); }
+    if (url.protocol !== "https:" || url.pathname !== "/" || url.username || url.password || url.search || url.hash) fail(`${name} must be a bare https origin`);
+    return url.origin;
+};
+export function createDeploymentPolicy(specification, env) {
+    const endpoints = (() => { try { return parseEndpointList(env[specification.endpointsEnv], specification.endpointsEnv); } catch (error) { return fail(error.message); } })();
+    const registry = Object.freeze({
+        host: identifierFromEnv(env, "HEXANA_REGISTRY_HOST"),
+        loginParameter: identifierFromEnv(env, "HEXANA_REGISTRY_LOGIN_PARAM"),
+        tokenParameter: identifierFromEnv(env, "HEXANA_REGISTRY_TOKEN_PARAM"),
+    });
+    const { endpointsEnv, applicationName, ...rest } = specification;
     return Object.freeze({
-        ...specification,
-        allowedTarget: Object.freeze({ ...specification.allowedTarget }),
-        endpoints: Object.freeze([...specification.endpoints]),
-        approvedParameters: Object.freeze({ ...specification.approvedParameters }),
-        approvedGeneratedScript: approvedGeneratedScript(specification.profile),
+        ...rest,
+        allowedTarget: Object.freeze({
+            serverUrl: originOf(env, "HEXANA_CLOUD_CONSOLE_SERVER_URL"),
+            buildTypeId: identifierFromEnv(env, "HEXANA_CLOUD_CONSOLE_BUILD_TYPE_ID"),
+            vcsRootId: identifierFromEnv(env, "HEXANA_CLOUD_CONSOLE_VCS_ROOT_ID"),
+        }),
+        endpoints: Object.freeze(endpoints),
+        approvedParameters: Object.freeze({
+            "env.APPLICATION_NAME": applicationName,
+            "env.K8S_NAMESPACE": identifierFromEnv(env, "HEXANA_K8S_NAMESPACE"),
+            "env.IMAGE_PULL_SECRET": identifierFromEnv(env, "HEXANA_IMAGE_PULL_SECRET"),
+            "env.JBCC_GCP_CLUSTER": identifierFromEnv(env, "HEXANA_GCP_CLUSTER"),
+            "env.JBCC_GCP_PROJECT": identifierFromEnv(env, "HEXANA_GCP_PROJECT"),
+            "env.JBCC_GCP_REGION": identifierFromEnv(env, "HEXANA_GCP_REGION"),
+        }),
+        approvedVcsUrl: required(env, "HEXANA_CLOUD_CONSOLE_VCS_URL"),
+        imageRepository: required(env, "HEXANA_WEBAPP_IMAGE_REPOSITORY"),
+        approvedGeneratedScript: approvedGeneratedScript(specification.profile, registry),
     });
 }
-export const releaseDeploymentPolicy = createDeploymentPolicy({
+export const createReleaseDeploymentPolicy = env => createDeploymentPolicy({
     mode: "release",
     profile: "deploy_only_production",
     identityField: "release",
     branchEnv: "HEXANA_RELEASE_BRANCH",
     revisionEnv: "HEXANA_RELEASE_REVISION",
-    allowedTarget,
-    endpoints: productionEndpoints,
-    approvedParameters,
+    endpointsEnv: "HEXANA_WEBAPP_PRODUCTION_ENDPOINTS",
+    applicationName: "hexana-webapp",
     branchSpec: "+:refs/heads/(release/webapp/*)",
     defaultBranch: null,
     queueBranchName: null,
@@ -102,15 +115,13 @@ export const releaseDeploymentPolicy = createDeploymentPolicy({
     endpointLabel: "release",
     readinessPhase: "production-readiness",
     readinessDeadlineField: "productionReadiness",
-});
-const fail = message => { throw new Error(`Webapp deployment refused: ${message}`); };
+}, env);
 const object = (value, label) => value && typeof value === "object" && !Array.isArray(value) ? value : fail(`${label} must be an object`);
 const exactKeys = (value, keys, label) => {
     object(value, label);
     if (Object.keys(value).sort().join("\0") !== [...keys].sort().join("\0")) fail(`${label} has an unsupported shape`);
 };
-const required = (env, name) => typeof env[name] === "string" && env[name].trim() ? env[name].trim() : fail(`${name} is required`);
-const validatePinnedTarget = (config, policy = releaseDeploymentPolicy) => {
+const validatePinnedTarget = (config, policy) => {
     if (config.serverUrl !== policy.allowedTarget.serverUrl || config.buildTypeId !== policy.allowedTarget.buildTypeId || config.vcsRootId !== policy.allowedTarget.vcsRootId) fail("Cloud Console target differs from the source-pinned configuration");
 };
 
@@ -143,7 +154,7 @@ export function parseJsonStrict(source, label) {
     return value;
 }
 
-export function validateEvidence(receipt, scan, selectedBranch, selectedRevision, policy = releaseDeploymentPolicy) {
+export function validateEvidence(receipt, scan, selectedBranch, selectedRevision, policy) {
     const series = policy.mode === "release" ? branchPattern.exec(selectedBranch ?? "") ?? fail("selected branch must be release/webapp/<numeric-major>.<numeric-minor>") : null;
     if (policy.mode === "master" && selectedBranch !== "master") fail("selected branch must be master");
     if (!revisionPattern.test(selectedRevision ?? "")) fail("selected revision must be lowercase full 40-character hex");
@@ -157,7 +168,7 @@ export function validateEvidence(receipt, scan, selectedBranch, selectedRevision
     }
     exactKeys(receipt.image, ["reference", "manifestDigest", "configDigest", "manifestMediaType", "configMediaType", "platform"], "Build image");
     exactKeys(receipt.image.platform, ["os", "architecture"], "Build platform");
-    if (!digestPattern.test(receipt.image.manifestDigest) || !digestPattern.test(receipt.image.configDigest) || receipt.image.reference !== `${repository}@${receipt.image.manifestDigest}`) fail("Build image is not the canonical immutable digest reference");
+    if (!digestPattern.test(receipt.image.manifestDigest) || !digestPattern.test(receipt.image.configDigest) || receipt.image.reference !== `${policy.imageRepository}@${receipt.image.manifestDigest}`) fail("Build image is not the canonical immutable digest reference");
     const mediaTypes = [["application/vnd.oci.image.manifest.v1+json", "application/vnd.oci.image.config.v1+json"], ["application/vnd.docker.distribution.manifest.v2+json", "application/vnd.docker.container.image.v1+json"]];
     if (!mediaTypes.some(([manifest, config]) => receipt.image.manifestMediaType === manifest && receipt.image.configMediaType === config)) fail("Build image media types do not identify one supported manifest");
     if (receipt.image.platform.os !== "linux" || receipt.image.platform.architecture !== "amd64") fail("Build image is not linux/amd64");
@@ -198,7 +209,7 @@ const optionalBuildId = (env, name) => {
     return Number.isSafeInteger(value) && value > 0 ? value : fail(`${name} must be a positive numeric build ID`);
 };
 
-export function configFromEnv(env, policy = releaseDeploymentPolicy) {
+export function configFromEnv(env, policy) {
     let server;
     try { server = new URL(required(env, "TEAMCITY_SERVER_URL")); } catch { fail("TEAMCITY_SERVER_URL is invalid"); }
     if (server.origin !== policy.allowedTarget.serverUrl || server.pathname !== "/" || server.username || server.password || server.search || server.hash) fail("TEAMCITY_SERVER_URL differs from the pinned TeamCity origin");
@@ -238,7 +249,7 @@ const properties = (value, label) => {
     return requireArray(value.property, `${label} property`).map((property, index) => { exactKeys(property, ["name", "value"], `${label} property ${index}`); return property; });
 };
 
-export function validateSafetyPreflight(buildType, vcsRoot, config, policy = releaseDeploymentPolicy) {
+export function validateSafetyPreflight(buildType, vcsRoot, config, policy) {
     exactKeys(buildType, ["id", "vcs-root-entries", "steps", "triggers", "parameters"], "Cloud Console build type");
     if (buildType.id !== config.buildTypeId) fail("Cloud Console build type ID differs");
     exactKeys(buildType["vcs-root-entries"], ["vcs-root-entry"], "Cloud Console VCS root entries");
@@ -295,7 +306,7 @@ export function validateSafetyPreflight(buildType, vcsRoot, config, policy = rel
         if (defaultBranches.length !== 1 || defaultBranches[0].value !== policy.defaultBranch) fail("Cloud Console VCS root default branch is unsafe");
     }
     const urls = vcsRootProperties.filter(property => property.name === "url");
-    if (urls.length !== 1 || urls[0].value !== approvedVcsUrl) fail("Cloud Console VCS root URL differs from the approved repository");
+    if (urls.length !== 1 || urls[0].value !== policy.approvedVcsUrl) fail("Cloud Console VCS root URL differs from the approved repository");
 }
 
 export function resolveVcsRootInstance(value, config) {
@@ -309,7 +320,7 @@ export function resolveVcsRootInstance(value, config) {
 }
 
 const buildFields = "id,state,status,branchName,buildType(id),revisions(revision(version,vcsBranchName,vcs-root-instance(id)))";
-export function createQueueRequest(config, evidence, vcsRootInstanceId, policy = releaseDeploymentPolicy) {
+export function createQueueRequest(config, evidence, vcsRootInstanceId, policy) {
     const payload = { buildType: { id: config.buildTypeId }, branchName: policy.queueBranchName ?? evidence.branch, revisions: { revision: [{ version: evidence.revision, vcsBranchName: `refs/heads/${evidence.branch}`, "vcs-root-instance": { id: vcsRootInstanceId } }] }, properties: { property: [{ name: "env.HEXANA_WEBAPP_IMAGE", value: evidence.image }] } };
     return { url: `${config.serverUrl}/app/rest/buildQueue?fields=${buildFields}`, init: { method: "POST", headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${config.token}` }, body: JSON.stringify(payload) } };
 }
@@ -580,10 +591,6 @@ async function deployForPolicy({ receipt, scan, config, outputDirectory, fetchIm
     }
 }
 
-export function deployRelease(input) {
-    return deployForPolicy(input, releaseDeploymentPolicy);
-}
-
 function options(args) {
     const result = new Map();
     for (let index = 0; index < args.length; index += 2) {
@@ -647,4 +654,8 @@ export function createDeploymentBridge(policy) {
     });
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) deploymentMain(process.argv.slice(2), process.env, releaseDeploymentPolicy).catch(error => { console.error(error.message); process.exitCode = 2; });
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    Promise.resolve()
+        .then(() => deploymentMain(process.argv.slice(2), process.env, createReleaseDeploymentPolicy(process.env)))
+        .catch(error => { console.error(error.message); process.exitCode = 2; });
+}

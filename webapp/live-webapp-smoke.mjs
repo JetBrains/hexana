@@ -3,14 +3,13 @@ import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parseEndpointList } from "./endpoint-list.mjs";
 import { ParserWorkerSmokeFailure, runParserWorkerFlow } from "./production-package-smoke.mjs";
 
 const delay = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 const approvedLinks = ["https://github.com/JetBrains/hexana", "https://jetbrains.github.io/hexana/"];
-const targetEndpoints = {
-    master: ["https://hexana-webapp-master.example.invalid/"],
-    production: ["https://hexana-webapp-private.example.invalid/", "https://hexana-webapp.example.invalid/"],
-};
+const targetEndpointVariables = { master: "HEXANA_WEBAPP_MASTER_ENDPOINTS", production: "HEXANA_WEBAPP_PRODUCTION_ENDPOINTS" };
+const targetEndpointCounts = { master: 1, production: 2 };
 const requiredHeaders = {
     "content-security-policy": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://eu.i.posthog.com; img-src 'self' data:; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
     "x-content-type-options": "nosniff",
@@ -46,7 +45,7 @@ function validateInput(env) {
     const version = env.HEXANA_WEBAPP_EXPECTED_VERSION;
     const revision = env.HEXANA_WEBAPP_EXPECTED_REVISION;
     const digest = env.HEXANA_WEBAPP_EXPECTED_DIGEST;
-    if (!(target in targetEndpoints)) fail("input", "HEXANA_WEBAPP_SMOKE_TARGET must be master or production");
+    if (!(target in targetEndpointVariables)) fail("input", "HEXANA_WEBAPP_SMOKE_TARGET must be master or production");
     if (!/^[0-9a-f]{40}$/.test(revision || "")) fail("input", "HEXANA_WEBAPP_EXPECTED_REVISION must be a lowercase full 40-character SHA");
     if (!/^sha256:[0-9a-f]{64}$/.test(digest || "")) fail("input", "HEXANA_WEBAPP_EXPECTED_DIGEST must be a canonical sha256 digest");
     if (target === "master" && version !== revision) fail("input", "master expected version must equal its expected revision");
@@ -54,9 +53,15 @@ function validateInput(env) {
     return { target, version, revision, digest };
 }
 
-function resolveEndpoints(input, injected) {
-    const endpoints = injected ?? targetEndpoints[input.target].map(secureUrl => ({ name: new URL(secureUrl).hostname, secureUrl }));
-    if (!Array.isArray(endpoints) || endpoints.length !== targetEndpoints[input.target].length) fail("input", `${input.target} requires ${targetEndpoints[input.target].length} endpoint(s)`);
+function endpointsFromEnv(input, env) {
+    const name = targetEndpointVariables[input.target];
+    try { return parseEndpointList(env[name], name).map(secureUrl => ({ name: new URL(secureUrl).hostname, secureUrl })); }
+    catch (error) { return fail("input", error.message); }
+}
+
+function resolveEndpoints(input, injected, env) {
+    const endpoints = injected ?? endpointsFromEnv(input, env);
+    if (!Array.isArray(endpoints) || endpoints.length !== targetEndpointCounts[input.target]) fail("input", `${input.target} requires ${targetEndpointCounts[input.target]} endpoint(s)`);
     return endpoints.map((endpoint, index) => {
         const secure = new URL(endpoint.secureUrl);
         const insecure = endpoint.httpUrl ? new URL(endpoint.httpUrl) : new URL(secure);
@@ -236,7 +241,7 @@ export async function runLiveSmoke(env = process.env, options = {}) {
         await rm(outputDir, { recursive: true, force: true });
         await mkdir(outputDir, { recursive: true });
         input = validateInput(env);
-        endpoints = resolveEndpoints(input, options.endpoints);
+        endpoints = resolveEndpoints(input, options.endpoints, env);
         const wasmBytes = await readFile(options.wasmFixture || new URL("../wasmParser/src/commonTest/resources/snippets/addition.wasm", import.meta.url));
         for (const endpoint of endpoints) {
             const directory = join(outputDir, endpoint.name.replace(/[^A-Za-z0-9_.-]/g, "_"));

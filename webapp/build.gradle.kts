@@ -533,6 +533,7 @@ tasks.register<Exec>("testWebappLiveSmoke") {
         project.file("live-webapp-smoke.mjs"),
         project.file("live-webapp-smoke.test.mjs"),
         project.file("production-package-smoke.mjs"),
+        project.file("endpoint-list.mjs"),
     )
     commandLine("node", "--test", project.file("live-webapp-smoke.test.mjs").absolutePath)
 }
@@ -544,6 +545,7 @@ tasks.register<Exec>("testWebappOciLocalhostBrowserSmoke") {
         project.file("oci-localhost-browser-smoke.mjs"),
         project.file("oci-localhost-browser-smoke.test.mjs"),
         project.file("live-webapp-smoke.mjs"),
+        project.file("endpoint-list.mjs"),
         project.file("production-package-smoke.mjs"),
         project.rootProject.file("wasmParser/src/commonTest/resources/snippets/addition.wasm"),
     )
@@ -577,6 +579,8 @@ tasks.register<Exec>("testWebappDeploymentBridge") {
         project.file("deploy-webapp-release.test.mjs"),
         project.file("deploy-webapp-master.mjs"),
         project.file("deploy-webapp-master.test.mjs"),
+        project.file("deployment-test-environment.mjs"),
+        project.file("endpoint-list.mjs"),
     )
     commandLine(
         "node", "--test",

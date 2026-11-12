@@ -4,7 +4,7 @@ Rust modules compiled into `.wasm` binaries.
 
 ## Teamcity
 
-You can launch the [build](https://ci.example.invalid/buildConfiguration/HexanaCi_HexanaWasmBuilder) from Teamcity
+You can launch the wasm builder build configuration from your CI (TeamCity)
 to get fresh `.wasm` binaries.
 
 ## Docker Build (All Modules)

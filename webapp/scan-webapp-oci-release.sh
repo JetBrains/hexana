@@ -38,6 +38,12 @@ fi
   echo "Webapp OCI scanning requires HEXANA_SOURCE_REVISION to be a lowercase full 40-character VCS revision." >&2
   exit 2
 }
+image_repository="${HEXANA_WEBAPP_IMAGE_REPOSITORY:-}"
+[[ -n "$image_repository" ]] || {
+  echo "Webapp OCI scanning requires HEXANA_WEBAPP_IMAGE_REPOSITORY." >&2
+  exit 2
+}
+export HEXANA_WEBAPP_IMAGE_REPOSITORY
 for command in docker node; do
   command -v "$command" >/dev/null || { echo "Required command is unavailable: $command" >&2; exit 2; }
 done
@@ -77,7 +83,7 @@ const [receiptFile] = process.argv.slice(2);
 const receipt = JSON.parse(fs.readFileSync(receiptFile, "utf8"));
 const digest = /^sha256:[0-9a-f]{64}$/;
 const reference = receipt.image?.reference;
-if (typeof reference !== "string" || reference !== `registry.jetbrains.team/p/hx/containers/hexana-webapp@${receipt.image?.manifestDigest}` ||
+if (typeof reference !== "string" || reference !== `${process.env.HEXANA_WEBAPP_IMAGE_REPOSITORY}@${receipt.image?.manifestDigest}` ||
     !digest.test(receipt.image?.manifestDigest ?? "") || receipt.image?.platform?.os !== "linux" ||
     receipt.image?.platform?.architecture !== "amd64") {
   throw new Error("Downloaded receipt does not contain the canonical linux/amd64 digest reference");

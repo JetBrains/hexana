@@ -22,19 +22,31 @@ master image as `hexana-webapp-master`. The profile removes Skaffold's source
 build, consumes only the supplied `HEXANA_WEBAPP_IMAGE`, and uses
 `values_staging.yaml`. `deploy-webapp-master.mjs` is the source-owned bridge: it
 accepts only matching schema-v2 master receipt/scan evidence, preflights the
-pinned generated Cloud Console target, queues exactly `refs/heads/master` at the
-approved full revision, and verifies `https://hexana-webapp-master.example.invalid/`
+configured generated Cloud Console target, queues exactly `refs/heads/master` at the
+approved full revision, and verifies each endpoint in `HEXANA_WEBAPP_MASTER_ENDPOINTS`
 before recording deployment evidence. The TeamCity nightly chain that supplies
 the bridge inputs and token is defined in the companion
 `ci-configuration` repository; it becomes operational only after
 that DSL is applied and live-validated in TeamCity.
 
+The deployment target and policy come from environment variables that the TeamCity
+configuration supplies. The bridge exits before any request, naming the variable,
+when one is missing or malformed:
+
+- `HEXANA_CLOUD_CONSOLE_SERVER_URL`, `HEXANA_CLOUD_CONSOLE_BUILD_TYPE_ID`,
+  `HEXANA_CLOUD_CONSOLE_VCS_ROOT_ID`, `HEXANA_CLOUD_CONSOLE_VCS_URL`
+- `HEXANA_K8S_NAMESPACE`, `HEXANA_IMAGE_PULL_SECRET`, `HEXANA_GCP_PROJECT`,
+  `HEXANA_GCP_CLUSTER`, `HEXANA_GCP_REGION`
+- `HEXANA_REGISTRY_HOST`, `HEXANA_REGISTRY_LOGIN_PARAM`,
+  `HEXANA_REGISTRY_TOKEN_PARAM` (parameter names without `%`),
+  `HEXANA_WEBAPP_IMAGE_REPOSITORY`
+- `HEXANA_WEBAPP_MASTER_ENDPOINTS` for master and `HEXANA_WEBAPP_PRODUCTION_ENDPOINTS`
+  for production: comma-separated canonical https origins with a trailing slash
+
 ```bash
-TEAMCITY_SERVER_URL=https://ci.example.invalid \
+TEAMCITY_SERVER_URL=https://teamcity.example.invalid \
 HEXANA_WEBAPP_SOURCE_BRANCH=master \
 HEXANA_SOURCE_REVISION=0123456789abcdef0123456789abcdef01234567 \
-HEXANA_CLOUD_CONSOLE_BUILD_TYPE_ID=HexanaCi_Deploy_HexanaWebappMaster \
-HEXANA_CLOUD_CONSOLE_VCS_ROOT_ID=HexanaCi_Deploy_HexanaWebappMasterSshGitGitJetbrainsTeamHxHexanaGit \
 HEXANA_CLOUD_CONSOLE_TOKEN=masked \
 node webapp/deploy-webapp-master.mjs --receipt /path/receipt.json --scan-summary /path/summary.json --output-dir webapp/build/master-deployment
 ```
@@ -45,9 +57,12 @@ Run the source-owned smoke from the repository root after deployment. Master use
 its full revision as both version and revision; production uses the release's
 strict semantic version. The image digest is required deployment evidence but is
 not inferred from HTTP headers.
+The endpoints come from `HEXANA_WEBAPP_MASTER_ENDPOINTS` (one origin) or
+`HEXANA_WEBAPP_PRODUCTION_ENDPOINTS` (two origins); the smoke fails without them.
 
 ```bash
 HEXANA_WEBAPP_SMOKE_TARGET=production \
+HEXANA_WEBAPP_PRODUCTION_ENDPOINTS=https://private.example.invalid/,https://public.example.invalid/ \
 HEXANA_WEBAPP_EXPECTED_VERSION=0.1.0 \
 HEXANA_WEBAPP_EXPECTED_REVISION=0123456789abcdef0123456789abcdef01234567 \
 HEXANA_WEBAPP_EXPECTED_DIGEST=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
@@ -102,7 +117,7 @@ Release**. TeamCity publishes the resulting evidence directory.
 
 ## Production deployment readiness
 
-The release deployment bridge queues the pinned Cloud Console deploy-only build
+The release deployment bridge queues the configured Cloud Console deploy-only build
 only after validating the Build receipt, passing Scan summary, generated build
 configuration, VCS root, branch, revision, and immutable image digest. Its build
 deadline starts after Cloud Console returns a valid build ID. The default and
@@ -115,7 +130,7 @@ Production readiness begins only after that exact build finishes with
 (`HEXANA_READINESS_TIMEOUT_MS=300000`). Every retry round checks the approved
 release endpoint:
 
-- `https://hexana-webapp.example.invalid/`
+- each origin in `HEXANA_WEBAPP_PRODUCTION_ENDPOINTS`
 
 `GET /healthz` must return exactly `204`, an empty body,
 `Cache-Control: no-store`, and no redirect. Then a cache-busted `GET /` must

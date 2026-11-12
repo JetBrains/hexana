@@ -4,7 +4,14 @@ import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { allowedTarget, configFromEnv, createQueueRequest, createSafetyPreflightRequests, createVcsRootInstancesRequest, deployRelease, deploymentTiming, parseJsonStrict, productionEndpoints, readinessBodyLimits, resolveVcsRootInstance, validateEvidence, validateSafetyPreflight } from "./deploy-webapp-release.mjs";
+import { createDeploymentBridge, createReleaseDeploymentPolicy, deploymentTiming, parseJsonStrict, readinessBodyLimits } from "./deploy-webapp-release.mjs";
+import { releaseTestEnvironment } from "./deployment-test-environment.mjs";
+
+const policy = createReleaseDeploymentPolicy(releaseTestEnvironment);
+const bridge = createDeploymentBridge(policy);
+const { allowedTarget, endpoints: productionEndpoints } = policy;
+const { configFromEnv, createQueueRequest, createSafetyPreflightRequests, createVcsRootInstancesRequest, resolveVcsRootInstance, validateEvidence, validateSafetyPreflight } = bridge;
+const deployRelease = bridge.deploy;
 
 const revision = "0123456789abcdef0123456789abcdef01234567";
 const digest = `sha256:${"a".repeat(64)}`;
@@ -12,7 +19,7 @@ const config = { ...allowedTarget, token: "secret", branch: "release/webapp/2.7"
 const vcsRootInstanceId = "125306";
 const evidenceFiles = ["build-identity.json", "checksums.sha256", "package-manifest.json", "provenance.json", "release-info.json", "resolved-dependencies.json", "sbom.cdx.json"];
 function fixture() {
-    const image = `registry.jetbrains.team/p/hx/containers/hexana-webapp@${digest}`;
+    const image = `${policy.imageRepository}@${digest}`;
     const receipt = { schemaVersion: 1, kind: "hexana-webapp-oci-evidence", releaseBranch: config.branch, sourceRevision: revision, image: { reference: image, manifestDigest: digest, configDigest: `sha256:${"b".repeat(64)}`, manifestMediaType: "application/vnd.oci.image.manifest.v1+json", configMediaType: "application/vnd.oci.image.config.v1+json", platform: { os: "linux", architecture: "amd64" } }, package: { identity: { schemaVersion: 1, product: "hexana-webapp", version: "2.7.3", versionSource: "webapp/gradle.properties", revision }, aggregateSha256: "c".repeat(64), evidence: Object.fromEntries(evidenceFiles.map(name => [name, "d".repeat(64)])) } };
     const scan = { schemaVersion: 1, kind: "hexana-webapp-vulnerability-evidence", decision: "pass", evaluatedAt: "2026-01-01T00:00:00.000Z", release: { branch: config.branch, revision, version: "2.7.3" }, image: { reference: image, manifestDigest: digest, configDigest: receipt.image.configDigest, archiveSha256: "e".repeat(64) }, sbomSha256: "f".repeat(64), scanner: {}, database: {}, reports: {}, counts: { UNKNOWN: 0, LOW: 1, MEDIUM: 0, HIGH: 0, CRITICAL: 0 }, findings: [{ severity: "LOW" }] };
     return { receipt, scan };
@@ -38,6 +45,7 @@ const deploymentFetch = (teamCityValues, { readiness = readinessResponse, calls 
     return response(teamCityValues.shift());
 };
 const validEnvironment = overrides => ({
+    ...releaseTestEnvironment,
     TEAMCITY_SERVER_URL: allowedTarget.serverUrl,
     HEXANA_CLOUD_CONSOLE_BUILD_TYPE_ID: allowedTarget.buildTypeId,
     HEXANA_CLOUD_CONSOLE_VCS_ROOT_ID: allowedTarget.vcsRootId,
@@ -58,7 +66,7 @@ export PATH=$PATH:/usr/local/custom-bin
 
 echo "Configure helm"
 helm version
-echo %registry.token% | helm registry login registry.jetbrains.team -u %registry.login% --password-stdin
+echo %example.registry.token% | helm registry login registry.example.invalid -u %example.registry.login% --password-stdin
 
 echo "Setup kubeconfig"
 export JBCC_TEMP_KUBECONFIG=$(mktemp); chmod 600 "$JBCC_TEMP_KUBECONFIG"; trap 'rm -f "$JBCC_TEMP_KUBECONFIG"' EXIT;
@@ -83,15 +91,15 @@ fi
 `;
 const safeParameters = () => [
     { name: "env.APPLICATION_NAME", value: "hexana-webapp" },
-    { name: "env.K8S_NAMESPACE", value: "hexana-namespace" },
-    { name: "env.IMAGE_PULL_SECRET", value: "registry-pull-secret" },
+    { name: "env.K8S_NAMESPACE", value: "example-namespace" },
+    { name: "env.IMAGE_PULL_SECRET", value: "example-pull-secret" },
     { name: "env.JBCC_GCP_CLUSTER", value: "example-cluster" },
-    { name: "env.JBCC_GCP_PROJECT", value: "example-gcp-project" },
-    { name: "env.JBCC_GCP_REGION", value: "europe-west1" },
+    { name: "env.JBCC_GCP_PROJECT", value: "example-project" },
+    { name: "env.JBCC_GCP_REGION", value: "example-region" },
     { name: "unrelated.password.parameter" },
 ];
 const safeBuildType = () => ({ id: config.buildTypeId, "vcs-root-entries": { "vcs-root-entry": [{ "vcs-root": { id: config.vcsRootId } }] }, steps: { step: [{ type: "simpleRunner", properties: { property: [{ name: "script.content", value: safeScript }, { name: "teamcity.build.workingDir", value: "webapp" }, { name: "use.custom.script", value: "true" }] } }] }, triggers: { trigger: [{ id: "TRIGGER_1", type: "vcsTrigger", disabled: true }] }, parameters: { property: safeParameters() } });
-const safeVcsRoot = () => ({ id: config.vcsRootId, properties: { property: [{ name: "teamcity:branchSpec", value: "+:refs/heads/(release/webapp/*)" }, { name: "url", value: "https://example.invalid/hexana/Hexana.git" }] } });
+const safeVcsRoot = () => ({ id: config.vcsRootId, properties: { property: [{ name: "teamcity:branchSpec", value: "+:refs/heads/(release/webapp/*)" }, { name: "url", value: "ssh://git@vcs.example.invalid/example/hexana.git" }] } });
 const buildParameter = (value, name) => value.parameters.property.find(parameter => parameter.name === name);
 const rootInstances = (overrides = {}) => ({ "vcs-root-instance": [{ id: vcsRootInstanceId, "vcs-root-id": config.vcsRootId }], ...overrides });
 const build = (state, overrides = {}) => ({ id: 42, state, status: state === "finished" ? "SUCCESS" : undefined, branchName: `refs/heads/${config.branch}`, buildType: { id: config.buildTypeId }, revisions: { revision: [{ version: revision, vcsBranchName: `refs/heads/${config.branch}`, "vcs-root-instance": { id: vcsRootInstanceId } }] }, ...overrides });
@@ -104,7 +112,7 @@ test("validates same-series immutable Build and passing Scan evidence", () => {
 });
 
 test("uses one-hour build and five-minute readiness defaults with hard upper bounds", () => {
-    assert.deepEqual(productionEndpoints, ["https://hexana-webapp.example.invalid/"]);
+    assert.deepEqual(productionEndpoints, ["https://webapp.example.invalid/"]);
     const parsed = configFromEnv(validEnvironment());
     assert.equal(parsed.buildTimeoutMs, deploymentTiming.buildTimeoutMs);
     assert.equal(parsed.readinessTimeoutMs, deploymentTiming.readinessTimeoutMs);
@@ -121,7 +129,7 @@ for (const [name, mutate, expected] of [
     ["different scan digest", (_receipt, scan) => { scan.image.manifestDigest = `sha256:${"f".repeat(64)}`; }, /differs from Build/],
     ["failing scan", (_receipt, scan) => { scan.decision = "fail"; }, /not a passing/],
     ["high finding", (_receipt, scan) => { scan.counts.HIGH = 1; }, /zero HIGH/],
-    ["mutable image", (receipt, scan) => { receipt.image.reference = scan.image.reference = "registry.jetbrains.team/p/hx/containers/hexana-webapp:2.7.3"; }, /canonical immutable/],
+    ["mutable image", (receipt, scan) => { receipt.image.reference = scan.image.reference = `${policy.imageRepository}:2.7.3`; }, /canonical immutable/],
 ]) test(`rejects ${name}`, () => { const { receipt, scan } = fixture(); mutate(receipt, scan); assert.throws(() => validateEvidence(receipt, scan, config.branch, revision), expected); });
 
 test("creates the fixed queue request with only the validated image parameter", () => {
@@ -496,7 +504,7 @@ for (const [name, mutateBuildType, mutateRoot, expected] of [
     ["duplicate approved parameter", value => { value.parameters.property.push({ ...buildParameter(value, "env.APPLICATION_NAME") }); }, () => {}, /fixed deployment target/],
     ["missing branch specification", () => {}, value => { value.properties.property = []; }, /branch specification is unsafe/],
     ["unparenthesized branch specification", () => {}, value => { value.properties.property[0].value = "+:refs/heads/release/webapp/*"; }, /branch specification is unsafe/],
-    ["wrong root URL", () => {}, value => { value.properties.property.find(property => property.name === "url").value = "https://example.invalid/hexana/Other.git"; }, /root URL differs/],
+    ["wrong root URL", () => {}, value => { value.properties.property.find(property => property.name === "url").value = "ssh://git@vcs.example.invalid/example/other.git"; }, /root URL differs/],
     ["malformed response", value => { delete value.steps; }, () => {}, /unsupported shape/],
     ["unused Skaffold options", value => { value.steps.step[0].properties.property[0].value = value.steps.step[0].properties.property[0].value.replaceAll("run ${SKAFFOLD_OPTIONS}", "run"); }, () => {}, /does not run its validated options/],
     ["wrong working directory", value => { value.steps.step[0].properties.property[1].value = "."; }, () => {}, /mode or working directory/],
@@ -608,4 +616,40 @@ test("rejects environment attempts to redirect the pinned target", () => {
     assert.throws(() => configFromEnv({ ...env, TEAMCITY_SERVER_URL: "https://evil.example" }), /pinned TeamCity origin/);
     assert.throws(() => configFromEnv({ ...env, HEXANA_CLOUD_CONSOLE_BUILD_TYPE_ID: "Other" }), /pinned generated configuration/);
     assert.throws(() => configFromEnv({ ...env, HEXANA_CLOUD_CONSOLE_VCS_ROOT_ID: "Other" }), /pinned generated configuration/);
+});
+
+for (const name of Object.keys(releaseTestEnvironment)) {
+    test(`refuses to build the release policy without ${name} before any request`, () => {
+        const { [name]: _removed, ...environment } = releaseTestEnvironment;
+        assert.throws(() => createReleaseDeploymentPolicy(environment), new RegExp(`${name} is required`));
+    });
+}
+
+test("rejects malformed release policy values", () => {
+    for (const [name, value, expected] of [
+        ["HEXANA_CLOUD_CONSOLE_SERVER_URL", "http://teamcity.example.invalid", /bare https origin/],
+        ["HEXANA_CLOUD_CONSOLE_SERVER_URL", "https://teamcity.example.invalid/path", /bare https origin/],
+        ["HEXANA_CLOUD_CONSOLE_BUILD_TYPE_ID", "bad id", /is invalid/],
+        ["HEXANA_K8S_NAMESPACE", "bad/namespace", /is invalid/],
+        ["HEXANA_WEBAPP_PRODUCTION_ENDPOINTS", "http://webapp.example.invalid/", /canonical https origins/],
+        ["HEXANA_WEBAPP_PRODUCTION_ENDPOINTS", "https://webapp.example.invalid", /canonical https origins/],
+    ]) assert.throws(() => createReleaseDeploymentPolicy({ ...releaseTestEnvironment, [name]: value }), expected);
+});
+
+test("CLI exits before touching the output directory when the policy environment is incomplete", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "hexana-policy-cli-missing-"));
+    const outputDirectory = join(directory, "output");
+    try {
+        const { HEXANA_REGISTRY_HOST: _removed, ...environment } = { ...process.env, ...validEnvironment() };
+        const child = spawn(process.execPath, [join(import.meta.dirname, "deploy-webapp-release.mjs"), "--receipt", join(directory, "receipt.json"), "--scan-summary", join(directory, "scan.json"), "--output-dir", outputDirectory], { env: environment, stdio: ["ignore", "pipe", "pipe"] });
+        let stderr = "";
+        child.stderr.setEncoding("utf8");
+        child.stderr.on("data", chunk => { stderr += chunk; });
+        const exitCode = await new Promise((resolveExit, rejectExit) => { child.once("error", rejectExit); child.once("close", resolveExit); });
+        assert.equal(exitCode, 2);
+        assert.match(stderr, /HEXANA_REGISTRY_HOST is required/);
+        await assert.rejects(readFile(join(outputDirectory, "deployment-evidence.json")), { code: "ENOENT" });
+    } finally {
+        await rm(directory, { recursive: true, force: true });
+    }
 });

@@ -1,7 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { allowedTarget, configFromEnv, createQueueRequest, deployMaster, masterDeploymentPolicy, masterEndpoints, validateEvidence } from "./deploy-webapp-master.mjs";
-import { releaseDeploymentPolicy } from "./deploy-webapp-release.mjs";
+import { createMasterDeploymentBridge, createMasterDeploymentPolicy } from "./deploy-webapp-master.mjs";
+import { createReleaseDeploymentPolicy } from "./deploy-webapp-release.mjs";
+import { masterTestEnvironment, releaseTestEnvironment } from "./deployment-test-environment.mjs";
+
+const masterDeploymentPolicy = createMasterDeploymentPolicy(masterTestEnvironment);
+const releaseDeploymentPolicy = createReleaseDeploymentPolicy(releaseTestEnvironment);
+const bridge = createMasterDeploymentBridge(masterTestEnvironment);
+const { allowedTarget, endpoints: masterEndpoints, configFromEnv, createQueueRequest, validateEvidence } = bridge;
+const deployMaster = bridge.deploy;
 
 const revision = "0123456789abcdef0123456789abcdef01234567";
 const digest = `sha256:${"a".repeat(64)}`;
@@ -10,7 +17,7 @@ const evidenceFiles = ["build-identity.json", "checksums.sha256", "package-manif
 const config = { ...allowedTarget, token: "secret", branch: "master", revision, buildTimeoutMs: 1_000, readinessTimeoutMs: 1_000, pollIntervalMs: 100, sourceBuilds: { nightly: 10, build: 11, scan: 12 } };
 
 function fixture() {
-    const reference = `registry.jetbrains.team/p/hx/containers/hexana-webapp@${digest}`;
+    const reference = `${masterDeploymentPolicy.imageRepository}@${digest}`;
     const image = { reference, manifestDigest: digest, configDigest: `sha256:${"b".repeat(64)}`, manifestMediaType: "application/vnd.oci.image.manifest.v1+json", configMediaType: "application/vnd.oci.image.config.v1+json", platform: { os: "linux", architecture: "amd64" } };
     const identity = { schemaVersion: 1, product: "hexana-webapp", version: revision, versionSource: "git-revision", revision };
     const receipt = { schemaVersion: 2, kind: "hexana-webapp-oci-evidence", source: { branch: "master", revision }, image, package: { identity, aggregateSha256: "c".repeat(64), evidence: Object.fromEntries(evidenceFiles.map(name => [name, "d".repeat(64)])) } };
@@ -19,6 +26,7 @@ function fixture() {
 }
 
 const validEnvironment = overrides => ({
+    ...masterTestEnvironment,
     TEAMCITY_SERVER_URL: allowedTarget.serverUrl,
     HEXANA_WEBAPP_SOURCE_BRANCH: "master",
     HEXANA_SOURCE_REVISION: revision,
@@ -34,7 +42,7 @@ const safeBuildType = () => ({
     triggers: { trigger: [{ id: "TRIGGER_1", type: "vcsTrigger", disabled: true }] },
     parameters: { property: Object.entries(masterDeploymentPolicy.approvedParameters).map(([name, value]) => ({ name, value })) },
 });
-const safeRoot = () => ({ id: config.vcsRootId, properties: { property: [{ name: "branch", value: "refs/heads/master" }, { name: "teamcity:branchSpec", value: "+:<default>" }, { name: "url", value: "https://example.invalid/hexana/Hexana.git" }] } });
+const safeRoot = () => ({ id: config.vcsRootId, properties: { property: [{ name: "branch", value: "refs/heads/master" }, { name: "teamcity:branchSpec", value: "+:<default>" }, { name: "url", value: "ssh://git@vcs.example.invalid/example/hexana.git" }] } });
 const roots = () => ({ "vcs-root-instance": [{ id: instanceId, "vcs-root-id": config.vcsRootId }] });
 const build = state => ({ id: 42, state, status: state === "finished" ? "SUCCESS" : undefined, branchName: "refs/heads/master", buildType: { id: config.buildTypeId }, revisions: { revision: [{ version: revision, vcsBranchName: "refs/heads/master", "vcs-root-instance": { id: instanceId } }] } });
 const response = value => ({ ok: true, status: 200, json: async () => value });
@@ -69,7 +77,7 @@ test("pins the master environment, target, branch, and revision", () => {
     const parsed = configFromEnv(validEnvironment({ TEAMCITY_BUILD_ID: "10", HEXANA_WEBAPP_BUILD_ID: "11", HEXANA_WEBAPP_SCAN_BUILD_ID: "12" }));
     assert.equal(parsed.branch, "master");
     assert.deepEqual(parsed.sourceBuilds, { nightly: 10, build: 11, scan: 12 });
-    assert.deepEqual(masterEndpoints, ["https://hexana-webapp-master.example.invalid/"]);
+    assert.deepEqual(masterEndpoints, ["https://webapp-master.example.invalid/"]);
     assert.ok(Object.isFrozen(masterDeploymentPolicy) && Object.isFrozen(masterDeploymentPolicy.allowedTarget));
     assert.equal(masterDeploymentPolicy.approvedGeneratedScript, releaseDeploymentPolicy.approvedGeneratedScript.replace("deploy_only_production", "deploy_only_master"));
     assert.throws(() => configFromEnv(validEnvironment({ HEXANA_WEBAPP_SOURCE_BRANCH: "release/webapp/0.1" })), /must be master/);
@@ -139,3 +147,10 @@ test("rejects the wrong identity at the master endpoint", async () => {
     assert.equal(error.deploymentEvidence.phase, "master-readiness");
     assert.match(error.deploymentEvidence.readiness.endpoints[0].lastObservation.reason, /identity did not match/);
 });
+
+for (const name of Object.keys(masterTestEnvironment)) {
+    test(`refuses to build the master policy without ${name}`, () => {
+        const { [name]: _removed, ...environment } = masterTestEnvironment;
+        assert.throws(() => createMasterDeploymentPolicy(environment), new RegExp(`${name} is required`));
+    });
+}
