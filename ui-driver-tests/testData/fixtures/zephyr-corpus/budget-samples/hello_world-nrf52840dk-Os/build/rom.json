@@ -86,7 +86,7 @@
             {
                 "name": "ZEPHYR_BASE",
                 "size": 14010,
-                "identifier": "/Users/user/IdeaProjects/zephyrproject/zephyr",
+                "identifier": "/home/user/IdeaProjects/zephyrproject/zephyr",
                 "loc": [],
                 "children": [
                     {
@@ -3388,7 +3388,7 @@
             {
                 "name": "OUTPUT_DIR",
                 "size": 578,
-                "identifier": "/Users/user/IdeaProjects/zephyr-corpus/build/apps_hello_world_nrf52840dk-Os",
+                "identifier": "/home/user/IdeaProjects/zephyr-corpus/build/apps_hello_world_nrf52840dk-Os",
                 "loc": [],
                 "children": [
                     {
@@ -3466,7 +3466,7 @@
             {
                 "name": "WORKSPACE",
                 "size": 3460,
-                "identifier": "/Users/user/IdeaProjects/zephyrproject",
+                "identifier": "/home/user/IdeaProjects/zephyrproject",
                 "loc": [],
                 "children": [
                     {

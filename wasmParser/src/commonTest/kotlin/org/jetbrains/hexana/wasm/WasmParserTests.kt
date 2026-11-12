@@ -1669,7 +1669,7 @@ class WasmParserTests {
      *               DW_AT_language    (DW_LANG_C11)
      *               DW_AT_name        ("utf8.c")
      *               DW_AT_stmt_list   (0x00000000)
-     *               DW_AT_comp_dir    ("/home/nd/w/hexana/wasmParser/src/commonTest/resources/c")
+     *               DW_AT_comp_dir    ("/home/user/hexana/wasmParser/src/commonTest/resources/c")
      *               DW_AT_low_pc      (0x00000009)
      *               DW_AT_high_pc     (0x00000053)
      *
@@ -1677,7 +1677,7 @@ class WasmParserTests {
      *                 DW_AT_name      ("str")
      *                 DW_AT_type      (0x00000037 "char[20]")
      *                 DW_AT_external  (true)
-     *                 DW_AT_decl_file ("/home/nd/w/hexana/wasmParser/src/commonTest/resources/c/utf8.c")
+     *                 DW_AT_decl_file ("/home/user/hexana/wasmParser/src/commonTest/resources/c/utf8.c")
      *                 DW_AT_decl_line (7)
      *                 DW_AT_location  (DW_OP_addr 0x10ad0)
      * ...
@@ -1724,7 +1724,7 @@ class WasmParserTests {
          *               DW_AT_language    (DW_LANG_C11)
          *               DW_AT_name        ("utf8.c")
          *               DW_AT_stmt_list   (0x00000000)
-         *               DW_AT_comp_dir    ("/home/nd/w/hexana/wasmParser/src/commonTest/resources/c")
+         *               DW_AT_comp_dir    ("/home/user/hexana/wasmParser/src/commonTest/resources/c")
          *               DW_AT_low_pc      (0x00000009)
          *               DW_AT_high_pc     (0x00000053)
          */
@@ -2011,7 +2011,7 @@ class WasmParserTests {
          * standard_opcode_lengths[DW_LNS_set_prologue_end] = 0
          * standard_opcode_lengths[DW_LNS_set_epilogue_begin] = 0
          * standard_opcode_lengths[DW_LNS_set_isa] = 1
-         * include_directories[  0] =  .debug_line_str[0x00000000] = "/Users/user/ws/Hexana/wasmParser/src/commonTest/resources/c"
+         * include_directories[  0] =  .debug_line_str[0x00000000] = "/home/user/hexana/wasmParser/src/commonTest/resources/c"
          * file_names[  0]:
          *            name:  .debug_line_str[0x00000040] = "utf8.c"
          *       dir_index: 0
@@ -2066,7 +2066,7 @@ class WasmParserTests {
      *               DW_AT_name       ("utf8.c")
      *               DW_AT_str_offsets_base   (0x00000008)
      *               DW_AT_stmt_list  (0x00000000)
-     *               DW_AT_comp_dir   ("/Users/user/ws/Hexana/wasmParser/src/commonTest/resources/c")
+     *               DW_AT_comp_dir   ("/home/user/hexana/wasmParser/src/commonTest/resources/c")
      *               DW_AT_low_pc     (0x00000009)
      *               DW_AT_high_pc    (0x00000053)
      *               DW_AT_addr_base  (0x00000008)
@@ -2076,7 +2076,7 @@ class WasmParserTests {
      *                 DW_AT_high_pc  (0x00000053)
      *                 DW_AT_frame_base       (DW_OP_WASM_location 0x0 0x0, DW_OP_stack_value)
      *                 DW_AT_name     ("main")
-     *                 DW_AT_decl_file        ("/Users/user/ws/Hexana/wasmParser/src/commonTest/resources/c/utf8.c")
+     *                 DW_AT_decl_file        ("/home/user/hexana/wasmParser/src/commonTest/resources/c/utf8.c")
      *                 DW_AT_decl_line        (10)
      *                 DW_AT_prototyped       (true)
      *                 DW_AT_type     (0x0000006a "int")

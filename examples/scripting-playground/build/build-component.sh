@@ -8,14 +8,14 @@
 # in a component shell and lifts its exports.
 #
 # Output: bin/component.wasm  (~1 KB)
-# Requires: wasm-tools 1.245.1 at ${WASM_TOOLS:-/Users/user/.cargo/bin/wasm-tools}
+# Requires: wasm-tools 1.245.1 at ${WASM_TOOLS:-wasm-tools}
 set -eu
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
 BIN="$ROOT/bin"
 
-WASM_TOOLS="${WASM_TOOLS:-/Users/user/.cargo/bin/wasm-tools}"
+WASM_TOOLS="${WASM_TOOLS:-wasm-tools}"
 
 if [ ! -f "$BIN/app-release.wasm" ]; then
   echo "ERROR: $BIN/app-release.wasm not found; run build-app.sh first" >&2

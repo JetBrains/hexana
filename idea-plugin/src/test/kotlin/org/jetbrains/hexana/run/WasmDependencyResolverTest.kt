@@ -81,10 +81,13 @@ class WasmDependencyResolverTest : UsefulTestCase() {
             WasmDependencyResolver.isRuntimeImport("my-module"))
     }
 
+    private fun sampleRootOrNull(): File? =
+        System.getenv("HEXANA_SAMPLE_COMPONENT_MODEL_DIR")?.let(::File)?.takeIf { it.exists() }
+
     fun testFindWorkspaceRoot() {
-        val sampleRoot = File("/Users/user/Downloads/sample-wasm-component-model-main")
-        if (!sampleRoot.exists()) {
-            println("[DEBUG_LOG] Sample project not found, skipping")
+        val sampleRoot = sampleRootOrNull()
+        if (sampleRoot == null) {
+            println("[DEBUG_LOG] Sample project not found (set HEXANA_SAMPLE_COMPONENT_MODEL_DIR), skipping")
             return
         }
         val appWasm = File(sampleRoot, "target/wasm32-wasip1/debug/app.wasm")
@@ -100,9 +103,9 @@ class WasmDependencyResolverTest : UsefulTestCase() {
     }
 
     fun testBuildScanRootsFromWasmFilePath() {
-        val sampleRoot = File("/Users/user/Downloads/sample-wasm-component-model-main")
-        if (!sampleRoot.exists()) {
-            println("[DEBUG_LOG] Sample project not found, skipping")
+        val sampleRoot = sampleRootOrNull()
+        if (sampleRoot == null) {
+            println("[DEBUG_LOG] Sample project not found (set HEXANA_SAMPLE_COMPONENT_MODEL_DIR), skipping")
             return
         }
         val appWasmPath = File(sampleRoot, "target/wasm32-wasip1/debug/app.wasm").absolutePath

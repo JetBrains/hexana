@@ -4,8 +4,8 @@
 # Then produces bin/app-release.wasm (stripped) and bin/app-release.debug.wasm (DWARF sidecar).
 #
 # Toolchain required:
-#   wasi-sdk 27.0  at ${WASI_SDK:-/Users/user/wasi-sdk}  (clang 20.1.8, wasm32-wasi)
-#   wasm-tools 1.245.1 at ${WASM_TOOLS:-/Users/user/.cargo/bin/wasm-tools}
+#   wasi-sdk 27.0  at ${WASI_SDK:-$HOME/wasi-sdk}  (clang 20.1.8, wasm32-wasi)
+#   wasm-tools 1.245.1 at ${WASM_TOOLS:-wasm-tools}
 #
 # Nondeterminism note: clang embeds the absolute source path in DWARF DW_AT_comp_dir /
 # DW_AT_name unless -ffile-prefix-map is used. We remap ${SCRIPT_DIR}/.. -> . so the
@@ -18,10 +18,10 @@ ROOT="$(dirname "$SCRIPT_DIR")"
 SRC="$ROOT/src/app"
 BIN="$ROOT/bin"
 
-WASI_SDK="${WASI_SDK:-/Users/user/wasi-sdk}"
+WASI_SDK="${WASI_SDK:-$HOME/wasi-sdk}"
 CLANG="$WASI_SDK/bin/clang"
 OBJCOPY="$WASI_SDK/bin/llvm-objcopy"
-WASM_TOOLS="${WASM_TOOLS:-/Users/user/.cargo/bin/wasm-tools}"
+WASM_TOOLS="${WASM_TOOLS:-wasm-tools}"
 
 # --no-wasm-opt: the wasi-sdk driver runs binaryen wasm-opt after the link, and
 # wasm-opt's DWARF rewriting drops every .debug_line program (prologue-only units

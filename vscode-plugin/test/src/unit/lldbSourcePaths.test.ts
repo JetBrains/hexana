@@ -54,7 +54,7 @@ describe('LLDB stack trace source paths', function () {
     });
 
     it('remaps the absolute macOS build-machine path from the DWARF fixture', function () {
-        expect(remap('/Users/user/git/Hexana/vscode-plugin/test/fixtures/debug_add.rs'))
+        expect(remap('/Users/dev/git/Hexana/vscode-plugin/test/fixtures/debug_add.rs'))
             .to.deep.equal({path: localSource, name: 'debug_add.rs', sourceReference: 0});
     });
 

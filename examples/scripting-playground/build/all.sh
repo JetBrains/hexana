@@ -33,7 +33,7 @@ run gen-broken.sh
 
 echo ""
 echo "=== Validation pass ==="
-WASM_TOOLS="${WASM_TOOLS:-/Users/user/.cargo/bin/wasm-tools}"
+WASM_TOOLS="${WASM_TOOLS:-wasm-tools}"
 for f in hello.wasm app-debug.wasm app-release.wasm component.wasm; do
   "$WASM_TOOLS" validate "$ROOT/bin/$f" && echo "  OK: $f" || echo "  FAIL: $f"
 done

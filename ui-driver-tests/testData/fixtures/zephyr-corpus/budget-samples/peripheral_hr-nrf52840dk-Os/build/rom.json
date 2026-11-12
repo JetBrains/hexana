@@ -1202,7 +1202,7 @@
             {
                 "name": "ZEPHYR_BASE",
                 "size": 129512,
-                "identifier": "/Users/user/IdeaProjects/zephyrproject/zephyr",
+                "identifier": "/home/user/IdeaProjects/zephyrproject/zephyr",
                 "loc": [],
                 "children": [
                     {
@@ -19211,7 +19211,7 @@
             {
                 "name": "OUTPUT_DIR",
                 "size": 668,
-                "identifier": "/Users/user/IdeaProjects/zephyr-corpus/build/apps_peripheral_hr_nrf52840dk-Os",
+                "identifier": "/home/user/IdeaProjects/zephyr-corpus/build/apps_peripheral_hr_nrf52840dk-Os",
                 "loc": [],
                 "children": [
                     {
@@ -19459,57 +19459,57 @@
                 "loc": [],
                 "children": [
                     {
-                        "name": "Users",
+                        "name": "home",
                         "size": 132,
-                        "identifier": "/Users",
+                        "identifier": "/home",
                         "loc": [],
                         "children": [
                             {
                                 "name": "user",
                                 "size": 132,
-                                "identifier": "/Users/user",
+                                "identifier": "/home/user",
                                 "loc": [],
                                 "children": [
                                     {
                                         "name": "zephyr-sdk-1.0.1",
                                         "size": 132,
-                                        "identifier": "/Users/user/zephyr-sdk-1.0.1",
+                                        "identifier": "/home/user/zephyr-sdk-1.0.1",
                                         "loc": [],
                                         "children": [
                                             {
                                                 "name": "gnu",
                                                 "size": 132,
-                                                "identifier": "/Users/user/zephyr-sdk-1.0.1/gnu",
+                                                "identifier": "/home/user/zephyr-sdk-1.0.1/gnu",
                                                 "loc": [],
                                                 "children": [
                                                     {
                                                         "name": "arm-zephyr-eabi",
                                                         "size": 132,
-                                                        "identifier": "/Users/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi",
+                                                        "identifier": "/home/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi",
                                                         "loc": [],
                                                         "children": [
                                                             {
                                                                 "name": "arm-zephyr-eabi",
                                                                 "size": 132,
-                                                                "identifier": "/Users/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/arm-zephyr-eabi",
+                                                                "identifier": "/home/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/arm-zephyr-eabi",
                                                                 "loc": [],
                                                                 "children": [
                                                                     {
                                                                         "name": "sys-include",
                                                                         "size": 132,
-                                                                        "identifier": "/Users/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/arm-zephyr-eabi/sys-include",
+                                                                        "identifier": "/home/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/arm-zephyr-eabi/sys-include",
                                                                         "loc": [],
                                                                         "children": [
                                                                             {
                                                                                 "name": "stdlib.h",
                                                                                 "size": 132,
-                                                                                "identifier": "/Users/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/arm-zephyr-eabi/sys-include/stdlib.h",
+                                                                                "identifier": "/home/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/arm-zephyr-eabi/sys-include/stdlib.h",
                                                                                 "loc": [],
                                                                                 "children": [
                                                                                     {
                                                                                         "name": "malloc",
                                                                                         "size": 52,
-                                                                                        "identifier": "/Users/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/arm-zephyr-eabi/sys-include/stdlib.h/malloc",
+                                                                                        "identifier": "/home/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/arm-zephyr-eabi/sys-include/stdlib.h/malloc",
                                                                                         "loc": [
                                                                                             "rom"
                                                                                         ],
@@ -19519,7 +19519,7 @@
                                                                                     {
                                                                                         "name": "calloc",
                                                                                         "size": 52,
-                                                                                        "identifier": "/Users/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/arm-zephyr-eabi/sys-include/stdlib.h/calloc",
+                                                                                        "identifier": "/home/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/arm-zephyr-eabi/sys-include/stdlib.h/calloc",
                                                                                         "loc": [
                                                                                             "rom"
                                                                                         ],
@@ -19529,7 +19529,7 @@
                                                                                     {
                                                                                         "name": "free",
                                                                                         "size": 28,
-                                                                                        "identifier": "/Users/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/arm-zephyr-eabi/sys-include/stdlib.h/free",
+                                                                                        "identifier": "/home/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/arm-zephyr-eabi/sys-include/stdlib.h/free",
                                                                                         "loc": [
                                                                                             "rom"
                                                                                         ],
@@ -19557,7 +19557,7 @@
             {
                 "name": "WORKSPACE",
                 "size": 17584,
-                "identifier": "/Users/user/IdeaProjects/zephyrproject",
+                "identifier": "/home/user/IdeaProjects/zephyrproject",
                 "loc": [],
                 "children": [
                     {

@@ -8,9 +8,9 @@ actual build output on 2026-09-21 using the toolchain versions below.
 | Tool | Version | Path |
 |------|---------|------|
 | wabt wat2wasm | 1.0.36 | /opt/homebrew/bin/wat2wasm |
-| wasi-sdk clang | 20.1.8 (wasm32-wasi) | /Users/user/wasi-sdk/bin/clang |
-| wasi-sdk llvm-objcopy | from wasi-sdk 27.0 | /Users/user/wasi-sdk/bin/llvm-objcopy |
-| wasm-tools | 1.245.1 | /Users/user/.cargo/bin/wasm-tools |
+| wasi-sdk clang | 20.1.8 (wasm32-wasi) | $HOME/wasi-sdk/bin/clang |
+| wasi-sdk llvm-objcopy | from wasi-sdk 27.0 | $HOME/wasi-sdk/bin/llvm-objcopy |
+| wasm-tools | 1.245.1 | $HOME/.cargo/bin/wasm-tools |
 
 ## Committed binaries
 
@@ -62,7 +62,7 @@ Ground-truth facts:
 - DWARF custom sections: present (.debug_abbrev, .debug_info, .debug_str, .debug_line, .debug_loc, .debug_ranges)
 - Validation: passes wasm-tools validate
 - Reproducibility: deterministic when built with `cd examples/scripting-playground && clang ...` (so DW_AT_comp_dir resolves to `.`). Building from a different cwd changes DW_AT_comp_dir and breaks reproducibility. The build script enforces `cd $ROOT` before invoking clang.
-- Machine-specific: the DWARF line table and .debug_str still embed the wasi-sdk sysroot install path (here `/Users/user/wasi-sdk/share/wasi-sysroot/...`), which -ffile-prefix-map=ROOT=. does not cover. Rebuilds are byte-identical on the same machine; a different wasi-sdk location produces different bytes. Extend the prefix map with the sysroot path to reproduce elsewhere.
+- Machine-specific: the DWARF line table and .debug_str still embed the wasi-sdk sysroot install path (here `<wasi-sdk>/share/wasi-sysroot/...`), which -ffile-prefix-map=ROOT=. does not cover. Rebuilds are byte-identical on the same machine; a different wasi-sdk location produces different bytes. Extend the prefix map with the sysroot path to reproduce elsewhere.
 
 ### app-release.wasm
 

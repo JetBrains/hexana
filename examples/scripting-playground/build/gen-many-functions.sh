@@ -29,7 +29,7 @@ TMP_WAT="$BIN/many-functions.wat"
 
 N="${1:-15000}"
 WAT2WASM="${WAT2WASM:-/opt/homebrew/bin/wat2wasm}"
-WASM_TOOLS="${WASM_TOOLS:-/Users/user/.cargo/bin/wasm-tools}"
+WASM_TOOLS="${WASM_TOOLS:-wasm-tools}"
 
 echo "==> Generating WAT with N=$N functions"
 T0="$(date +%s)"

@@ -12,7 +12,7 @@ import java.util.zip.GZIPInputStream
  * and verifies the breakpoint was hit.
  *
  * Guards:
- * - [GDB_BINARY] must exist as a file.
+ * - [GDB_BINARY] must exist as a file (resolved from `ZEPHYR_SDK_INSTALL_DIR`).
  * - [QEMU_BINARY] must exist as a file.
  *
  * Both guards must pass; the test prints a skip message (does NOT use Assume) and returns
@@ -228,8 +228,10 @@ class GdbDapSmokeTest : UsefulTestCase() {
     }
 
     companion object {
-        private const val GDB_BINARY =
-            "/Users/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb-py"
+        private val GDB_BINARY: String =
+            System.getenv("ZEPHYR_SDK_INSTALL_DIR")
+                ?.let { "$it/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb-py" }
+                ?: "arm-zephyr-eabi-gdb-py"
         private const val QEMU_BINARY = "/opt/homebrew/bin/qemu-system-arm"
     }
 }

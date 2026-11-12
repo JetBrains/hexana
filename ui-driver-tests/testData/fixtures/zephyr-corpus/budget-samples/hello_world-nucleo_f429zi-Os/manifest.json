@@ -3,7 +3,7 @@
   "board": "nucleo_f429zi",
   "linker": "ld",
   "builtAt": "2026-08-23T00:00:00Z",
-  "sizeTool": "/Users/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-size",
+  "sizeTool": "/home/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-size",
   "size": {"text": 16976, "data": 124, "bss": 4300, "dec": 21400},
   "romReport": {"total": 17092},
   "ramReport": {"total": 4424},

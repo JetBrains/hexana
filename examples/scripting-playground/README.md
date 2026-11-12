@@ -14,8 +14,8 @@ generate it locally with `build/gen-many-functions.sh`.
 | Tool | Version | Location on this machine |
 |------|---------|--------------------------|
 | wabt wat2wasm | 1.0.36 | /opt/homebrew/bin/wat2wasm |
-| wasi-sdk | 27.0 (clang 20.1.8, wasm32-wasi) | /Users/user/wasi-sdk |
-| wasm-tools | 1.245.1 | /Users/user/.cargo/bin/wasm-tools |
+| wasi-sdk | 27.0 (clang 20.1.8, wasm32-wasi) | $HOME/wasi-sdk |
+| wasm-tools | 1.245.1 | $HOME/.cargo/bin/wasm-tools |
 
 The build scripts accept override env vars: `WAT2WASM`, `WASI_SDK`, `WASM_TOOLS`.
 

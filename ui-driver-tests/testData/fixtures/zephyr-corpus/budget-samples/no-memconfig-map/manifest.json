@@ -3,7 +3,7 @@
   "board": "nrf52840dk/nrf52840",
   "linker": "ld",
   "builtAt": "2026-08-23T00:00:00Z",
-  "sizeTool": "/Users/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-size",
+  "sizeTool": "/home/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-size",
   "size": {"text": 21168, "data": 212, "bss": 4366, "dec": 25746},
   "romReport": null,
   "ramReport": null,

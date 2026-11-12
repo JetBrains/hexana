@@ -15,6 +15,7 @@ Output: image.elf with the FDT blob embedded in .rodata
 Also writes fdt-offset.txt with the byte offset of the FDT magic in image.elf.
 """
 
+import os
 import struct
 import subprocess
 import sys
@@ -114,8 +115,8 @@ def build_fdt() -> bytes:
 
 
 def build_elf(fdt_blob: bytes):
-    clang = '/Users/user/.swiftly/bin/clang'
-    lld   = '/Users/user/.swiftly/bin/ld.lld'
+    clang = os.environ.get('CLANG', 'clang')
+    lld   = os.environ.get('LLD', 'ld.lld')
 
     # Write the blob bytes as a C array into .rodata
     c_lines = ['/* Auto-generated: FDT blob embedded in .rodata */\n',

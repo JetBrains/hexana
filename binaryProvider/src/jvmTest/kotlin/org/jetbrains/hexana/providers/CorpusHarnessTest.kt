@@ -42,13 +42,13 @@ class CorpusHarnessTest {
         // The corpus is a local checkout of the extracted WASM spec testsuite; it
         // does not exist on CI. Skipping is allowed ONLY at the directory level;
         // per-file results below are real observations, never graceful skips.
-        val corpusRoot = System.getenv("HEXANA_CORPUS_DIR") ?: "/Users/user/RustroverProjects/testsuite"
+        val corpusRoot = System.getenv("HEXANA_CORPUS_DIR").orEmpty()
         val validDir = File(corpusRoot, "valid")
         val invalidDir = File(corpusRoot, "invalid")
 
         org.junit.Assume.assumeTrue(
-            "Corpus directories absent under $corpusRoot; set HEXANA_CORPUS_DIR or check out the testsuite",
-            validDir.exists() && invalidDir.exists(),
+            "Corpus directories absent under '$corpusRoot'; set HEXANA_CORPUS_DIR or check out the testsuite",
+            corpusRoot.isNotEmpty() && validDir.exists() && invalidDir.exists(),
         )
 
         val csvOut = File("/tmp/hexana-corpus-baseline2.csv")

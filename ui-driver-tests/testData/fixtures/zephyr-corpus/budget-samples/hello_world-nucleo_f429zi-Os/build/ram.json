@@ -14,7 +14,7 @@
             {
                 "name": "ZEPHYR_BASE",
                 "size": 4420,
-                "identifier": "/Users/user/IdeaProjects/zephyrproject/zephyr",
+                "identifier": "/home/user/IdeaProjects/zephyrproject/zephyr",
                 "loc": [],
                 "children": [
                     {
@@ -990,7 +990,7 @@
             {
                 "name": "WORKSPACE",
                 "size": 4,
-                "identifier": "/Users/user/IdeaProjects/zephyrproject",
+                "identifier": "/home/user/IdeaProjects/zephyrproject",
                 "loc": [],
                 "children": [
                     {

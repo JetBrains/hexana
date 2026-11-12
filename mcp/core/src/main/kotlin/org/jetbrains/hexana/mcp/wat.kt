@@ -262,7 +262,7 @@ private fun Any?.renderOperand(): String =
 // Why the mapping has both -23 and 0x69:
 //
 //  - opcode GC instructions parse heap types through consumeSignedInt(), not through the section-level WasmHeapType model
-//  - see /home/vladislavkuznetsov/Vl/Work/Hexana/wasmParser/src/commonMain/kotlin/org/jetbrains/hexana/wasm/opcodes/consumeGCOpCode.kt:21
+//  - see wasmParser/src/commonMain/kotlin/org/jetbrains/hexana/wasm/opcodes/consumeGCOpCode.kt:21
 //  - so the same heap type may appear as:
 //      - signed SLEB value like -23
 //      - or positive hex form like 0x69
