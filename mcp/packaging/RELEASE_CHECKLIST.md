@@ -150,11 +150,11 @@ release:
   `mcp/out/teamcity/cli-downloads-index/releases.json`, and each current entry
   points to its own product manifest.
 - Confirm the versioned bundle upload targets are
-  `s3://downloads-bucket.example.invalid/resources/hexana/mcp/<version>/` and
-  `s3://downloads-bucket.example.invalid/resources/hexana/cli/<version>/`.
+  `s3://$HEXANA_DOWNLOADS_S3_BUCKET/resources/hexana/mcp/<version>/` and
+  `s3://$HEXANA_DOWNLOADS_S3_BUCKET/resources/hexana/cli/<version>/`.
 - Confirm the root index upload targets are
-  `s3://downloads-bucket.example.invalid/resources/hexana/mcp/releases.json` and
-  `s3://downloads-bucket.example.invalid/resources/hexana/cli/releases.json`.
+  `s3://$HEXANA_DOWNLOADS_S3_BUCKET/resources/hexana/mcp/releases.json` and
+  `s3://$HEXANA_DOWNLOADS_S3_BUCKET/resources/hexana/cli/releases.json`.
 
 If downloads publication fails after bundle generation, rerun the same
 TeamCity publication build. The script regenerates both products from the same

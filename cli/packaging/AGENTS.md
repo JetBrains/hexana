@@ -28,4 +28,5 @@ CLI_DOWNLOADS_BUNDLE_SELF_TEST=true bash cli/packaging/publish-cli-downloads-rel
 ```
 
 Keep artifact paths, output paths, release policy, and destination validation
-within this directory. Do not add unrelated product or wrapper policy here.
+within this directory. The S3 bucket comes from `HEXANA_DOWNLOADS_S3_BUCKET` (required when publishing); never
+hardcode it. Do not add unrelated product or wrapper policy here.

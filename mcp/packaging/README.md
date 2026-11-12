@@ -240,10 +240,14 @@ script continues to publish all CLI ZIP assets alongside the MCP assets.
 
 The versioned upload targets are:
 
-- `s3://downloads-bucket.example.invalid/resources/hexana/mcp/<version>/`, served as
+- `s3://$HEXANA_DOWNLOADS_S3_BUCKET/resources/hexana/mcp/<version>/`, served as
   `https://download.jetbrains.com/resources/hexana/mcp/<version>/`
-- `s3://downloads-bucket.example.invalid/resources/hexana/cli/<version>/`, served as
+- `s3://$HEXANA_DOWNLOADS_S3_BUCKET/resources/hexana/cli/<version>/`, served as
   `https://download.jetbrains.com/resources/hexana/cli/<version>/`
+
+`HEXANA_DOWNLOADS_S3_BUCKET` names the S3 bucket and has no default. It is required whenever
+`PUBLISH_DOWNLOADS=true`; without it the script exits before generating or uploading anything. The destination guards
+only accept prefixes under that bucket.
 
 The script prepares independent root indexes at `mcp/out/teamcity/downloads-index/releases.json` and
 `mcp/out/teamcity/cli-downloads-index/releases.json`. They are published as the MCP and CLI root `releases.json`

@@ -15,6 +15,22 @@ require_tool() {
   command -v "$1" >/dev/null 2>&1 || die "Required tool '$1' is not installed"
 }
 
+require_env() {
+  [ -n "${!1:-}" ] || die "$1 is required"
+}
+
+validate_s3_bucket_name() {
+  case "$1" in
+    ''|*[!A-Za-z0-9.-]*|-*|.*) die "HEXANA_DOWNLOADS_S3_BUCKET must be a plain S3 bucket name" ;;
+  esac
+}
+
+default_s3_root() {
+  if [ -n "$DOWNLOADS_S3_BUCKET" ]; then
+    printf 's3://%s/resources/hexana/%s/' "$DOWNLOADS_S3_BUCKET" "$1"
+  fi
+}
+
 to_bool() {
   case "${1:-false}" in
     true|TRUE|True|1|yes|YES|Yes) printf 'true' ;;
@@ -510,8 +526,8 @@ publish_downloads_bundle() {
   require_tool "aws"
   [ -d "$bundle_dir" ] || die "Bundle directory does not exist: $bundle_dir"
   case "$product:$destination" in
-    mcp:s3://downloads-bucket.example.invalid/resources/hexana/mcp/*) ;;
-    cli:s3://downloads-bucket.example.invalid/resources/hexana/cli/*) ;;
+    mcp:"s3://$DOWNLOADS_S3_BUCKET/resources/hexana/mcp/"*) ;;
+    cli:"s3://$DOWNLOADS_S3_BUCKET/resources/hexana/cli/"*) ;;
     *) die "Refusing to publish outside the Hexana $product downloads prefix: $destination" ;;
   esac
 
@@ -528,8 +544,8 @@ publish_releases_index() {
   require_tool "aws"
   [ -f "$index_file" ] || die "Releases index does not exist: $index_file"
   case "$product:$destination" in
-    mcp:s3://downloads-bucket.example.invalid/resources/hexana/mcp/releases.json) ;;
-    cli:s3://downloads-bucket.example.invalid/resources/hexana/cli/releases.json) ;;
+    mcp:"s3://$DOWNLOADS_S3_BUCKET/resources/hexana/mcp/releases.json") ;;
+    cli:"s3://$DOWNLOADS_S3_BUCKET/resources/hexana/cli/releases.json") ;;
     *) die "Refusing to publish releases index outside the Hexana $product downloads root: $destination" ;;
   esac
 
@@ -615,11 +631,12 @@ self_test_downloads_bundle() {
   CLI_DOWNLOADS_ROOT_PUBLIC_PREFIX="https://download.jetbrains.com/resources/hexana/cli/"
   CLI_DOWNLOADS_PUBLIC_PREFIX="$(url_join "$CLI_DOWNLOADS_ROOT_PUBLIC_PREFIX" "$MCP_VERSION")"
   CLI_DOWNLOADS_README_TEMPLATE="mcp/packaging/CLI_DOWNLOADS_README.md.template"
-  DOWNLOADS_RELEASES_INDEX_S3_URI="s3://downloads-bucket.example.invalid/resources/hexana/mcp/releases.json"
-  CLI_DOWNLOADS_RELEASES_INDEX_S3_URI="s3://downloads-bucket.example.invalid/resources/hexana/cli/releases.json"
+  DOWNLOADS_S3_BUCKET="example-bucket.invalid"
+  DOWNLOADS_RELEASES_INDEX_S3_URI="s3://$DOWNLOADS_S3_BUCKET/resources/hexana/mcp/releases.json"
+  CLI_DOWNLOADS_RELEASES_INDEX_S3_URI="s3://$DOWNLOADS_S3_BUCKET/resources/hexana/cli/releases.json"
   GITHUB_RELEASE_ASSET_BASE_URL="https://github.com/JetBrains/hexana/releases/download/v$MCP_VERSION"
   TEAMCITY_BUILD_ID="12345"
-  TEAMCITY_BUILD_URL="https://ci.example.invalid/buildConfiguration/InnoHub_HexFlow_McpPublishDownloads/12345"
+  TEAMCITY_BUILD_URL="https://teamcity.example.invalid/buildConfiguration/Example_McpPublishDownloads/12345"
   GIT_REVISION="abcdef1234567890"
   GENERATED_AT="2026-06-23T00:00:00Z"
   PUBLISH_DOWNLOADS="false"
@@ -860,14 +877,14 @@ self_test_downloads_bundle() {
   SELF_TEST_AWS_CALLS="$aws_calls"
   export SELF_TEST_AWS_CALLS
   PATH="$fake_bin_dir:$PATH"
-  publish_downloads_bundle "$mcp_bundle_dir" "s3://downloads-bucket.example.invalid/resources/hexana/mcp/0.2.0/" "mcp"
-  publish_downloads_bundle "$cli_bundle_dir" "s3://downloads-bucket.example.invalid/resources/hexana/cli/0.2.0/" "cli"
-  publish_releases_index "$mcp_index_dir" "s3://downloads-bucket.example.invalid/resources/hexana/mcp/releases.json" "mcp"
-  publish_releases_index "$cli_index_dir" "s3://downloads-bucket.example.invalid/resources/hexana/cli/releases.json" "cli"
-  [ "$(sed -n '1p' "$aws_calls")" = "s3 cp $mcp_bundle_dir s3://downloads-bucket.example.invalid/resources/hexana/mcp/0.2.0/ --recursive --only-show-errors" ] || die "Self-test did not upload the MCP bundle first"
-  [ "$(sed -n '2p' "$aws_calls")" = "s3 cp $cli_bundle_dir s3://downloads-bucket.example.invalid/resources/hexana/cli/0.2.0/ --recursive --only-show-errors" ] || die "Self-test did not upload the CLI bundle second"
-  [ "$(sed -n '3p' "$aws_calls")" = "s3 cp $mcp_index_dir/releases.json s3://downloads-bucket.example.invalid/resources/hexana/mcp/releases.json --only-show-errors" ] || die "Self-test did not upload the MCP index third"
-  [ "$(sed -n '4p' "$aws_calls")" = "s3 cp $cli_index_dir/releases.json s3://downloads-bucket.example.invalid/resources/hexana/cli/releases.json --only-show-errors" ] || die "Self-test did not upload the CLI index fourth"
+  publish_downloads_bundle "$mcp_bundle_dir" "s3://$DOWNLOADS_S3_BUCKET/resources/hexana/mcp/0.2.0/" "mcp"
+  publish_downloads_bundle "$cli_bundle_dir" "s3://$DOWNLOADS_S3_BUCKET/resources/hexana/cli/0.2.0/" "cli"
+  publish_releases_index "$mcp_index_dir" "s3://$DOWNLOADS_S3_BUCKET/resources/hexana/mcp/releases.json" "mcp"
+  publish_releases_index "$cli_index_dir" "s3://$DOWNLOADS_S3_BUCKET/resources/hexana/cli/releases.json" "cli"
+  [ "$(sed -n '1p' "$aws_calls")" = "s3 cp $mcp_bundle_dir s3://$DOWNLOADS_S3_BUCKET/resources/hexana/mcp/0.2.0/ --recursive --only-show-errors" ] || die "Self-test did not upload the MCP bundle first"
+  [ "$(sed -n '2p' "$aws_calls")" = "s3 cp $cli_bundle_dir s3://$DOWNLOADS_S3_BUCKET/resources/hexana/cli/0.2.0/ --recursive --only-show-errors" ] || die "Self-test did not upload the CLI bundle second"
+  [ "$(sed -n '3p' "$aws_calls")" = "s3 cp $mcp_index_dir/releases.json s3://$DOWNLOADS_S3_BUCKET/resources/hexana/mcp/releases.json --only-show-errors" ] || die "Self-test did not upload the MCP index third"
+  [ "$(sed -n '4p' "$aws_calls")" = "s3 cp $cli_index_dir/releases.json s3://$DOWNLOADS_S3_BUCKET/resources/hexana/cli/releases.json --only-show-errors" ] || die "Self-test did not upload the CLI index fourth"
   [ "$(wc -l < "$aws_calls" | tr -d '[:space:]')" -eq 4 ] || die "Self-test recorded unexpected additional uploads"
 
   log "Downloads bundle self-test passed"
@@ -878,6 +895,13 @@ main() {
   if [ "$(to_bool "${MCP_DOWNLOADS_BUNDLE_SELF_TEST:-false}" "MCP_DOWNLOADS_BUNDLE_SELF_TEST")" = "true" ]; then
     self_test_downloads_bundle
     return
+  fi
+
+  PUBLISH_DOWNLOADS="$(to_bool "${PUBLISH_DOWNLOADS:-false}" "PUBLISH_DOWNLOADS")"
+  DOWNLOADS_S3_BUCKET="${HEXANA_DOWNLOADS_S3_BUCKET:-}"
+  if [ "$PUBLISH_DOWNLOADS" = "true" ]; then
+    require_env "HEXANA_DOWNLOADS_S3_BUCKET"
+    validate_s3_bucket_name "$DOWNLOADS_S3_BUCKET"
   fi
 
   MCP_VERSION="${MCP_VERSION:-${PLUGIN_VERSION:-$(read_mcp_version)}}"
@@ -891,12 +915,12 @@ main() {
   CLI_DOWNLOADS_README_TEMPLATE="${CLI_DOWNLOADS_README_TEMPLATE:-mcp/packaging/CLI_DOWNLOADS_README.md.template}"
   DOWNLOADS_ROOT_PUBLIC_PREFIX="${DOWNLOADS_ROOT_PUBLIC_PREFIX:-https://download.jetbrains.com/resources/hexana/mcp}"
   DOWNLOADS_PUBLIC_PREFIX="${DOWNLOADS_PUBLIC_PREFIX:-$(url_join "$DOWNLOADS_ROOT_PUBLIC_PREFIX" "$MCP_VERSION")}"
-  DOWNLOADS_ROOT_S3_PREFIX="${DOWNLOADS_ROOT_S3_PREFIX:-s3://downloads-bucket.example.invalid/resources/hexana/mcp/}"
+  DOWNLOADS_ROOT_S3_PREFIX="${DOWNLOADS_ROOT_S3_PREFIX:-$(default_s3_root mcp)}"
   DOWNLOADS_S3_PREFIX="${DOWNLOADS_S3_PREFIX:-$(s3_join "$DOWNLOADS_ROOT_S3_PREFIX" "$MCP_VERSION")/}"
   DOWNLOADS_RELEASES_INDEX_S3_URI="${DOWNLOADS_RELEASES_INDEX_S3_URI:-$(s3_join "$DOWNLOADS_ROOT_S3_PREFIX" "releases.json")}"
   CLI_DOWNLOADS_ROOT_PUBLIC_PREFIX="${CLI_DOWNLOADS_ROOT_PUBLIC_PREFIX:-https://download.jetbrains.com/resources/hexana/cli}"
   CLI_DOWNLOADS_PUBLIC_PREFIX="${CLI_DOWNLOADS_PUBLIC_PREFIX:-$(url_join "$CLI_DOWNLOADS_ROOT_PUBLIC_PREFIX" "$MCP_VERSION")}"
-  CLI_DOWNLOADS_ROOT_S3_PREFIX="${CLI_DOWNLOADS_ROOT_S3_PREFIX:-s3://downloads-bucket.example.invalid/resources/hexana/cli/}"
+  CLI_DOWNLOADS_ROOT_S3_PREFIX="${CLI_DOWNLOADS_ROOT_S3_PREFIX:-$(default_s3_root cli)}"
   CLI_DOWNLOADS_S3_PREFIX="${CLI_DOWNLOADS_S3_PREFIX:-$(s3_join "$CLI_DOWNLOADS_ROOT_S3_PREFIX" "$MCP_VERSION")/}"
   CLI_DOWNLOADS_RELEASES_INDEX_S3_URI="${CLI_DOWNLOADS_RELEASES_INDEX_S3_URI:-$(s3_join "$CLI_DOWNLOADS_ROOT_S3_PREFIX" "releases.json")}"
   GITHUB_RELEASE_ASSET_BASE_URL="${GITHUB_RELEASE_ASSET_BASE_URL:-}"
@@ -908,7 +932,6 @@ main() {
   TEAMCITY_BUILD_URL="${TEAMCITY_BUILD_URL:-${BUILD_URL:-}}"
   GIT_REVISION="${GIT_REVISION:-${BUILD_VCS_NUMBER:-}}"
   GENERATED_AT="${GENERATED_AT:-$(date -u '+%Y-%m-%dT%H:%M:%SZ')}"
-  PUBLISH_DOWNLOADS="$(to_bool "${PUBLISH_DOWNLOADS:-false}" "PUBLISH_DOWNLOADS")"
 
   generate_downloads_bundle "$MCP_RELEASE_ARTIFACT_DIR" "$MCP_DOWNLOADS_BUNDLE_DIR" "mcp"
   generate_downloads_bundle "$MCP_RELEASE_ARTIFACT_DIR" "$CLI_DOWNLOADS_BUNDLE_DIR" "cli"

@@ -50,6 +50,9 @@ and unreadable-input rejection. Notices cover the union of all three CLI runtime
 dependency graphs and the MCP server.
 
 The self-test uses fake local S3 storage and does not publish to the network.
+
+When `PUBLISH_DOWNLOADS=true`, `HEXANA_DOWNLOADS_S3_BUCKET` must name the destination bucket. There is no default, and
+the script exits before generating or uploading anything when it is missing.
 It proves the six-archive manifest/ledger/index and checksum inventory, rejects
 the old four-archive input, temporarily removes a required Wasm archive and
 substitutes a wrong identity/launcher, then restores the exact set before retry.

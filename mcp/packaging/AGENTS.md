@@ -25,7 +25,7 @@ This folder contains client-specific wrapper layouts for the standalone MCP runt
   version directory contains only native MCP plus Claude/Codex wrapper ZIPs, checksums, and its manifest. The CLI
   version directory contains only the two split native CLI ZIP families, checksums, a rendered version-local README,
   and its manifest. Each product has its own merged root `releases.json` and guarded S3 prefix. The script must not
-  rebuild artifacts.
+  rebuild artifacts. The S3 bucket comes from `HEXANA_DOWNLOADS_S3_BUCKET` (required when publishing); never hardcode it.
 - `CLI_DOWNLOADS_README.md.template` is internal release input. Only its rendered `README.md` belongs in the versioned
   CLI downloads directory; do not publish it at the CLI downloads root.
 - Public Claude/Codex release packages run R8 at build time and ship `server/lib/hexana-runtime-obfuscated.jar`.

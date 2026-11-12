@@ -15,6 +15,22 @@ require_tool() {
   command -v "$1" >/dev/null 2>&1 || die "Required tool '$1' is not installed"
 }
 
+require_env() {
+  [ -n "${!1:-}" ] || die "$1 is required"
+}
+
+validate_s3_bucket_name() {
+  case "$1" in
+    ''|*[!A-Za-z0-9.-]*|-*|.*) die "HEXANA_DOWNLOADS_S3_BUCKET must be a plain S3 bucket name" ;;
+  esac
+}
+
+default_s3_root() {
+  if [ -n "$CLI_S3_BUCKET" ]; then
+    printf 's3://%s/resources/hexana/cli/' "$CLI_S3_BUCKET"
+  fi
+}
+
 to_bool() {
   case "${1:-false}" in
     true|TRUE|True|1|yes|YES|Yes) printf 'true' ;;
@@ -284,7 +300,7 @@ remote_if_present() {
 validate_destinations() {
   [ "$CLI_ROOT_PUBLIC_PREFIX" = 'https://download.jetbrains.com/resources/hexana/cli' ] || die 'CLI public root is not exact'
   [ "$CLI_PUBLIC_PREFIX" = "$CLI_ROOT_PUBLIC_PREFIX/$CLI_VERSION" ] || die 'CLI public version prefix is not exact'
-  [ "$CLI_ROOT_S3_PREFIX" = 's3://downloads-bucket.example.invalid/resources/hexana/cli/' ] || die 'CLI storage root is not exact'
+  [ "$CLI_ROOT_S3_PREFIX" = "s3://$CLI_S3_BUCKET/resources/hexana/cli/" ] || die 'CLI storage root is not exact'
   [ "$CLI_S3_PREFIX" = "$CLI_ROOT_S3_PREFIX$CLI_VERSION/" ] || die 'CLI storage version prefix is not exact'
   [ "$CLI_INDEX_S3_URI" = "${CLI_ROOT_S3_PREFIX}releases.json" ] || die 'CLI index destination is not exact'
 }
@@ -292,7 +308,7 @@ validate_destinations() {
 remote_names() {
   local remote="$1"
   local key
-  key="${remote#s3://downloads-bucket.example.invalid/}"
+  key="${remote#s3://$CLI_S3_BUCKET/}"
   aws s3 ls "$remote" --recursive |
     awk '{print $4}' |
     sed "s!^$key!!" |
@@ -558,7 +574,7 @@ create_fake_aws() {
   cat > "$fake_dir/aws" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-path() { printf '%s/%s\n' "$SELF_STORAGE" "${1#s3://downloads-bucket.example.invalid/}"; }
+path() { printf '%s/%s\n' "$SELF_STORAGE" "${1#s3://$SELF_BUCKET/}"; }
 printf '%s\n' "$*" >> "$SELF_CALLS"
 case "$2" in
   cp)
@@ -608,7 +624,8 @@ self_test() {
   CLI_VERSION='0.2.0'
   CLI_ROOT_PUBLIC_PREFIX='https://download.jetbrains.com/resources/hexana/cli'
   CLI_PUBLIC_PREFIX="$CLI_ROOT_PUBLIC_PREFIX/$CLI_VERSION"
-  CLI_ROOT_S3_PREFIX='s3://downloads-bucket.example.invalid/resources/hexana/cli/'
+  CLI_S3_BUCKET='example-bucket.invalid'
+  CLI_ROOT_S3_PREFIX="s3://$CLI_S3_BUCKET/resources/hexana/cli/"
   CLI_S3_PREFIX="$CLI_ROOT_S3_PREFIX$CLI_VERSION/"
   CLI_INDEX_S3_URI="${CLI_ROOT_S3_PREFIX}releases.json"
   CLI_INDEX_DIR="$index"
@@ -692,7 +709,8 @@ self_test() {
   create_fake_aws "$fake"
   SELF_STORAGE="$storage"
   SELF_CALLS="$calls"
-  export SELF_STORAGE SELF_CALLS
+  SELF_BUCKET="$CLI_S3_BUCKET"
+  export SELF_STORAGE SELF_CALLS SELF_BUCKET
   PATH="$fake:$PATH"
   PUBLISH_DOWNLOADS=true
   cp "$old_index" "$storage/resources/hexana/cli/releases.json"
@@ -858,6 +876,13 @@ main() {
     return
   fi
 
+  PUBLISH_DOWNLOADS="$(to_bool "${PUBLISH_DOWNLOADS:-false}" PUBLISH_DOWNLOADS)"
+  CLI_S3_BUCKET="${HEXANA_DOWNLOADS_S3_BUCKET:-}"
+  if [ "$PUBLISH_DOWNLOADS" = true ]; then
+    require_env HEXANA_DOWNLOADS_S3_BUCKET
+    validate_s3_bucket_name "$CLI_S3_BUCKET"
+  fi
+
   CLI_VERSION="$(resolve_cli_version)"
   [ -n "$CLI_VERSION" ] || die 'Could not read hexanaToolsVersion from gradle.properties'
   validate_semver CLI_VERSION "$CLI_VERSION"
@@ -869,7 +894,7 @@ main() {
   CLI_DOWNLOADS_README_TEMPLATE="${CLI_DOWNLOADS_README_TEMPLATE:-cli/packaging/CLI_DOWNLOADS_README.md.template}"
   CLI_DOWNLOADS_ROOT_PUBLIC_PREFIX="${CLI_DOWNLOADS_ROOT_PUBLIC_PREFIX:-https://download.jetbrains.com/resources/hexana/cli}"
   CLI_DOWNLOADS_PUBLIC_PREFIX="${CLI_DOWNLOADS_PUBLIC_PREFIX:-$(join_url "$CLI_DOWNLOADS_ROOT_PUBLIC_PREFIX" "$CLI_VERSION")}"
-  CLI_DOWNLOADS_ROOT_S3_PREFIX="${CLI_DOWNLOADS_ROOT_S3_PREFIX:-s3://downloads-bucket.example.invalid/resources/hexana/cli/}"
+  CLI_DOWNLOADS_ROOT_S3_PREFIX="${CLI_DOWNLOADS_ROOT_S3_PREFIX:-$(default_s3_root)}"
   CLI_DOWNLOADS_S3_PREFIX="${CLI_DOWNLOADS_S3_PREFIX:-$(join_s3 "$CLI_DOWNLOADS_ROOT_S3_PREFIX" "$CLI_VERSION")/}"
   CLI_DOWNLOADS_RELEASES_INDEX_S3_URI="${CLI_DOWNLOADS_RELEASES_INDEX_S3_URI:-$(join_s3 "$CLI_DOWNLOADS_ROOT_S3_PREFIX" releases.json)}"
 
@@ -890,7 +915,6 @@ main() {
   TEAMCITY_BUILD_ID="${TEAMCITY_BUILD_ID:-${BUILD_ID:-}}"
   TEAMCITY_BUILD_URL="${TEAMCITY_BUILD_URL:-${BUILD_URL:-}}"
   GENERATED_AT="${GENERATED_AT:-$(date -u '+%Y-%m-%dT%H:%M:%SZ')}"
-  PUBLISH_DOWNLOADS="$(to_bool "${PUBLISH_DOWNLOADS:-false}" PUBLISH_DOWNLOADS)"
 
   [ "$PUBLISH_DOWNLOADS" = false ] || {
     [ "$CLI_RELEASE_DESCRIPTOR" = 'cli/metadata/src/main/gen/cli-release-artifacts.json' ] || die 'Publication requires the checked-in generated CLI release descriptor'
