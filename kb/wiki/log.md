@@ -200,3 +200,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-12 — `entities/ci-env-parameters` — new: internal CI targets (build types, S3 bucket, Cloud Console/GCP/registry values, endpoints, leak-guard names) moved out of source into `HEXANA_*` env variables; per-script requirements.
 - 2026-11-12 — `entities/analytics-build-key` — PostHog key moved out of source: generated `AnalyticsBuildConfig`, blank key disables analytics, release guard, TeamCity params.
 - 2026-11-12 — `sources/public-tip-hygiene` — new: conventions from the pre-release tip clean-up (paths, internal references, oversized files).
+- 2026-11-12 — `entities/third-party-notices` — HEXANA-33 Part B: shared notices generator, per-artifact verification, `license/third_party` layout.

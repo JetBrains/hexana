@@ -61,6 +61,8 @@ consult-first / write-back rules.
   targets, and what each does when one is missing.
 - [[entities/analytics-build-key]] — how the PostHog key is injected at build time, the blank-key = analytics-off rule, the
   opt-in release guard, and the TeamCity params.
+- [[entities/third-party-notices]] — the shared notices generator, per-artifact inputs (IDEA ZIP, VSIX, webapp, MCP/CLI),
+  where licence texts come from, and what fails when a dependency has no reviewed text.
 
 ## Sources
 

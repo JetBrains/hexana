@@ -66,3 +66,46 @@ tasks.register("assembleExtensionAssets") {
         ":mcp:scripting:generateHexanaScriptingDts",
     )
 }
+
+// --- Third-party notices -----------------------------------------------------
+// THIRD-PARTY-NOTICES.md at the extension root is packaged into the VSIX by vsce. It covers the Kotlin/JS libraries
+// and npm packages bundled into extension-lib.js and webview.js, the extension host's production npm dependencies
+// (read from node_modules, so run `npm install` first), and the embedded Wasm printer's Rust crates.
+// build-release-package.sh generates it and runs scripts/verify-vsix-notices.js on the finished VSIX.
+
+apply(from = rootProject.file("gradle/third-party-notices.gradle.kts"))
+
+@Suppress("UNCHECKED_CAST")
+val registerThirdPartyNotices = extra["registerThirdPartyNotices"] as (Map<String, Any?>) -> TaskProvider<Task>
+
+val extensionHostNpmDependencies = (groovy.json.JsonSlurper().parse(file("package.json")) as Map<*, *>)
+    .let { it["dependencies"] as Map<*, *> }
+    .keys.map { it as String }
+
+registerThirdPartyNotices(
+    mapOf(
+        "taskName" to "generateThirdPartyNotices",
+        "output" to providers.provider { layout.projectDirectory.file("THIRD-PARTY-NOTICES.md") },
+        "title" to "Hexana VS Code Extension: Third-Party Notices",
+        "description" to "Generates THIRD-PARTY-NOTICES.md for the VSIX (requires npm install in vscode-plugin).",
+        "mavenClasspaths" to listOf(":vscode-plugin:extension-lib", ":vscode-plugin:webview").map { projectPath ->
+            providers.provider { project(projectPath).configurations.getByName("jsRuntimeClasspath") }
+        },
+        "npmNodeModules" to rootProject.layout.buildDirectory.dir("js/node_modules"),
+        "npmPackageJsons" to listOf("hexana-vscode-plugin-extension-lib", "hexana-vscode-plugin-webview").map { packageName ->
+            rootProject.layout.buildDirectory.file("js/packages/$packageName/package.json").map { it.asFile }
+        },
+        "npmPackages" to listOf(
+            mapOf(
+                "nodeModules" to layout.projectDirectory.dir("node_modules"),
+                "roots" to extensionHostNpmDependencies,
+            )
+        ),
+        "rustModules" to listOf("wasmprinter_wrapper"),
+        "dependsOn" to listOf(
+            ":kotlinNpmInstall",
+            ":vscode-plugin:extension-lib:jsPackageJson",
+            ":vscode-plugin:webview:jsPackageJson",
+        ),
+    )
+)

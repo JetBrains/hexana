@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- The static package now includes `THIRD-PARTY-NOTICES.md`, listing the third-party components it contains with their licences.
 - GGUF and safetensors model files open with "Header", "Metadata" (GGUF only) and "Tensors" tabs, recognized by content; scripts read them as `binary.raw.parsedGguf` / `binary.raw.parsedSafetensors`.
 - Navigable nodes in the component "Dependencies" graph: double-clicking a core module or a nested component opens it in its own tab, and double-clicking an import or an export selects that entity's bytes in the hex view. The byte ranges travel with the graph the parser Worker already produces, so no reparse happens on the Window. Core and component instances stay inert — the parser records no per-entry offset for them.
 - .NET assemblies: a ".NET" overview, "Types", "Methods", "Assembly Refs" and ".NET Metadata" tabs, an "IL Disassembly" view (one foldable section per type, with resolved call targets and `.try` clauses), and a "Top" breakdown of every section by what owns its bytes — ReadyToRun native code per method, ReadyToRun tables, IL bodies, metadata and resources.

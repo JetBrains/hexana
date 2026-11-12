@@ -198,6 +198,12 @@ object HexanaRoutingPolicies {
             reason = "The immediate Webapp aggregate consumes the embedded Wasm printer.",
         ),
         PathRoutingPolicy(
+            "/license/**",
+            RoutingPolicyKind.TASK_ONLY_LINK,
+            directLanes = setOf(INTELLIJ_LANE, VSCODE_LANE, WEBAPP_LANE, SERVER_CLI_LANE),
+            reason = "Licence and notice texts are packaged into the IntelliJ plugin, the VSIX, the webapp and the MCP/CLI bundles.",
+        ),
+        PathRoutingPolicy(
             "/vscode-plugin/media/editor.css",
             RoutingPolicyKind.TASK_ONLY_LINK,
             directLanes = setOf(WEBAPP_LANE),

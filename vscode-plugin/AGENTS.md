@@ -36,7 +36,9 @@ All three layers reuse the existing KMP modules:
 - Package the extension: `cd vscode-plugin && npx @vscode/vsce package`
 - Build and run locally (no obfuscation): `cd vscode-plugin && ./build-and-run-locally.sh` (or `.bat` on Windows)
 - Run a mock downloads-index API for MCP failure-path testing: `./gradlew :mcp:server:distZip && cd vscode-plugin && npm run mock:mcp-release`
-- Build VSIX ready for distribution: `cd vscode-plugin && ./build-release-package.sh` (or `.bat` on Windows)
+- Build VSIX ready for distribution: `cd vscode-plugin && ./build-release-package.sh` (or `.bat` on Windows). It runs
+  `npm install` before Gradle because `:vscode-plugin:generateThirdPartyNotices` reads `node_modules`, and ends with
+  `node scripts/verify-vsix-notices.js` on the finished VSIX.
 - Publish to VS Code Marketplace and Open VSX: `cd vscode-plugin && ./publish.sh` (or `.bat` on Windows)
   - Requires `VSCE_PAT` and `OVSX_PAT` environment variables. Set `PUBLISH_TARGET` to `vscode`, `openvsx`, or `all` (default).
 
@@ -105,3 +107,5 @@ update `TableTabEnricher.kt`.
   Unavailable file IDs must fail the assertion rather than make unrelated files compare equal.
   Compile the extension before running adapter unit regressions: `cd vscode-plugin && npm run compile`, then
   `cd test && npm run unit`.
+- `THIRD-PARTY-NOTICES.md` at the extension root is generated (git-ignored) and must stay in the VSIX; do not
+  re-add `*.js.LICENSE.txt` or the notices to `.vscodeignore`.

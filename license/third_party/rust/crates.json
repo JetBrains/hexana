@@ -1,0 +1,534 @@
+[
+  {
+    "name": "anyhow",
+    "version": "1.0.102",
+    "source": "crates.io",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/dtolnay/anyhow",
+    "modules": [
+      "wasmprinter_wrapper"
+    ],
+    "files": [
+      "rust/anyhow-1.0.102/LICENSE-APACHE",
+      "rust/anyhow-1.0.102/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "bitflags",
+    "version": "2.13.2",
+    "source": "crates.io",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/bitflags/bitflags",
+    "modules": [
+      "wasmprinter_wrapper",
+      "wat2wasm"
+    ],
+    "files": [
+      "rust/bitflags-2.13.2/LICENSE-APACHE",
+      "rust/bitflags-2.13.2/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "bitvec",
+    "version": "1.0.1",
+    "source": "crates.io",
+    "license": "MIT",
+    "repository": "https://github.com/bitvecto-rs/bitvec",
+    "modules": [
+      "disassembler"
+    ],
+    "files": [
+      "rust/bitvec-1.0.1/LICENSE.txt"
+    ]
+  },
+  {
+    "name": "bumpalo",
+    "version": "3.20.2",
+    "source": "crates.io",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/fitzgen/bumpalo",
+    "modules": [
+      "wat2wasm"
+    ],
+    "files": [
+      "rust/bumpalo-3.20.2/LICENSE-APACHE",
+      "rust/bumpalo-3.20.2/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "cfg-if",
+    "version": "1.0.5",
+    "source": "crates.io",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-lang/cfg-if",
+    "modules": [
+      "disassembler"
+    ],
+    "files": [
+      "rust/cfg-if-1.0.5/LICENSE-APACHE",
+      "rust/cfg-if-1.0.5/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "equivalent",
+    "version": "1.0.3",
+    "source": "crates.io",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/indexmap-rs/equivalent",
+    "modules": [
+      "wasmprinter_wrapper",
+      "wat2wasm"
+    ],
+    "files": [
+      "rust/equivalent-1.0.3/LICENSE-APACHE",
+      "rust/equivalent-1.0.3/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "foldhash",
+    "version": "0.1.5",
+    "source": "crates.io",
+    "license": "Zlib",
+    "repository": "https://github.com/orlp/foldhash",
+    "modules": [
+      "wasmprinter_wrapper",
+      "wat2wasm"
+    ],
+    "files": [
+      "rust/foldhash-0.1.5/LICENSE"
+    ]
+  },
+  {
+    "name": "funty",
+    "version": "2.0.0",
+    "source": "crates.io",
+    "license": "MIT",
+    "repository": "https://github.com/myrrlyn/funty",
+    "modules": [
+      "disassembler"
+    ],
+    "files": [
+      "rust/funty-2.0.0/LICENSE.txt"
+    ]
+  },
+  {
+    "name": "hashbrown",
+    "version": "0.15.5",
+    "source": "crates.io",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-lang/hashbrown",
+    "modules": [
+      "wasmprinter_wrapper",
+      "wat2wasm"
+    ],
+    "files": [
+      "rust/hashbrown-0.15.5/LICENSE-APACHE",
+      "rust/hashbrown-0.15.5/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "hashbrown",
+    "version": "0.16.1",
+    "source": "crates.io",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-lang/hashbrown",
+    "modules": [
+      "wasmprinter_wrapper"
+    ],
+    "files": [
+      "rust/hashbrown-0.16.1/LICENSE-APACHE",
+      "rust/hashbrown-0.16.1/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "hashbrown",
+    "version": "0.17.1",
+    "source": "crates.io",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-lang/hashbrown",
+    "modules": [
+      "wat2wasm"
+    ],
+    "files": [
+      "rust/hashbrown-0.17.1/LICENSE-APACHE",
+      "rust/hashbrown-0.17.1/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "indexmap",
+    "version": "2.13.0",
+    "source": "crates.io",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/indexmap-rs/indexmap",
+    "modules": [
+      "wasmprinter_wrapper"
+    ],
+    "files": [
+      "rust/indexmap-2.13.0/LICENSE-APACHE",
+      "rust/indexmap-2.13.0/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "indexmap",
+    "version": "2.14.2",
+    "source": "crates.io",
+    "license": "Apache-2.0 OR MIT",
+    "repository": "https://github.com/indexmap-rs/indexmap",
+    "modules": [
+      "wat2wasm"
+    ],
+    "files": [
+      "rust/indexmap-2.14.2/LICENSE-APACHE",
+      "rust/indexmap-2.14.2/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "leb128fmt",
+    "version": "0.1.0",
+    "source": "crates.io",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/bluk/leb128fmt",
+    "modules": [
+      "wat2wasm"
+    ],
+    "files": [
+      "rust/leb128fmt-0.1.0/LICENSE-APACHE",
+      "rust/leb128fmt-0.1.0/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "memchr",
+    "version": "2.8.3",
+    "source": "crates.io",
+    "license": "Unlicense OR MIT",
+    "repository": "https://github.com/BurntSushi/memchr",
+    "modules": [
+      "wat2wasm"
+    ],
+    "files": [
+      "rust/memchr-2.8.3/COPYING",
+      "rust/memchr-2.8.3/LICENSE-MIT",
+      "rust/memchr-2.8.3/UNLICENSE"
+    ]
+  },
+  {
+    "name": "num-traits",
+    "version": "0.2.19",
+    "source": "crates.io",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/rust-num/num-traits",
+    "modules": [
+      "disassembler"
+    ],
+    "files": [
+      "rust/num-traits-0.2.19/LICENSE-APACHE",
+      "rust/num-traits-0.2.19/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "radium",
+    "version": "0.7.0",
+    "source": "crates.io",
+    "license": "MIT",
+    "repository": "https://github.com/bitvecto-rs/radium",
+    "modules": [
+      "disassembler"
+    ],
+    "files": [
+      "rust/radium-0.7.0/LICENSE.txt"
+    ]
+  },
+  {
+    "name": "riscv-decode",
+    "version": "0.2.3",
+    "source": "crates.io",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/fintelia/riscv-decode",
+    "modules": [
+      "disassembler"
+    ],
+    "files": [
+      "licenses/Apache-2.0.txt"
+    ],
+    "note": "UNVERIFIED: neither the crate source nor the upstream repository ships a licence file or states a copyright holder; the text is the canonical Apache-2.0 text from https://www.apache.org/licenses/LICENSE-2.0.txt (the crate declares `MIT OR Apache-2.0`)."
+  },
+  {
+    "name": "semver",
+    "version": "1.0.27",
+    "source": "crates.io",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/dtolnay/semver",
+    "modules": [
+      "wasmprinter_wrapper"
+    ],
+    "files": [
+      "rust/semver-1.0.27/LICENSE-APACHE",
+      "rust/semver-1.0.27/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "semver",
+    "version": "1.0.28",
+    "source": "crates.io",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/dtolnay/semver",
+    "modules": [
+      "wat2wasm"
+    ],
+    "files": [
+      "rust/semver-1.0.28/LICENSE-APACHE",
+      "rust/semver-1.0.28/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "serde",
+    "version": "1.0.229",
+    "source": "crates.io",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/serde-rs/serde",
+    "modules": [
+      "wasmprinter_wrapper",
+      "wat2wasm"
+    ],
+    "files": [
+      "rust/serde-1.0.229/LICENSE-APACHE",
+      "rust/serde-1.0.229/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "serde_core",
+    "version": "1.0.229",
+    "source": "crates.io",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/serde-rs/serde",
+    "modules": [
+      "wasmprinter_wrapper",
+      "wat2wasm"
+    ],
+    "files": [
+      "rust/serde_core-1.0.229/LICENSE-APACHE",
+      "rust/serde_core-1.0.229/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "tap",
+    "version": "1.0.1",
+    "source": "crates.io",
+    "license": "MIT",
+    "repository": "https://github.com/myrrlyn/tap",
+    "modules": [
+      "disassembler"
+    ],
+    "files": [
+      "rust/tap-1.0.1/LICENSE.txt"
+    ]
+  },
+  {
+    "name": "termcolor",
+    "version": "1.4.1",
+    "source": "crates.io",
+    "license": "Unlicense OR MIT",
+    "repository": "https://github.com/BurntSushi/termcolor",
+    "modules": [
+      "wasmprinter_wrapper"
+    ],
+    "files": [
+      "rust/termcolor-1.4.1/COPYING",
+      "rust/termcolor-1.4.1/LICENSE-MIT",
+      "rust/termcolor-1.4.1/UNLICENSE"
+    ]
+  },
+  {
+    "name": "unicode-width",
+    "version": "0.2.2",
+    "source": "crates.io",
+    "license": "MIT OR Apache-2.0",
+    "repository": "https://github.com/unicode-rs/unicode-width",
+    "modules": [
+      "wat2wasm"
+    ],
+    "files": [
+      "rust/unicode-width-0.2.2/LICENSE-APACHE",
+      "rust/unicode-width-0.2.2/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "wasi",
+    "version": "0.14.7+wasi-0.2.4",
+    "source": "crates.io",
+    "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+    "repository": "https://github.com/bytecodealliance/wasi-rs",
+    "modules": [
+      "webapp_server"
+    ],
+    "files": [
+      "rust/wasi-0.14.7+wasi-0.2.4/LICENSE-APACHE",
+      "rust/wasi-0.14.7+wasi-0.2.4/LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "rust/wasi-0.14.7+wasi-0.2.4/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "wasip2",
+    "version": "1.0.4+wasi-0.2.12",
+    "source": "crates.io",
+    "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+    "repository": "https://github.com/bytecodealliance/wasi-rs",
+    "modules": [
+      "webapp_server"
+    ],
+    "files": [
+      "rust/wasip2-1.0.4+wasi-0.2.12/LICENSE-APACHE",
+      "rust/wasip2-1.0.4+wasi-0.2.12/LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "rust/wasip2-1.0.4+wasi-0.2.12/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "wasm-encoder",
+    "version": "0.245.1",
+    "source": "git+https://github.com/bytecodealliance/wasm-tools@c463da0e0a6310f5c33173164d8b745164bc333a",
+    "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+    "repository": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasm-encoder",
+    "modules": [
+      "wat2wasm"
+    ],
+    "files": [
+      "rust/wasm-tools/LICENSE-APACHE",
+      "rust/wasm-tools/LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "rust/wasm-tools/LICENSE-MIT"
+    ],
+    "note": "The crate source ships no licence file; the texts are the repository-root files of https://github.com/bytecodealliance/wasm-tools (identical at tag v1.241.2 and at revision c463da0e0a6310f5c33173164d8b745164bc333a)."
+  },
+  {
+    "name": "wasmparser",
+    "version": "0.241.2",
+    "source": "crates.io",
+    "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+    "repository": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmparser",
+    "modules": [
+      "wasmprinter_wrapper",
+      "wat2wasm"
+    ],
+    "files": [
+      "rust/wasm-tools/LICENSE-APACHE",
+      "rust/wasm-tools/LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "rust/wasm-tools/LICENSE-MIT"
+    ],
+    "note": "The crate source ships no licence file; the texts are the repository-root files of https://github.com/bytecodealliance/wasm-tools (identical at tag v1.241.2 and at revision c463da0e0a6310f5c33173164d8b745164bc333a)."
+  },
+  {
+    "name": "wasmprinter",
+    "version": "0.241.2",
+    "source": "crates.io",
+    "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+    "repository": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wasmprinter",
+    "modules": [
+      "wasmprinter_wrapper"
+    ],
+    "files": [
+      "rust/wasm-tools/LICENSE-APACHE",
+      "rust/wasm-tools/LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "rust/wasm-tools/LICENSE-MIT"
+    ],
+    "note": "The crate source ships no licence file; the texts are the repository-root files of https://github.com/bytecodealliance/wasm-tools (identical at tag v1.241.2 and at revision c463da0e0a6310f5c33173164d8b745164bc333a)."
+  },
+  {
+    "name": "wast",
+    "version": "245.0.1",
+    "source": "git+https://github.com/bytecodealliance/wasm-tools@c463da0e0a6310f5c33173164d8b745164bc333a",
+    "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+    "repository": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wast",
+    "modules": [
+      "wat2wasm"
+    ],
+    "files": [
+      "rust/wasm-tools/LICENSE-APACHE",
+      "rust/wasm-tools/LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "rust/wasm-tools/LICENSE-MIT"
+    ],
+    "note": "The crate source ships no licence file; the texts are the repository-root files of https://github.com/bytecodealliance/wasm-tools (identical at tag v1.241.2 and at revision c463da0e0a6310f5c33173164d8b745164bc333a)."
+  },
+  {
+    "name": "wat",
+    "version": "1.245.1",
+    "source": "git+https://github.com/bytecodealliance/wasm-tools@c463da0e0a6310f5c33173164d8b745164bc333a",
+    "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+    "repository": "https://github.com/bytecodealliance/wasm-tools/tree/main/crates/wat",
+    "modules": [
+      "wat2wasm"
+    ],
+    "files": [
+      "rust/wasm-tools/LICENSE-APACHE",
+      "rust/wasm-tools/LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "rust/wasm-tools/LICENSE-MIT"
+    ],
+    "note": "The crate source ships no licence file; the texts are the repository-root files of https://github.com/bytecodealliance/wasm-tools (identical at tag v1.241.2 and at revision c463da0e0a6310f5c33173164d8b745164bc333a)."
+  },
+  {
+    "name": "wit-bindgen",
+    "version": "0.57.1",
+    "source": "crates.io",
+    "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+    "repository": "https://github.com/bytecodealliance/wit-bindgen",
+    "modules": [
+      "webapp_server"
+    ],
+    "files": [
+      "rust/wit-bindgen-0.57.1/LICENSE-APACHE",
+      "rust/wit-bindgen-0.57.1/LICENSE-Apache-2.0_WITH_LLVM-exception",
+      "rust/wit-bindgen-0.57.1/LICENSE-MIT"
+    ]
+  },
+  {
+    "name": "wyz",
+    "version": "0.5.1",
+    "source": "crates.io",
+    "license": "MIT",
+    "repository": "https://github.com/myrrlyn/wyz",
+    "modules": [
+      "disassembler"
+    ],
+    "files": [
+      "rust/wyz-0.5.1/LICENSE.txt"
+    ]
+  },
+  {
+    "name": "yaxpeax-arch",
+    "version": "0.3.3",
+    "source": "crates.io",
+    "license": "0BSD",
+    "repository": "https://git.iximeow.net/yaxpeax-arch/",
+    "modules": [
+      "disassembler"
+    ],
+    "files": [
+      "rust/yaxpeax-arch-0.3.3/LICENSE"
+    ]
+  },
+  {
+    "name": "yaxpeax-arm",
+    "version": "0.4.0",
+    "source": "crates.io",
+    "license": "0BSD",
+    "repository": "http://git.iximeow.net/yaxpeax-arm/",
+    "modules": [
+      "disassembler"
+    ],
+    "files": [
+      "licenses/0BSD.txt"
+    ],
+    "note": "UNVERIFIED: neither the crate source nor the upstream repository ships a licence file or states a copyright holder; the text is the SPDX 0BSD template (license-list-data v3.29.0, https://github.com/spdx/license-list-data/blob/main/text/0BSD.txt) with its placeholders unfilled."
+  },
+  {
+    "name": "yaxpeax-x86",
+    "version": "2.0.0",
+    "source": "crates.io",
+    "license": "0BSD",
+    "repository": "http://git.iximeow.net/yaxpeax-x86/",
+    "modules": [
+      "disassembler"
+    ],
+    "files": [
+      "rust/yaxpeax-x86-2.0.0/LICENSE"
+    ]
+  }
+]

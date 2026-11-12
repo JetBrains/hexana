@@ -7,7 +7,7 @@ const digest = /^sha256:[0-9a-f]{64}$/;
 const revision = /^[0-9a-f]{40}$/;
 const version = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const branch = /^release\/webapp\/(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-const evidenceNames = ["build-identity.json", "checksums.sha256", "package-manifest.json", "provenance.json", "release-info.json", "resolved-dependencies.json", "sbom.cdx.json"];
+const evidenceNames = ["THIRD-PARTY-NOTICES.md", "build-identity.json", "checksums.sha256", "package-manifest.json", "provenance.json", "release-info.json", "resolved-dependencies.json", "sbom.cdx.json"];
 const imageMediaTypePairs = [
   ["application/vnd.oci.image.manifest.v1+json", "application/vnd.oci.image.config.v1+json"],
   ["application/vnd.docker.distribution.manifest.v2+json", "application/vnd.docker.container.image.v1+json"],

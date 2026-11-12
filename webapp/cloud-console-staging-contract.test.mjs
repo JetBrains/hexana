@@ -15,7 +15,7 @@ function fixture(identity) {
   const root = mkdtempSync(join(tmpdir(), "hexana-webapp-staging-"));
   const values = {
     "build-identity.json": `${JSON.stringify(identity)}\n`,
-    "package-manifest.json": "{}\n", "provenance.json": "{}\n", "release-info.json": "{}\n", "resolved-dependencies.json": "{}\n", "sbom.cdx.json": "{}\n", "index.html": "static payload\n",
+    "package-manifest.json": "{}\n", "THIRD-PARTY-NOTICES.md": "notices\n", "provenance.json": "{}\n", "release-info.json": "{}\n", "resolved-dependencies.json": "{}\n", "sbom.cdx.json": "{}\n", "index.html": "static payload\n",
   };
   for (const [name, value] of Object.entries(values)) writeFileSync(join(root, name), value);
   const checksums = Object.entries(values).map(([name, value]) => `${sha(value)}  ${name}`).sort().join("\n") + "\n";

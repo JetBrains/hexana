@@ -12,13 +12,17 @@ if not defined VSCODE_CLI (
     exit /b 1
 )
 
-echo == Building Extension Assets ==
-call "%ROOT_DIR%\gradlew.bat" :vscode-plugin:assembleExtensionAssets
+echo == Installing npm dependencies ==
+cd /d "%SCRIPT_DIR%"
+call npm install
+if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
+
+REM The third-party notices read the production npm dependencies from node_modules, so npm install comes first.
+echo == Building Extension Assets and third-party notices ==
+call "%ROOT_DIR%\gradlew.bat" :vscode-plugin:assembleExtensionAssets :vscode-plugin:generateThirdPartyNotices
 if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
 
 echo == Building plugin shim ==
-cd /d "%SCRIPT_DIR%"
-call npm install
 call npm run compile
 
 echo == Packaging ==
@@ -26,6 +30,10 @@ call npx @vscode/vsce package --allow-missing-repository
 
 for /f "usebackq delims=" %%v in (`node -p "require('./package.json').version"`) do set VSIX_VERSION=%%v
 set VSIX_FILE=hexana-wasm-%VSIX_VERSION%.vsix
+
+echo == Verifying third-party notices in the VSIX ==
+call node scripts\verify-vsix-notices.js "%VSIX_FILE%"
+if %ERRORLEVEL% neq 0 exit /b %ERRORLEVEL%
 
 echo == Registering the plugin in VSCode ==
 "%VSCODE_CLI%" --install-extension "%VSIX_FILE%" --force

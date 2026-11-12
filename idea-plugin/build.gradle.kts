@@ -8,6 +8,7 @@ import org.jetbrains.intellij.platform.gradle.tasks.PublishPluginTask
 import org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask
 import org.jetbrains.intellij.platform.gradle.tasks.SignPluginTask
 import org.jetbrains.intellij.platform.gradle.tasks.aware.SplitModeAware
+import java.util.zip.ZipFile
 
 plugins {
     id("java")
@@ -569,4 +570,76 @@ sourceSets.test {
 }
 kotlin.target.compilations.named("test") {
     associateWith(kotlin.target.compilations.getByName("suiteRunner"))
+}
+
+// --- Third-party notices -----------------------------------------------------
+// THIRD-PARTY-NOTICES.md is generated from intellijPlatformRuntimeClasspath, the classpath that PrepareSandbox copies
+// into the plugin's lib/ directory (it resolves a few versions differently from runtimeClasspath), so the ZIP and the
+// notices cannot drift apart. verifyPluginThirdPartyNotices re-checks that on
+// the built ZIP.
+
+apply(from = rootProject.file("gradle/third-party-notices.gradle.kts"))
+
+@Suppress("UNCHECKED_CAST")
+val registerThirdPartyNotices = extra["registerThirdPartyNotices"] as (Map<String, Any?>) -> TaskProvider<Task>
+
+val thirdPartyNoticesFile = layout.buildDirectory.file("generated/third-party-notices/THIRD-PARTY-NOTICES.md")
+val thirdPartyNoticesListing = layout.buildDirectory.file("generated/third-party-notices/components.tsv")
+
+val generateThirdPartyNotices = registerThirdPartyNotices(
+    mapOf(
+        "output" to thirdPartyNoticesFile,
+        "listing" to thirdPartyNoticesListing,
+        "title" to "Hexana IntelliJ Plugin: Third-Party Notices",
+        "description" to "Generates THIRD-PARTY-NOTICES.md for the IntelliJ plugin ZIP.",
+        "mavenClasspaths" to listOf(configurations.named("intellijPlatformRuntimeClasspath")),
+        "requiredModules" to listOf("org.graalvm.polyglot:polyglot"),
+    )
+)
+
+tasks.withType<PrepareSandboxTask>().configureEach {
+    dependsOn(generateThirdPartyNotices)
+    from(thirdPartyNoticesFile) {
+        into(pluginName)
+    }
+}
+
+val verifyPluginThirdPartyNotices = tasks.register("verifyPluginThirdPartyNotices") {
+    group = "verification"
+    description = "Verifies that the plugin ZIP contains THIRD-PARTY-NOTICES.md covering every bundled library."
+    val pluginArchive = tasks.named<Zip>("buildPlugin").flatMap { it.archiveFile }
+    dependsOn(tasks.named("buildPlugin"), generateThirdPartyNotices)
+    inputs.file(pluginArchive)
+    inputs.file(thirdPartyNoticesFile)
+    inputs.file(thirdPartyNoticesListing)
+
+    doLast {
+        val listedFileNames = thirdPartyNoticesListing.get().asFile.readLines()
+            .map { it.split('\t') }
+            .filter { it.size == 3 && it[2].isNotEmpty() }
+            .map { it[2] }
+            .toSet()
+        ZipFile(pluginArchive.get().asFile).use { zip ->
+            val names = zip.entries().asSequence().filterNot { it.isDirectory }.map { it.name }.toList()
+            val noticesEntryName = names.singleOrNull { it.count { c -> c == '/' } == 1 && it.endsWith("/THIRD-PARTY-NOTICES.md") }
+                ?: throw GradleException("The plugin ZIP does not contain exactly one top-level THIRD-PARTY-NOTICES.md: $names")
+            val packaged = zip.getInputStream(zip.getEntry(noticesEntryName)).use { it.readBytes() }
+            if (!packaged.contentEquals(thirdPartyNoticesFile.get().asFile.readBytes())) {
+                throw GradleException("$noticesEntryName in the plugin ZIP differs from the generated notices")
+            }
+            val ownJarPrefix = "${project.name}-"
+            val unlisted = names
+                .filter { it.contains("/lib/") && !it.contains("/lib/modules/") }
+                .map { it.substringAfterLast('/') }
+                .filterNot { it in listedFileNames }
+                .filterNot { it.startsWith(ownJarPrefix) }
+            if (unlisted.isNotEmpty()) {
+                throw GradleException("Bundled libraries missing from THIRD-PARTY-NOTICES.md: $unlisted")
+            }
+        }
+    }
+}
+
+tasks.named("buildPlugin") {
+    finalizedBy(verifyPluginThirdPartyNotices)
 }

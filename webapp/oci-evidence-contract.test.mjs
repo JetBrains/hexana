@@ -15,13 +15,13 @@ function fixture(mode = "release") {
     : { schemaVersion: 1, product: "hexana-webapp", version: "0.1.0", versionSource: "webapp/gradle.properties", revision };
   const values = {
     "build-identity.json": `${JSON.stringify(identity)}\n`,
-    "package-manifest.json": "{}\n", "provenance.json": "{}\n", "release-info.json": "{}\n", "resolved-dependencies.json": "{}\n", "sbom.cdx.json": "{}\n", "index.html": "static payload\n",
+    "package-manifest.json": "{}\n", "THIRD-PARTY-NOTICES.md": "notices\n", "provenance.json": "{}\n", "release-info.json": "{}\n", "resolved-dependencies.json": "{}\n", "sbom.cdx.json": "{}\n", "index.html": "static payload\n",
   };
   for (const [name, value] of Object.entries(values)) writeFileSync(join(root, name), value);
   const checksums = Object.entries(values).map(([name, value]) => `${sha(value)}  ${name}`).sort().join("\n") + "\n";
   writeFileSync(join(root, "checksums.sha256"), checksums);
   writeFileSync(join(root, "package.sha256"), `${sha(checksums)}\n`);
-  const evidence = Object.fromEntries(["build-identity.json", "checksums.sha256", "package-manifest.json", "provenance.json", "release-info.json", "resolved-dependencies.json", "sbom.cdx.json"].map(name => [name, sha(readFileSync(join(root, name)))]));
+  const evidence = Object.fromEntries(["THIRD-PARTY-NOTICES.md", "build-identity.json", "checksums.sha256", "package-manifest.json", "provenance.json", "release-info.json", "resolved-dependencies.json", "sbom.cdx.json"].map(name => [name, sha(readFileSync(join(root, name)))]));
   const manifestDigest = `sha256:${"a".repeat(64)}`;
   const image = { reference: `${repository}@${manifestDigest}`, manifestDigest, configDigest: `sha256:${"b".repeat(64)}`, manifestMediaType: "application/vnd.oci.image.manifest.v1+json", configMediaType: "application/vnd.oci.image.config.v1+json", platform: { os: "linux", architecture: "amd64" } };
   const packageEvidence = { identity, aggregateSha256: sha(checksums), evidence };

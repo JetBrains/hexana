@@ -90,6 +90,8 @@ All agents — the main session and every subagent it dispatches — MUST treat 
 - `graalwasm/`: JVM wrappers around embedded `.wasm` utilities used for built-in `wasm -> wat` and `wat -> wasm`.
 - `wasm-modules/`: Rust sources and Docker build flow that produce the embedded `.wasm` artifacts consumed by `graalwasm/`.
 - `ui-driver-tests/`: slow, external-integration UI tests that download IDE artifacts and install the plugin.
+- `license/`: licence index and the upstream licence texts (`license/third_party/`) that feed the generated
+  `THIRD-PARTY-NOTICES.md` of every shipped artifact. See `license/README.md` and `kb/wiki/entities/third-party-notices.md`.
 - `doc/`: reference material, not a maintained architecture guide.
 - `analysis/`: local research/export scratch data. It is not part of the product build; do not edit it unless the task explicitly targets it.
 
@@ -221,6 +223,19 @@ Existing IDE run configurations currently include:
   - `wasmParser/WasmParser`
   - `binaryProvider/*`
 - All production code uses the `org.jetbrains.hexana` package prefix.
+
+## Third-Party Notices
+
+- Every shipped artifact (IntelliJ plugin ZIP, VSIX, webapp package, MCP/CLI bundles) contains a generated
+  `THIRD-PARTY-NOTICES.md` built by `gradle/third-party-notices.gradle.kts` from the dependencies packaged into that
+  artifact. Do not hand-edit generated notices.
+- A new runtime dependency that ships no licence text makes the generator fail; add a reviewed rule to
+  `license/third_party/maven-licenses.json`. A new embedded `.wasm` module needs its crates in
+  `license/third_party/rust/crates.json`. Details: `license/README.md`.
+- Verify with `./gradlew :idea-plugin:buildPlugin` (runs `verifyPluginThirdPartyNotices`),
+  `node vscode-plugin/scripts/verify-vsix-notices.js <vsix>` (run by `build-release-package.sh`),
+  `./gradlew :webapp:verifyProductionPackage` and `./gradlew :mcp:verifyMcpR8ReleaseArchives`.
+- The IntelliJ notices use `intellijPlatformRuntimeClasspath`, not `runtimeClasspath`, because that is what the ZIP packages.
 
 ## Generated And Derived Files
 

@@ -13,7 +13,7 @@ const deployMaster = bridge.deploy;
 const revision = "0123456789abcdef0123456789abcdef01234567";
 const digest = `sha256:${"a".repeat(64)}`;
 const instanceId = "125306";
-const evidenceFiles = ["build-identity.json", "checksums.sha256", "package-manifest.json", "provenance.json", "release-info.json", "resolved-dependencies.json", "sbom.cdx.json"];
+const evidenceFiles = ["THIRD-PARTY-NOTICES.md", "build-identity.json", "checksums.sha256", "package-manifest.json", "provenance.json", "release-info.json", "resolved-dependencies.json", "sbom.cdx.json"];
 const config = { ...allowedTarget, token: "secret", branch: "master", revision, buildTimeoutMs: 1_000, readinessTimeoutMs: 1_000, pollIntervalMs: 100, sourceBuilds: { nightly: 10, build: 11, scan: 12 } };
 
 function fixture() {

@@ -17,7 +17,7 @@ const revision = "0123456789abcdef0123456789abcdef01234567";
 const digest = `sha256:${"a".repeat(64)}`;
 const config = { ...allowedTarget, token: "secret", branch: "release/webapp/2.7", revision, buildTimeoutMs: 1_000, readinessTimeoutMs: 1_000, pollIntervalMs: 100, sourceBuilds: { release: 10, build: 11, scan: 12 } };
 const vcsRootInstanceId = "125306";
-const evidenceFiles = ["build-identity.json", "checksums.sha256", "package-manifest.json", "provenance.json", "release-info.json", "resolved-dependencies.json", "sbom.cdx.json"];
+const evidenceFiles = ["THIRD-PARTY-NOTICES.md", "build-identity.json", "checksums.sha256", "package-manifest.json", "provenance.json", "release-info.json", "resolved-dependencies.json", "sbom.cdx.json"];
 function fixture() {
     const image = `${policy.imageRepository}@${digest}`;
     const receipt = { schemaVersion: 1, kind: "hexana-webapp-oci-evidence", releaseBranch: config.branch, sourceRevision: revision, image: { reference: image, manifestDigest: digest, configDigest: `sha256:${"b".repeat(64)}`, manifestMediaType: "application/vnd.oci.image.manifest.v1+json", configMediaType: "application/vnd.oci.image.config.v1+json", platform: { os: "linux", architecture: "amd64" } }, package: { identity: { schemaVersion: 1, product: "hexana-webapp", version: "2.7.3", versionSource: "webapp/gradle.properties", revision }, aggregateSha256: "c".repeat(64), evidence: Object.fromEntries(evidenceFiles.map(name => [name, "d".repeat(64)])) } };

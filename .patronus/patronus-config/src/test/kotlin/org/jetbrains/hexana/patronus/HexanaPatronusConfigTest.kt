@@ -58,6 +58,10 @@ class HexanaPatronusConfigTest {
             RouteCase("/mcp/server/src/main/kotlin/Server.kt", setOf(SERVER_CLI_LANE)),
             RouteCase("/webapp/src/jsMain/kotlin/App.kt", setOf(WEBAPP_LANE)),
             RouteCase("/build.gradle.kts", allProductLanes),
+            RouteCase(
+                "/license/third_party/components.json",
+                setOf(INTELLIJ_LANE, VSCODE_LANE, WEBAPP_LANE, SERVER_CLI_LANE),
+            ),
             RouteCase("/ui-driver-tests/src/test/kotlin/UiTest.kt", emptySet(), ui = true),
             RouteCase("/.patronus/patronus-config/build.gradle.kts", emptySet()),
             RouteCase("/README.md", emptySet()),

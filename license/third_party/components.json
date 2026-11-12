@@ -1,0 +1,12 @@
+[
+  {
+    "id": "graalvm-community-runtime",
+    "name": "GraalVM Community Edition native-image runtime (Substrate VM and JDK class libraries)",
+    "version": "25.0.0",
+    "spdx": "GPL-2.0-only WITH Classpath-exception-2.0",
+    "url": "https://github.com/oracle/graal/tree/vm-25.0.0",
+    "scope": "native-image executables only (not the JVM/JAR distributions)",
+    "files": ["graalvm-community/LICENSE"],
+    "note": "The native executables are built with GraalVM Community 25.0.0 and embed its runtime. The software as a whole is released under GPL version 2 with the Classpath Exception, which permits linking this runtime into an executable under a different licence."
+  }
+]

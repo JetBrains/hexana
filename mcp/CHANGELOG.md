@@ -12,6 +12,8 @@
   dependencies of the public MCP server, `hexana-cli`, and `hexana-cli-script` distributions.
 
 ### Changed
+- The third-party notice shipped in every MCP and CLI bundle now also lists the Rust crates of the embedded Wasm modules and the upstream NOTICE and licence texts, and the native bundles name the GraalVM Community runtime they embed.
+- `hexana-mcp` logs through `slf4j-simple` instead of logback (stderr only, as before). A logged exception now prints its stack trace on stderr, and log lines read `INFO message` instead of `INFO  hexana-mcp - message`.
 - `hexana-mcp` is now MCP-only and exposes exactly `stdio`, `http`, `doctor`, `version`, and `help`. Direct
   `summarize-binary`, `summarize-module`, `wasm-to-wat`, `run-script`, and `tools` commands remain available only from
   their split CLI products where applicable; MCP protocol tools, including `run_binary_script`, are unchanged.

@@ -81,7 +81,7 @@ Gradle/JDK toolchain. The pinned Trivy image is anonymously readable. Prepare
 these fixed inputs first:
 
 - `webapp/build/oci-release-scan-input/evidence/receipt.json`
-- `webapp/build/oci-release-scan-input/static-package/`, including `sbom.cdx.json`
+- `webapp/build/oci-release-scan-input/static-package/`, including `sbom.cdx.json` and `THIRD-PARTY-NOTICES.md`
 
 From any working directory, invoke the checked-in script with the exact release
 branch and lowercase full source revision:

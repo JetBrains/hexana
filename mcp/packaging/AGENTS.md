@@ -31,6 +31,14 @@ This folder contains client-specific wrapper layouts for the standalone MCP runt
 - Public Claude/Codex release packages run R8 at build time and ship `server/lib/hexana-runtime-obfuscated.jar`.
   Do not ship R8 itself, `mcp/build/r8/mapping.txt`, or the pre-obfuscation Hexana-owned runtime jars.
 
+## Third-Party Notices
+
+- `THIRD-PARTY-NOTICES.md` in every JVM and native bundle comes from `:mcp:generateThirdPartyNotices`, which uses the
+  shared `gradle/third-party-notices.gradle.kts`. It covers the union of the MCP server and CLI runtime classpaths, the
+  Rust crates of embedded Wasm modules found on them, and the GraalVM Community native-image runtime
+  (GPL-2.0 WITH Classpath-exception-2.0, labelled as applying to native executables). The packaging validators compare
+  the bundled file byte for byte with the generated one.
+
 ## Testing
 
 - Run `./gradlew :mcp:assembleMcpPackagingPlain :mcp:server:plainMcpPackagingSmoke` to verify the pre-R8 JVM fallback

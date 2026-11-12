@@ -8,7 +8,7 @@ const branchPattern = /^release\/webapp\/(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const revisionPattern = /^[0-9a-f]{40}$/;
 const digestPattern = /^sha256:[0-9a-f]{64}$/;
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-const evidenceFiles = ["build-identity.json", "checksums.sha256", "package-manifest.json", "provenance.json", "release-info.json", "resolved-dependencies.json", "sbom.cdx.json"];
+const evidenceFiles = ["THIRD-PARTY-NOTICES.md", "build-identity.json", "checksums.sha256", "package-manifest.json", "provenance.json", "release-info.json", "resolved-dependencies.json", "sbom.cdx.json"];
 const normalizeGeneratedScript = value => {
     const normalized = [];
     let rawHeredocLines = 0;

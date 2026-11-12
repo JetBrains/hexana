@@ -10,7 +10,7 @@ dependency surfaces are, and the results of the 2026-10-27 audit.
 | JVM/KMP libraries + Gradle plugins | `gradle/libs.versions.toml`; a few hard-coded coordinates in `disassembly/capstone-wasm/build.gradle.kts` (chicory, redline) and `jvm-jit-jmh/build.gradle.kts` (jmh, asm) | yes (plugin ZIP, MCP server, CLI products) |
 | VS Code extension npm | `vscode-plugin/package.json` + lock, with `overrides` | build/publish tooling (`vsce`, `ovsx`) + runtime `adm-zip`, `semver` |
 | VS Code UI-test npm | `vscode-plugin/test/package.json` + lock, with `overrides` | no (test only) |
-| Rust → embedded `.wasm` | `wasm-modules/*/Cargo.toml` (no committed `Cargo.lock`; `wat2wasm` tracks wasm-tools git HEAD) | yes, as prebuilt `.wasm` in `graalwasm/` |
+| Rust → embedded `.wasm` | `wasm-modules/*/Cargo.toml` and the committed `wasm-modules/*/Cargo.lock` (`wat2wasm` pins wasm-tools to revision `c463da0e`) | yes, as prebuilt `.wasm` in `graalwasm/` |
 | Docker images | `webapp/Dockerfile` (node verifier stages + pinned nginx final image), fixture Dockerfiles (`debian:bookworm-slim`, `rust:1-bookworm`) | only the webapp nginx final image |
 
 ## Method

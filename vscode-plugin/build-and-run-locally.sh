@@ -80,12 +80,15 @@ run_vscode_cli() {
     "$VSCODE_CLI" "${args[@]}"
 }
 
-echo "== Building Extension Assets =="
-"$ROOT_DIR/gradlew" :vscode-plugin:assembleExtensionAssets
-
-echo "== Building plugin shim =="
+echo "== Installing npm dependencies =="
 cd "$SCRIPT_DIR"
 npm install
+
+# The third-party notices read the production npm dependencies from node_modules, so npm install comes first.
+echo "== Building Extension Assets and third-party notices =="
+"$ROOT_DIR/gradlew" :vscode-plugin:assembleExtensionAssets :vscode-plugin:generateThirdPartyNotices
+
+echo "== Building plugin shim =="
 npm run compile
 
 echo "== Packaging =="
@@ -93,6 +96,9 @@ npx @vscode/vsce package --allow-missing-repository
 
 VSIX_VERSION=$(node -p "require('./package.json').version")
 VSIX_FILE="hexana-wasm-${VSIX_VERSION}.vsix"
+
+echo "== Verifying third-party notices in the VSIX =="
+node scripts/verify-vsix-notices.js "$VSIX_FILE"
 
 echo "== Registering the plugin in VSCode =="
 VSCODE_USER_DATA_DIR=""

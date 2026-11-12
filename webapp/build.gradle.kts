@@ -184,6 +184,34 @@ private fun json(value: String): String = buildString {
 
 private fun packageFailure(message: String): Nothing = throw GradleException("Invalid production webapp package: $message")
 
+apply(from = rootProject.file("gradle/third-party-notices.gradle.kts"))
+
+@Suppress("UNCHECKED_CAST")
+private val registerThirdPartyNotices = extra["registerThirdPartyNotices"] as (Map<String, Any?>) -> TaskProvider<Task>
+
+private val thirdPartyNoticesFileName = "THIRD-PARTY-NOTICES.md"
+private val generatedThirdPartyNotices = layout.buildDirectory.file("generated/third-party-notices/$thirdPartyNoticesFileName")
+
+// The npm roots are the `dependencies` of the Kotlin/JS package.json files of both webpack entry points; the
+// embedded Wasm printer is the only Rust-built module shipped in the package.
+private val generateThirdPartyNotices = registerThirdPartyNotices(
+    mapOf(
+        "output" to generatedThirdPartyNotices,
+        "title" to "Hexana Web App: Third-Party Notices",
+        "description" to "Generates THIRD-PARTY-NOTICES.md for the production webapp package.",
+        "mavenClasspaths" to listOf(
+            configurations.named("jsRuntimeClasspath"),
+            configurations.named("jsParserWorkerRuntimeClasspath"),
+        ),
+        "npmNodeModules" to rootProject.layout.buildDirectory.dir("js/node_modules"),
+        "npmPackageJsons" to listOf("hexana-webapp", "hexana-webapp-parserWorker").map { packageName ->
+            rootProject.layout.buildDirectory.file("js/packages/$packageName/package.json").map { it.asFile }
+        },
+        "rustModules" to listOf("wasmprinter_wrapper"),
+        "dependsOn" to listOf(":kotlinNpmInstall", tasks.named("jsPackageJson"), tasks.named("jsParserWorkerPackageJson")),
+    )
+)
+
 private val productionSourceAssets = listOf(
     "index.html",
     "robots.txt",
@@ -315,6 +343,25 @@ private fun productionCacheControl(path: String): String = when {
 
 private fun hostingPolicyJson(): String = "{\"schemaVersion\":1,\"headers\":{\"Content-Security-Policy\":${json(productionCsp)},\"X-Content-Type-Options\":\"nosniff\",\"Referrer-Policy\":\"no-referrer\",\"Permissions-Policy\":\"geolocation=(), microphone=(), camera=(), payment=(), usb=()\",\"X-Frame-Options\":\"DENY\",\"Cross-Origin-Opener-Policy\":\"same-origin\",\"Cross-Origin-Embedder-Policy\":\"require-corp\",\"Cross-Origin-Resource-Policy\":\"same-origin\"},\"edgeHeaders\":{\"Strict-Transport-Security\":\"max-age=31536000\"},\"hstsScope\":\"HTTPS edge-only: configure this header at the TLS terminator; the static origin does not terminate TLS.\",\"cache\":{\"index.html\":\"no-cache\",\"assets/*\":\"public, max-age=31536000, immutable\",\"evidence\":\"no-store\"},\"coopCoepDecision\":\"enabled: all app, worker, and Wasm resources are same-origin and the production-package smoke verifies worker parsing under COOP/COEP\"}\n"
 
+private fun verifyThirdPartyNotices(noticesFile: File, components: List<ResolvedRuntimeComponent>) {
+    if (!noticesFile.isFile) packageFailure("missing $thirdPartyNoticesFileName")
+    val notices = noticesFile.readText()
+    if (generatedThirdPartyNotices.get().asFile.readText() != notices) {
+        packageFailure("$thirdPartyNoticesFileName differs from the generated notices for the resolved runtime components")
+    }
+    // The resolution result names the Kotlin Multiplatform root module while the notices name the module whose
+    // artifact is packaged (`name-js`).
+    val missing = components.filter { it.purl != null }
+        .filterNot { component ->
+            listOf(component.name, "${component.name}-js").any { name ->
+                "### `${component.group}:$name:${component.version}`" in notices
+            }
+        }
+        .map { "${it.group}:${it.name}:${it.version}" }
+    if (missing.isNotEmpty()) packageFailure("$thirdPartyNoticesFileName omits resolved runtime components: $missing")
+    if ("cargo:" !in notices) packageFailure("$thirdPartyNoticesFileName omits the embedded Wasm printer crates")
+}
+
 private fun verifyProductionPackage(packageDir: File) {
     if (!packageDir.isDirectory) packageFailure("missing package directory ${packageDir.absolutePath}")
     val manifest = packageDir.resolve("package-manifest.json")
@@ -358,6 +405,7 @@ private fun verifyProductionPackage(packageDir: File) {
     if (packageDir.resolve("hosting-policy.json").readText() != hostingPolicyJson()) {
         packageFailure("deployed-equivalent hosting policy is missing or changed")
     }
+    verifyThirdPartyNotices(packageDir.resolve(thirdPartyNoticesFileName), resolvedComponents)
     checksumEntries.forEach { (path, hash) ->
         val file = packageDir.resolve(path)
         if (!file.isFile || sha256(file) != hash) packageFailure("hash mismatch for $path")
@@ -379,6 +427,7 @@ private fun verifyProductionPackage(packageDir: File) {
         "package-manifest.json",
         "checksums.sha256",
         "package.sha256",
+        thirdPartyNoticesFileName,
     )
     if (actualFiles.filterNot { it.startsWith("assets/") } != nonAssetAllowlist.sorted()) {
         packageFailure("non-asset allowlist mismatch")
@@ -613,7 +662,7 @@ tasks.register<Exec>("verifyWebappOciEvidenceReceipt") {
 val packageProductionWebapp by tasks.registering {
     group = "distribution"
     description = "Produces a deterministic, immutable static package from the browser distribution."
-    dependsOn(tasks.named("jsBrowserDistribution"))
+    dependsOn(tasks.named("jsBrowserDistribution"), generateThirdPartyNotices)
 
     val sourceDir = layout.buildDirectory.dir("dist/js/productionExecutable")
     val packageDir = layout.buildDirectory.dir("production-package")
@@ -625,6 +674,7 @@ val packageProductionWebapp by tasks.registering {
         project.file("src/jsMain/resources/index.html"),
         webappVersionPropertiesFile,
         project.file("CHANGELOG.md"),
+        generatedThirdPartyNotices,
     )
     inputs.property("webappRevision", webappRevision)
     inputs.property("webappArtifactVersion", webappArtifactVersion)
@@ -680,6 +730,7 @@ val packageProductionWebapp by tasks.registering {
             .replace(releaseInfoPlaceholder, releaseInfo.trimEnd())
             .also { output.resolve("index.html").writeText(it, StandardCharsets.UTF_8) }
         source.resolve("robots.txt").copyTo(output.resolve("robots.txt"), overwrite = true)
+        generatedThirdPartyNotices.get().asFile.copyTo(output.resolve(thirdPartyNoticesFileName), overwrite = true)
 
         val resolvedComponents = resolvedRuntimeComponents(revision)
         val payloadFiles = output.walkTopDown().filter { it.isFile }.map { file ->
