@@ -14,7 +14,11 @@ object HexanaAnalytics {
         distinctIdProvider: DistinctIdProvider,
         globalProperties: Map<String, Any> = emptyMap()
     ) {
-        _client = createPlatformClient(config, consentProvider, distinctIdProvider, globalProperties)
+        _client = if (config.isEnabled) {
+            createPlatformClient(config, consentProvider, distinctIdProvider, globalProperties)
+        } else {
+            NoOpAnalyticsClient
+        }
     }
 
     fun shutdown() {

@@ -97,6 +97,27 @@ class PostHogJsClientHttpTest {
     }
 
     @Test
+    fun blankApiKeySendsNothingEvenWithConsentAndConfiguredHost() = runTest {
+        val server = FakePostHogNodeServer.start()
+        try {
+            withProcessEnv(AnalyticsConfig.HOST_ENV_VAR, server.url) {
+                HexanaAnalytics.initialize(
+                    config = AnalyticsConfig(apiKey = "", flushAt = 1, flushIntervalMs = 1_000),
+                    consentProvider = ConsentProvider { true },
+                    distinctIdProvider = DistinctIdProvider { TEST_DISTINCT_ID },
+                )
+                HexanaAnalytics.client.capture(HexanaEvent.HexTabSelected("Functions", HexanaEvent.Surface.VSCODE_EXTENSION))
+                HexanaAnalytics.client.flush()
+
+                server.assertNoRequests()
+            }
+        } finally {
+            HexanaAnalytics.shutdown()
+            server.close()
+        }
+    }
+
+    @Test
     fun defaultHostCanBeOverriddenWithEnvironmentVariable() = runTest {
         val server = FakePostHogNodeServer.start()
         withProcessEnv(AnalyticsConfig.HOST_ENV_VAR, server.url) {

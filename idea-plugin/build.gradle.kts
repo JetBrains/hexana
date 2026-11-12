@@ -222,6 +222,7 @@ tasks {
     }
 
     named<PublishPluginTask>("publishPlugin") {
+        dependsOn(":analytics:api:verifyAnalyticsReleaseKey")
         hexanaPublishPluginArchiveFile?.let {
             val explicitPublishChannel = hexanaPublishChannel
                 ?: throw GradleException(

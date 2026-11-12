@@ -296,6 +296,18 @@ Docker build instructions for the Rust modules already exist in `wasm-modules/RE
 - `graalwasm/` or embedded converter changes: run the directly affected plugin tests and the existing `:graalwasm:wat2wasm:test` run configuration if relevant.
 - `ui-driver-tests/` is intentionally expensive. Do not run it unless your change affects plugin packaging, IDE startup, installation flow, or end-to-end UI behavior.
 
+## PostHog Build Key
+
+- The PostHog project key is not in the source. `analytics/api` generates `AnalyticsBuildConfig` (`commonMain`) from the
+  Gradle property `hexana.posthog.apiKey`, falling back to env `HEXANA_POSTHOG_BUILD_API_KEY`. A blank key disables
+  analytics: `HexanaAnalytics.initialize`, `createBrowserAnalyticsClient` and the CLI telemetry never create a client or
+  send anything. The runtime override `HEXANA_POSTHOG_KEY` (MCP) still wins.
+- `hexana.release=true` (or env `HEXANA_RELEASE_BUILD=true`) marks a release build: `:analytics:api:verifyAnalyticsReleaseKey`
+  then fails any build that compiles `analytics:api` without a key, and `:idea-plugin:publishPlugin` depends on it too.
+  TeamCity release/publish builds set both; local, PR and fork builds need neither.
+- Tests must pass an explicit `AnalyticsConfig(apiKey = "test-key")`; never rely on the build-time default key.
+- Never print, log or commit the real key. Only obvious placeholders may appear in the repository, such as in `.claude/agents/posthog-expert.md`.
+
 ## Known Project Quirks
 
 - `README.md` is mostly publishing-oriented and does not describe the implementation in enough detail. Trust code, build files, and nested `AGENTS.md` files over the README for architecture.

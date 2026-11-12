@@ -59,6 +59,8 @@ consult-first / write-back rules.
   audit them (npm audit + OSV batch API), and the 2026-10-27 audit results.
 - [[entities/ci-env-parameters]] — which `HEXANA_*` env variables each CI script requires instead of hardcoded internal
   targets, and what each does when one is missing.
+- [[entities/analytics-build-key]] — how the PostHog key is injected at build time, the blank-key = analytics-off rule, the
+  opt-in release guard, and the TeamCity params.
 
 ## Sources
 

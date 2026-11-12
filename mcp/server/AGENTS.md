@@ -53,6 +53,8 @@ Read these files before making structural changes:
 - PostHog networking and shutdown-hook behavior add runtime surface that can block native startup/smoke reliability, so
   keep native stdio smoke coverage on the default command line to verify the analytics-enabled native default remains
   stable.
+- The baked-in PostHog key is build-time only (see root `AGENTS.md`). A build without it has analytics disabled, so tests
+  that expect events must pass an explicit key.
 
 ## Testing
 

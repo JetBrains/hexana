@@ -949,7 +949,7 @@ private inline fun withCliAnalytics(
     commandName: String,
     block: () -> ProductCliResult,
 ): ProductCliResult {
-    if (!settings.enabled) {
+    if (!settings.enabled || (settings.key ?: AnalyticsConfig.DEFAULT_API_KEY).isBlank()) {
         return block()
     }
     val analyticsThread = sendCliAnalyticsAsync(product, settings, commandName)

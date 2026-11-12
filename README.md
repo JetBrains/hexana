@@ -277,6 +277,21 @@ Run configurations can target Node.js and the browser in addition
 to Wasmtime, WAMR, and GraalWasm — running only; Node.js and
 browser debugging is not yet wired up in VS Code.
 
+## Usage analytics
+
+Official release builds of Hexana send anonymous usage analytics to JetBrains (via PostHog) by default: which
+features are used, coarse file-type buckets and sizes, and the host IDE or editor and OS. No file contents, file
+names or personal data are sent. You can opt out at any time:
+
+- JetBrains IDEs: turn off **Send anonymous usage analytics** in the Hexana settings.
+- Visual Studio Code: set `hexana.enableStatistics` to `false`, or disable VS Code telemetry.
+- Standalone MCP server: `--telemetry-enabled false` or `HEXANA_MCP_TELEMETRY_ENABLED=false`.
+- CLI products: `--telemetry-enabled false` or `HEXANA_CLI_TELEMETRY_ENABLED=false`.
+- Web app: use the **Anonymous usage analytics** toggle on the page.
+
+Builds from source do not report anything: the analytics key is injected only by the official release pipeline, and a
+build without it has analytics disabled. See [JetBrains Privacy Notice](https://www.jetbrains.com/legal/docs/privacy/privacy/).
+
 ## Documentation
 
 - [User guide](doc/) — work in progress.
@@ -308,6 +323,10 @@ cd hexana
 ./gradlew :vscode-plugin:assembleExtensionAssets
 cd vscode-plugin && npm install && npm run compile && npm run package
 ```
+
+Analytics are disabled in source builds. Official releases bake the PostHog key in at build time from the
+`hexana.posthog.apiKey` Gradle property or the `HEXANA_POSTHOG_BUILD_API_KEY` environment variable, and set
+`hexana.release=true` (or `HEXANA_RELEASE_BUILD=true`) so a release build without the key fails.
 
 Requirements: JDK 21 (Hexana bundles the JetBrains Runtime as the
 build toolchain), Node.js 18 or newer for the VS Code surface, Rust

@@ -13,6 +13,24 @@ class VscodeAnalyticsTest {
     private val wasmHeader = byteArrayOf(0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00)
     private val ggufHeader = byteArrayOf(0x47, 0x47, 0x55, 0x46, 0x00, 0x00, 0x00, 0x00)
 
+    private fun initTestAnalytics(
+        storagePath: String,
+        telemetryEnabled: Boolean,
+        appName: String,
+        appVersion: String,
+        pluginVersion: String,
+        apiKey: String = "test-key",
+    ) {
+        initAnalyticsWith(
+            AnalyticsConfig(apiKey = apiKey),
+            storagePath,
+            telemetryEnabled,
+            appName,
+            appVersion,
+            pluginVersion,
+        )
+    }
+
     @AfterTest
     fun tearDown() {
         shutdownAnalytics()
@@ -25,7 +43,7 @@ class VscodeAnalyticsTest {
         val server = FakePostHogNodeServer.start()
         try {
             withProcessEnv(AnalyticsConfig.HOST_ENV_VAR, server.url) {
-                initAnalytics(
+                initTestAnalytics(
                     storagePath = temporaryStoragePath(),
                     telemetryEnabled = true,
                     appName = "Visual Studio Code",
@@ -57,7 +75,7 @@ class VscodeAnalyticsTest {
         val server = FakePostHogNodeServer.start()
         try {
             withProcessEnv(AnalyticsConfig.HOST_ENV_VAR, server.url) {
-                initAnalytics(
+                initTestAnalytics(
                     storagePath = temporaryStoragePath(),
                     telemetryEnabled = true,
                     appName = "Visual Studio Code",
@@ -91,7 +109,7 @@ class VscodeAnalyticsTest {
         val server = FakePostHogNodeServer.start()
         try {
             withProcessEnv(AnalyticsConfig.HOST_ENV_VAR, server.url) {
-                initAnalytics(
+                initTestAnalytics(
                     storagePath = temporaryStoragePath(),
                     telemetryEnabled = true,
                     appName = "Visual Studio Code",
@@ -140,7 +158,7 @@ class VscodeAnalyticsTest {
         val server = FakePostHogNodeServer.start()
         try {
             withProcessEnv(AnalyticsConfig.HOST_ENV_VAR, server.url) {
-                initAnalytics(
+                initTestAnalytics(
                     storagePath = temporaryStoragePath(),
                     telemetryEnabled = true,
                     appName = "Visual Studio Code",
@@ -178,7 +196,7 @@ class VscodeAnalyticsTest {
         val server = FakePostHogNodeServer.start()
         try {
             withProcessEnv(AnalyticsConfig.HOST_ENV_VAR, server.url) {
-                initAnalytics(
+                initTestAnalytics(
                     storagePath = temporaryStoragePath(),
                     telemetryEnabled = true,
                     appName = "Visual Studio Code",
@@ -214,7 +232,7 @@ class VscodeAnalyticsTest {
         val server = FakePostHogNodeServer.start()
         try {
             withProcessEnv(AnalyticsConfig.HOST_ENV_VAR, server.url) {
-                initAnalytics(
+                initTestAnalytics(
                     storagePath = temporaryStoragePath(),
                     telemetryEnabled = false,
                     appName = "Visual Studio Code",
@@ -234,6 +252,33 @@ class VscodeAnalyticsTest {
     }
 
     @Test
+    fun blankApiKeySendsNothingEvenWhenTelemetryIsEnabled() = runTest {
+        if (!isNodeTestRuntime()) return@runTest
+
+        val server = FakePostHogNodeServer.start()
+        try {
+            withProcessEnv(AnalyticsConfig.HOST_ENV_VAR, server.url) {
+                initTestAnalytics(
+                    storagePath = temporaryStoragePath(),
+                    telemetryEnabled = true,
+                    appName = "Visual Studio Code",
+                    appVersion = "1.102.0",
+                    pluginVersion = "9.9.9",
+                    apiKey = "",
+                )
+
+                captureBinaryOpened("keyless.wasm", wasmHeader)
+                flushAnalytics()
+
+                server.assertNoRequests()
+            }
+        } finally {
+            shutdownAnalytics()
+            server.close()
+        }
+    }
+
+    @Test
     fun reinitializingAnalyticsAppliesTelemetryStateChanges() = runTest {
         if (!isNodeTestRuntime()) return@runTest
 
@@ -241,13 +286,13 @@ class VscodeAnalyticsTest {
         val storagePath = temporaryStoragePath()
         try {
             withProcessEnv(AnalyticsConfig.HOST_ENV_VAR, server.url) {
-                initAnalytics(storagePath, telemetryEnabled = false, appName = "Cursor", appVersion = "1.2.3", pluginVersion = "9.9.9")
+                initTestAnalytics(storagePath, telemetryEnabled = false, appName = "Cursor", appVersion = "1.2.3", pluginVersion = "9.9.9")
                 captureBinaryOpened("a.wasm", wasmHeader)
                 flushAnalytics()
                 server.assertNoRequests()
 
                 shutdownAnalytics()
-                initAnalytics(storagePath, telemetryEnabled = true, appName = "Cursor", appVersion = "1.2.3", pluginVersion = "9.9.9")
+                initTestAnalytics(storagePath, telemetryEnabled = true, appName = "Cursor", appVersion = "1.2.3", pluginVersion = "9.9.9")
                 captureBinaryOpened("b.wasm", wasmHeader)
                 flushUntilEvents(server, expectedCount = 1)
 
@@ -260,7 +305,7 @@ class VscodeAnalyticsTest {
                     .assertProperty("plugin_version", "9.9.9")
 
                 shutdownAnalytics()
-                initAnalytics(storagePath, telemetryEnabled = true, appName = "Cursor", appVersion = "1.2.3", pluginVersion = "9.9.9")
+                initTestAnalytics(storagePath, telemetryEnabled = true, appName = "Cursor", appVersion = "1.2.3", pluginVersion = "9.9.9")
                 captureBinaryOpened("c.wasm", wasmHeader)
                 flushUntilEvents(server, expectedCount = 2)
 

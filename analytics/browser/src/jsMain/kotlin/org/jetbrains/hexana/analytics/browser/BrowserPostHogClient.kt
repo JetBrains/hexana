@@ -42,7 +42,20 @@ interface BrowserAnalyticsClient : AnalyticsClient {
 
 fun createBrowserAnalyticsClient(
     config: BrowserAnalyticsConfig = BrowserAnalyticsConfig(),
-): BrowserAnalyticsClient = PostHogBrowserAnalyticsClient(config)
+): BrowserAnalyticsClient =
+    if (config.apiKey.isBlank()) DisabledBrowserAnalyticsClient else PostHogBrowserAnalyticsClient(config)
+
+private object DisabledBrowserAnalyticsClient : BrowserAnalyticsClient {
+    override fun initialize() = Unit
+
+    override fun setConsent(enabled: Boolean) = Unit
+
+    override fun capture(event: HexanaEvent) = Unit
+
+    override fun flush() = Unit
+
+    override fun shutdown() = Unit
+}
 
 private class PostHogBrowserAnalyticsClient(
     private val configuration: BrowserAnalyticsConfig,

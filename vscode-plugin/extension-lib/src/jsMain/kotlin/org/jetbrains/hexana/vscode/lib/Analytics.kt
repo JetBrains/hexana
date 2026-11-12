@@ -52,8 +52,19 @@ fun initAnalytics(
     appVersion: String,
     pluginVersion: String,
 ) {
+    initAnalyticsWith(AnalyticsConfig(), storagePath, telemetryEnabled, appName, appVersion, pluginVersion)
+}
+
+internal fun initAnalyticsWith(
+    config: AnalyticsConfig,
+    storagePath: String,
+    telemetryEnabled: Boolean,
+    appName: String,
+    appVersion: String,
+    pluginVersion: String,
+) {
     HexanaAnalytics.initialize(
-        config = AnalyticsConfig(),
+        config = config,
         consentProvider = ConsentProvider { telemetryEnabled },
         distinctIdProvider = NodeDistinctIdProvider(storagePath),
         globalProperties = mapOf(

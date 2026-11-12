@@ -27,6 +27,7 @@ class WebAppTelemetryTest {
         val telemetry = BrowserWebAppTelemetry(
             storage = storage,
             analyticsClient = createBrowserAnalyticsClient(BrowserAnalyticsConfig(
+                apiKey = "test-key",
                 apiHost = "${window.location.origin}/__fake-posthog",
                 requestBatching = false,
                 advancedDisableDecide = true,
