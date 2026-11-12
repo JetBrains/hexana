@@ -244,7 +244,7 @@ tasks.register("verifyCliReleasePackaging") {
     dependsOn(verifyCliReleaseValidatorTests, verifyCliDownloadsPublisherSelfTest)
 }
 
-// Aggregator lists driven by ci-configuration's build configurations.
+// Aggregator lists driven by the CI build configurations.
 // The lists travel with the code branch so release branches stay self-contained.
 val teamcityCoreTestTaskPaths = listOf(
     ":analytics:allTests",

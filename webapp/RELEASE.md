@@ -26,7 +26,7 @@ configured generated Cloud Console target, queues exactly `refs/heads/master` at
 approved full revision, and verifies each endpoint in `HEXANA_WEBAPP_MASTER_ENDPOINTS`
 before recording deployment evidence. The TeamCity nightly chain that supplies
 the bridge inputs and token is defined in the companion
-`ci-configuration` repository; it becomes operational only after
+CI configuration; it becomes operational only after
 that DSL is applied and live-validated in TeamCity.
 
 The deployment target and policy come from environment variables that the TeamCity

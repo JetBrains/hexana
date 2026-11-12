@@ -66,7 +66,7 @@ tasks.register<Test>("captureWhatsNewScreenshots") {
     }
 }
 
-// Aggregator task driven by ci-configuration's `UI Driver Tests` build.
+// Aggregator task driven by the CI `UI Driver Tests` build.
 // Keep the surface broad on purpose: any new UI driver test class added to this module
 // is picked up automatically without a DSL change.
 tasks.register("teamcityUiDriverTests") {
