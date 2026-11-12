@@ -165,7 +165,7 @@ dependencies {
     implementation(project(":mcp:scripting"))
     implementation(libs.clikt)
     implementation(libs.kotlin.logging.jvm)
-    implementation(libs.logback.classic)
+    implementation(libs.slf4j.simple)
     implementation(libs.mcp.kotlin.sdk.jvm)
     implementation(libs.ktor.serialization.kotlinx.json.jvm)
     implementation(libs.ktor.server.cio.jvm)

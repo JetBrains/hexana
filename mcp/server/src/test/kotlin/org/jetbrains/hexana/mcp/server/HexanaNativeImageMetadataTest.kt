@@ -45,7 +45,7 @@ class HexanaNativeImageMetadataTest {
     }
 
     @Test
-    fun nativeImageResourceConfigIncludesLogbackVersionResources() {
+    fun nativeImageResourceConfigIncludesSlf4jServiceProvider() {
         val root = nativeImageJson("resource-config.json").jsonObject
         val includes = root
             .objectValue("resources")
@@ -53,8 +53,7 @@ class HexanaNativeImageMetadataTest {
             .mapNotNull { include -> include.jsonObject["pattern"]?.jsonPrimitive?.content }
             .toSet()
 
-        assertTrue("ch/qos/logback/classic/logback-classic-version\\.properties" in includes)
-        assertTrue("ch/qos/logback/core/logback-core-version\\.properties" in includes)
+        assertTrue("META-INF/services/org\\.slf4j\\.spi\\.SLF4JServiceProvider" in includes)
     }
 
     private fun nativeImageJson(fileName: String) = Json.parseToJsonElement(

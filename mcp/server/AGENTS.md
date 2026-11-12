@@ -43,6 +43,12 @@ Read these files before making structural changes:
 
 - `stdio` must keep protocol traffic on stdout only. Human-readable logs belong on stderr.
 - Keep CLI parsing library-backed and keep log formatting/configuration explicit so stdout remains protocol-only.
+- Logging uses `slf4j-simple`, which reads its `org.slf4j.simpleLogger.*` settings once, when the first logger is
+  created. `configureLogging` in `HexanaLogging.kt` sets them and must run (once, after command-line parsing) before any
+  SLF4J or kotlin-logging logger is touched; a later call cannot change the level. Do not add another SLF4J binding or
+  a logback dependency (EPL/LGPL, see HEXANA-33).
+- Structured diagnostics (`HexanaDiagnostics.kt`) are written by the in-repo `RotatingJsonlWriter`, not by the logging
+  backend.
 - Default HTTP bind should stay local-first (`127.0.0.1`) unless the CLI explicitly allows a public bind.
 - Prefer the official MCP Kotlin SDK transport/runtime APIs over custom protocol plumbing.
 

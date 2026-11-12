@@ -2,10 +2,7 @@
   "resources": {
     "includes": [
       {
-        "pattern": "ch/qos/logback/classic/logback-classic-version\\.properties"
-      },
-      {
-        "pattern": "ch/qos/logback/core/logback-core-version\\.properties"
+        "pattern": "META-INF/services/org\\.slf4j\\.spi\\.SLF4JServiceProvider"
       }
     ],
     "excludes": []

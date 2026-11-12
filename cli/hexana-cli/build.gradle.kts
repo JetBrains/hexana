@@ -161,7 +161,7 @@ val verifyHexanaCliBoundary = tasks.register("verifyHexanaCliBoundary") {
             "colormath",
             "jansi",
             "kotlin-logging",
-            "logback",
+            "slf4j-simple",
             "mordant",
             "icu4j",
             "js-",

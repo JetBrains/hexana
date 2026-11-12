@@ -165,7 +165,7 @@ val verifyHexanaCliScriptBoundary = tasks.register("verifyHexanaCliScriptBoundar
             "colormath",
             "jansi",
             "kotlin-logging",
-            "logback",
+            "slf4j-simple",
             "mordant",
             "wasm-",
             "wasm-language",

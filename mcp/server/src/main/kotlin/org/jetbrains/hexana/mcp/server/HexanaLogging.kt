@@ -1,46 +1,31 @@
 package org.jetbrains.hexana.mcp.server
 
-import ch.qos.logback.classic.Level
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.LoggerContext
-import ch.qos.logback.classic.encoder.PatternLayoutEncoder
-import ch.qos.logback.classic.spi.ILoggingEvent
-import ch.qos.logback.core.ConsoleAppender
-import ch.qos.logback.core.joran.spi.ConsoleTarget
-import org.slf4j.LoggerFactory
+internal const val SIMPLE_LOGGER_PROPERTY_PREFIX = "org.slf4j.simpleLogger."
+internal const val SIMPLE_LOGGER_LOG_FILE_PROPERTY = "${SIMPLE_LOGGER_PROPERTY_PREFIX}logFile"
+internal const val SIMPLE_LOGGER_FACTORY_CLASS_NAME = "org.slf4j.simple.SimpleLoggerFactory"
 
-private const val HEXANA_STDERR_APPENDER = "hexana-stderr"
-
+/**
+ * Configures slf4j-simple, which reads its settings once, when the first logger is created. This must run before any
+ * SLF4J or kotlin-logging logger is touched, otherwise the requested level is silently ignored.
+ *
+ * Logs go to stderr so that stdout stays protocol-only for the stdio transport.
+ */
 fun configureLogging(configuredLevel: HexanaLogLevel) {
-    val loggerFactory = LoggerFactory.getILoggerFactory()
-    val context = loggerFactory as? LoggerContext ?: return
-
-    val encoder = PatternLayoutEncoder().apply {
-        this.context = context
-        pattern = "%-5level hexana-mcp - %msg%nopex%n"
-        start()
-    }
-
-    val appender = ConsoleAppender<ILoggingEvent>().apply {
-        this.context = context
-        name = HEXANA_STDERR_APPENDER
-        target = ConsoleTarget.SystemErr.toString()
-        this.encoder = encoder
-        start()
-    }
-
-    context.getLogger(Logger.ROOT_LOGGER_NAME).apply {
-        detachAndStopAllAppenders()
-        addAppender(appender)
-        level = configuredLevel.toLogbackLevel()
-        isAdditive = false
-    }
+    mapOf(
+        "defaultLogLevel" to configuredLevel.toSimpleLoggerLevel(),
+        "logFile" to "System.err",
+        "showDateTime" to "false",
+        "showThreadName" to "false",
+        "showLogName" to "false",
+        "showShortLogName" to "false",
+        "levelInBrackets" to "false",
+    ).forEach { (key, value) -> System.setProperty("$SIMPLE_LOGGER_PROPERTY_PREFIX$key", value) }
 }
 
-private fun HexanaLogLevel.toLogbackLevel(): Level {
+private fun HexanaLogLevel.toSimpleLoggerLevel(): String {
     return when (this) {
-        HexanaLogLevel.QUIET -> Level.ERROR
-        HexanaLogLevel.INFO -> Level.INFO
-        HexanaLogLevel.DEBUG -> Level.DEBUG
+        HexanaLogLevel.QUIET -> "error"
+        HexanaLogLevel.INFO -> "info"
+        HexanaLogLevel.DEBUG -> "debug"
     }
 }

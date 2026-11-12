@@ -1,12 +1,5 @@
 package org.jetbrains.hexana.mcp.server
 
-import ch.qos.logback.classic.LoggerContext
-import ch.qos.logback.core.encoder.EncoderBase
-import ch.qos.logback.core.rolling.FixedWindowRollingPolicy
-import ch.qos.logback.core.rolling.RollingFileAppender
-import ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy
-import ch.qos.logback.core.util.Duration
-import ch.qos.logback.core.util.FileSize
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -17,7 +10,6 @@ import org.jetbrains.hexana.mcp.HexanaResourceLimits
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.Path
-import java.nio.charset.StandardCharsets
 import java.time.Instant
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -69,7 +61,7 @@ internal class HexanaDiagnosticSession private constructor(
     private val context: HexanaDiagnosticContext,
     private val sessionId: String,
     private val now: () -> Instant,
-    private val appender: DiagnosticRollingFileAppender?,
+    private val writer: RotatingJsonlWriter?,
     private val retainedFileLimit: Int,
     initialStatus: HexanaDiagnosticStatus,
 ) : AutoCloseable {
@@ -112,7 +104,7 @@ internal class HexanaDiagnosticSession private constructor(
     }
 
     private fun append(event: JsonObject) {
-        val fileAppender = appender ?: return
+        val fileWriter = writer ?: return
         val record = buildJsonObject {
             put("schema_version", 1)
             put("timestamp", now().toString())
@@ -121,8 +113,7 @@ internal class HexanaDiagnosticSession private constructor(
         }
         try {
             synchronized(this) {
-                fileAppender.doAppend(record.toString())
-                if (fileAppender.consumeRollover()) {
+                if (fileWriter.append(record.toString())) {
                     pruneDiagnosticFiles(currentStatus.directory, currentStatus.file ?: return, retainedFileLimit)
                 }
             }
@@ -142,8 +133,7 @@ internal class HexanaDiagnosticSession private constructor(
     }
 
     override fun close() {
-        appender?.stop()
-        (appender?.context as? LoggerContext)?.stop()
+        writer?.close()
     }
 
     private fun contextJson(): JsonObject = buildJsonObject {
@@ -175,76 +165,20 @@ internal class HexanaDiagnosticSession private constructor(
             val file = directory.resolve(
                 "hexana-mcp-${DIAGNOSTIC_FILE_TIMESTAMP.format(now())}-$sessionId.jsonl"
             )
-            var appender: DiagnosticRollingFileAppender? = null
+            var writer: RotatingJsonlWriter? = null
             val status = try {
                 Files.createDirectories(directory)
-                appender = diagnosticAppender(file, maxFileSizeBytes, retainedFileLimit)
+                writer = RotatingJsonlWriter(file, maxFileSizeBytes, maxRolledIndex = retainedFileLimit - 1)
                 pruneDiagnosticFiles(directory, file, retainedFileLimit)
                 HexanaDiagnosticStatus(directory, file, available = true)
             } catch (error: Exception) {
-                appender?.stop()
+                writer?.close()
                 HexanaDiagnosticStatus(directory, file = null, available = false, problem = error.javaClass.simpleName)
             }
-            return HexanaDiagnosticSession(context, sessionId, now, appender, retainedFileLimit, status)
+            return HexanaDiagnosticSession(context, sessionId, now, writer, retainedFileLimit, status)
                 .also { it.recordStart() }
         }
     }
-}
-
-private fun diagnosticAppender(
-    file: Path,
-    maxFileSizeBytes: Long,
-    retainedFileLimit: Int,
-): DiagnosticRollingFileAppender {
-    val loggerContext = LoggerContext().apply { name = "hexana-structured-diagnostics-${UUID.randomUUID()}" }
-    val encoder = object : EncoderBase<String>() {
-        override fun encode(event: String): ByteArray = "$event\n".toByteArray(StandardCharsets.UTF_8)
-        override fun headerBytes(): ByteArray? = null
-        override fun footerBytes(): ByteArray? = null
-    }.apply {
-        context = loggerContext
-        start()
-    }
-    val appender = DiagnosticRollingFileAppender().apply {
-        context = loggerContext
-        name = "hexana-structured-diagnostics"
-        setFile(file.toString())
-        setEncoder(encoder)
-    }
-    val rollingPolicy = object : FixedWindowRollingPolicy() {
-        override fun rollover() {
-            super.rollover()
-            appender.markRolloverCompleted()
-        }
-    }.apply {
-        context = loggerContext
-        setParent(appender)
-        fileNamePattern = file.toString().removeSuffix(".jsonl") + ".%i.jsonl"
-        minIndex = 1
-        maxIndex = retainedFileLimit - 1
-        start()
-    }
-    val triggeringPolicy = SizeBasedTriggeringPolicy<String>().apply {
-        context = loggerContext
-        maxFileSize = FileSize(maxFileSizeBytes)
-        checkIncrement = Duration.buildByMilliseconds(0.0)
-        start()
-    }
-    appender.rollingPolicy = rollingPolicy
-    appender.triggeringPolicy = triggeringPolicy
-    appender.start()
-    check(appender.isStarted) { "Structured diagnostic appender did not start" }
-    return appender
-}
-
-private class DiagnosticRollingFileAppender : RollingFileAppender<String>() {
-    private var rolloverPending = false
-
-    fun markRolloverCompleted() {
-        rolloverPending = true
-    }
-
-    fun consumeRollover(): Boolean = rolloverPending.also { rolloverPending = false }
 }
 
 private fun pruneDiagnosticFiles(directory: Path, currentFile: Path, retainedFileLimit: Int) {

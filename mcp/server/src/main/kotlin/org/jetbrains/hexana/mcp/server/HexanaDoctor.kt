@@ -1,9 +1,5 @@
 package org.jetbrains.hexana.mcp.server
 
-import ch.qos.logback.classic.Logger
-import ch.qos.logback.classic.LoggerContext
-import ch.qos.logback.core.ConsoleAppender
-import ch.qos.logback.core.joran.spi.ConsoleTarget
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.nio.file.Files
@@ -81,7 +77,7 @@ internal object HexanaDoctor {
             return DoctorCheck(
                 severity = DoctorSeverity.WARNING,
                 name = "logs",
-                message = "logging backend is not Logback; keep human-readable transport logs off stdout"
+                message = "logging backend is not slf4j-simple; keep human-readable transport logs off stdout"
             )
         }
 
@@ -288,20 +284,12 @@ internal enum class ConsoleLogTarget {
 }
 
 internal fun currentConsoleLogTargets(): Set<ConsoleLogTarget>? {
-    val context = LoggerFactory.getILoggerFactory() as? LoggerContext ?: return null
-    val rootLogger = context.getLogger(Logger.ROOT_LOGGER_NAME)
-    val targets = mutableSetOf<ConsoleLogTarget>()
-    val appenders = rootLogger.iteratorForAppenders()
-    while (appenders.hasNext()) {
-        val appender = appenders.next()
-        if (appender is ConsoleAppender<*>) {
-            when (appender.target) {
-                ConsoleTarget.SystemOut.toString() -> targets += ConsoleLogTarget.STDOUT
-                ConsoleTarget.SystemErr.toString() -> targets += ConsoleLogTarget.STDERR
-            }
-        }
+    if (LoggerFactory.getILoggerFactory().javaClass.name != SIMPLE_LOGGER_FACTORY_CLASS_NAME) return null
+    return when (System.getProperty(SIMPLE_LOGGER_LOG_FILE_PROPERTY)?.trim()?.lowercase()) {
+        null, "", "system.err" -> setOf(ConsoleLogTarget.STDERR)
+        "system.out" -> setOf(ConsoleLogTarget.STDOUT)
+        else -> emptySet()
     }
-    return targets
 }
 
 private fun parseJavaSpecificationMajorVersion(version: String): Int? {

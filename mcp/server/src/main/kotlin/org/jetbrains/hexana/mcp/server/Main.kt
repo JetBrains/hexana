@@ -22,7 +22,6 @@ private val logger by lazy { LoggerFactory.getLogger("org.jetbrains.hexana.mcp.s
 
 fun main(args: Array<String>) {
     KotlinLoggingConfiguration.logStartupMessage = false
-    configureLogging(HexanaLogLevel.INFO)
     retainMcpSerializersForNativeImage()
     val cli = HexanaCli()
     val version = hexanaServerVersion()
@@ -30,6 +29,7 @@ fun main(args: Array<String>) {
         cli.parse(args)
     } catch (error: CliktError) {
         if (error.statusCode != 0) {
+            configureLogging(HexanaLogLevel.INFO)
             HexanaDiagnostics.start(
                 HexanaDiagnosticContext(
                     version, "cli", null, null, HexanaLogLevel.INFO.cliValue(), null, 0, null
