@@ -202,3 +202,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-12 — `sources/public-tip-hygiene` — new: conventions from the pre-release tip clean-up (paths, internal references, oversized files).
 - 2026-11-12 — `entities/third-party-notices` — HEXANA-33 Part B: shared notices generator, per-artifact verification, `license/third_party` layout.
 - 2026-11-12 — `sources/third-party-fixture-provenance` — HEXANA-33 part B area D: fixture provenance/licence notices, Nordic-licensed ELF removed, legacy Exceptions.md replaced by a link.
+- 2026-11-13 — `entities/leak-guard` — new: clean-machine build findings, leak guard design (private TeamCity/Patronus check plus generic GitHub Action).

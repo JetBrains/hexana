@@ -1,0 +1,6 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Truncated PEM header used as test input, not a key"
+paths = ['''idea-plugin/src/test/kotlin/org/jetbrains/hexana/ui/PrivateKeyContentTest\.kt''']

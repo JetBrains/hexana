@@ -52,6 +52,7 @@ fun hexanaPatronusConfig(graph: ProjectImpactGraph): BranchProtectionConfig {
                 ),
             )
             check(teamCityCheck("InnoHub_HexFlow_PatronusConfigCheckPatronus", "*"))
+            check(teamCityCheck("InnoHub_HexFlow_LeakGuardPatronus", "*"))
             check(teamCityCheck(INTELLIJ_LANE, *patterns.getValue(INTELLIJ_LANE).toTypedArray()))
             check(teamCityCheck(CORE_LANE, *patterns.getValue(CORE_LANE).toTypedArray()))
             check(teamCityCheck(VSCODE_LANE, *patterns.getValue(VSCODE_LANE).toTypedArray()))

@@ -1,0 +1,14 @@
+home-directory idea-plugin/src/main/kotlin/org/jetbrains/hexana/run/CdpDebugProcess.kt
+home-directory idea-plugin/src/main/kotlin/org/jetbrains/hexana/run/WasmDebugProcess.kt
+home-directory idea-plugin/src/test/kotlin/org/jetbrains/hexana/run/CdpSourceLocationResolverTest.kt
+home-directory idea-plugin/src/test/kotlin/org/jetbrains/hexana/run/WasmBreakpointPathMatchingTest.kt
+home-directory plugins-shared/src/commonMain/kotlin/org/jetbrains/hexana/shared/DwarfPathMatcher.kt
+home-directory plugins-shared/src/commonTest/kotlin/org/jetbrains/hexana/shared/DwarfPathMatcherTest.kt
+home-directory vscode-plugin/test/src/unit/lldbSourcePaths.test.ts
+home-directory cli/packaging/publish-cli-downloads-release-bundle.sh
+home-directory mcp/packaging/publish-downloads-release-bundle.sh
+home-directory mcp/packaging/release-codex-claude-plugins.sh
+home-directory mcp/packaging/README.md
+home-directory kb/wiki/sources/public-tip-hygiene.md
+home-directory .github/workflows/leak-guard.yml
+analytics-key .github/workflows/leak-guard.yml

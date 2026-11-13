@@ -63,6 +63,8 @@ consult-first / write-back rules.
   opt-in release guard, and the TeamCity params.
 - [[entities/third-party-notices]] — the shared notices generator, per-artifact inputs (IDEA ZIP, VSIX, webapp, MCP/CLI),
   where licence texts come from, and what fails when a dependency has no reviewed text.
+- [[entities/leak-guard]] — what a clean-machine build of the public part needs and why (`CONTRIBUTING.md`), and the
+  two leak-guard checks (private TeamCity/Patronus, public GitHub Action).
 
 ## Sources
 

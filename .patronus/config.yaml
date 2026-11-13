@@ -73,6 +73,7 @@ checks:
   - "/settings.gradle.kts"
   - "/wasm-modules/**"
   - "/wasmParser/**"
+- configurationId: "InnoHub_HexFlow_LeakGuardPatronus"
 - configurationId: "InnoHub_HexFlow_PatronusConfigCheckPatronus"
 - configurationId: "InnoHub_HexFlow_ServerCliTestsPatronus"
   executeOnChanges:

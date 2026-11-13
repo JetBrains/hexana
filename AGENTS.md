@@ -177,6 +177,8 @@ Run the narrowest command that proves your change.
   `.patronus/config.yaml` is generated from `.patronus/patronus-config`; update it with
   `./gradlew updatePatronusConfig` and verify it with `./gradlew verifyPatronusConfigUpToDate`.
   `InnoHub_HexFlow_PatronusConfigCheckPatronus` is an ungrouped wildcard check for validating generated Patronus YAML.
+  `InnoHub_HexFlow_LeakGuardPatronus` is an ungrouped wildcard check that scans the whole tree for internal references
+  and secrets with a private pattern list kept in the internal CI configuration; see `kb/wiki/entities/leak-guard.md`.
   An unowned non-exempt Gradle project is conservatively assigned to Core. `ui-driver-tests` stays UI-only,
   `jvm-jit-jmh` selects IntelliJ verification without running benchmarks, and `.patronus/patronus-config` selects only
   freshness. Run `./gradlew verifyPatronusRoutingCoverage` after changing routing inputs.

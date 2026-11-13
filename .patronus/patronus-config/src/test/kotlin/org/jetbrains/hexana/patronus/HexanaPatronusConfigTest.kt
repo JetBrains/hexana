@@ -27,10 +27,11 @@ class HexanaPatronusConfigTest {
         val configurationIds = Regex("configurationId: \\\"([^\\\"]+)\\\"").findAll(yaml).map { it.groupValues[1] }.toList()
         val infrastructureIds = setOf(
             "InnoHub_HexFlow_PatronusConfigCheckPatronus",
+            "InnoHub_HexFlow_LeakGuardPatronus",
             "InnoHub_HexFlow_UiTestsPatronus",
         )
         assertEquals(PRODUCT_LANES + infrastructureIds, configurationIds.toSet())
-        assertEquals(7, configurationIds.distinct().size)
+        assertEquals(8, configurationIds.distinct().size)
         assertFalse("InnoHub_HexFlow_SafeMergeTests" in configurationIds)
         assertEquals(false, "  group:" in yaml)
         assertEquals(false, "isFallback:" in yaml)
@@ -38,6 +39,8 @@ class HexanaPatronusConfigTest {
         val checks = hexanaPatronusConfig(graph).teamCityChecksConfig.checks
         val freshness = checks.single { it.configurationId == "InnoHub_HexFlow_PatronusConfigCheckPatronus" }
         assertEquals(listOf("*"), freshness.executeOnChanges)
+        val leakGuard = checks.single { it.configurationId == "InnoHub_HexFlow_LeakGuardPatronus" }
+        assertEquals(listOf("*"), leakGuard.executeOnChanges)
         val ui = checks.single { it.configurationId == "InnoHub_HexFlow_UiTestsPatronus" }
         assertEquals(listOf("/ui-driver-tests/**", "/idea-plugin/src/ui-tests-framework/**"), ui.executeOnChanges)
         PRODUCT_LANES.forEach { lane ->
@@ -72,12 +75,12 @@ class HexanaPatronusConfigTest {
             RouteCase("/.space/automation.kts", emptySet()),
             RouteCase("/CODEOWNERS", emptySet()),
         ).forEach { case ->
-            val actual = linkedSetOf("InnoHub_HexFlow_PatronusConfigCheckPatronus")
+            val actual = linkedSetOf("InnoHub_HexFlow_PatronusConfigCheckPatronus", "InnoHub_HexFlow_LeakGuardPatronus")
             actual += routing.lanesForPath(case.path)
             if (case.ui) actual += "InnoHub_HexFlow_UiTestsPatronus"
 
             assertEquals(
-                setOf("InnoHub_HexFlow_PatronusConfigCheckPatronus") + case.productLanes +
+                setOf("InnoHub_HexFlow_PatronusConfigCheckPatronus", "InnoHub_HexFlow_LeakGuardPatronus") + case.productLanes +
                     if (case.ui) setOf("InnoHub_HexFlow_UiTestsPatronus") else emptySet(),
                 actual,
                 case.path,
