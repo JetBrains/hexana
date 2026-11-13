@@ -2,6 +2,9 @@
 
 This module contains end-to-end UI tests for the Hexana IntelliJ plugin using JetBrains IDE Starter + Driver.
 
+> **Internal-only.** These tests run on JetBrains' internal CI: by default they download the IDE installer and the plugin
+> from an internal TeamCity server and need credentials for it. They are not a contributor step.
+
 ## What It Does
 
 - Downloads IDEA Ultimate installer from TeamCity.

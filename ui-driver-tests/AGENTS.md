@@ -2,6 +2,14 @@
 
 This module contains expensive end-to-end UI tests for the plugin using JetBrains IDE Starter + Driver.
 
+## Internal-only module
+
+`ui-driver-tests` is built for JetBrains' internal CI: by default it downloads the IDE installer and the plugin build
+through IntelliJ's `TeamCityClient` from the internal TeamCity server, and needs the `HEXANA_*` build-type variables
+and credentials described in `kb/wiki/entities/ci-env-parameters.md`. Running it from a public checkout (a public IDE
+version plus a local plugin ZIP) is not a supported or validated contributor path. Do not document it as a contributor
+step.
+
 ## What These Tests Actually Do
 
 - Download an IntelliJ IDEA installer from TeamCity.
