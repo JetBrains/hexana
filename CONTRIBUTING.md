@@ -7,7 +7,8 @@ Thank you for your interest in Hexana.
 The contribution workflow is not set up yet, so **external pull requests are not accepted. Please open an issue
 instead.** A pull request opened from a fork may be closed with a pointer to this page.
 
-Issues are welcome and are the best way to help right now:
+Issues are welcome and are the best way to help right now (see [SUPPORT.md](SUPPORT.md) for what to include and
+what the tracker is for):
 
 - **Bug reports.** Include the Hexana version, the host (IntelliJ IDEA, VS Code, CLI or MCP server), the IDE or VS Code
   version, the operating system, and steps to reproduce. If a binary triggers the problem, say which format it is. Do
