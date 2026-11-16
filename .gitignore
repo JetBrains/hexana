@@ -14,7 +14,6 @@ kotlin-js-store/
 wasm-modules/wasmprinter_wrapper/target
 wasm-modules/disassembler/target
 wasm-modules/webapp_server/target
-/plugins/hexana/
 ui-driver-tests/allure-results/
 .DS_Store
 parsing/native-fixtures/src/clr/**/obj/*

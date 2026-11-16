@@ -40,10 +40,20 @@ Once the Hexana plugin is accepted into the Anthropic marketplace, this is the r
 
 ```
 ./gradlew :mcp:installRepoLocalClaudePlugin
-claude --plugin-dir plugins/hexana
+claude --plugin-dir build/repo-local-plugin/plugins/hexana
 ```
 
-That task installs the assembled plugin to `plugins/hexana/` with the bundled server runtime. The same path is also used by `installRepoLocalCodexPlugin`, so run whichever you need last.
+That task installs the assembled plugin to the gitignored `build/repo-local-plugin/plugins/hexana/` with the bundled
+server runtime. The tracked root `plugins/hexana/` is the public marketplace layout and is never touched. The same
+directory is also used by `installRepoLocalCodexPlugin`, so run whichever you need last.
+
+The task also writes a `hexana-local` dev marketplace to `build/repo-local-plugin/.claude-plugin/marketplace.json`. To
+install through `/plugin` instead of `--plugin-dir`:
+
+```
+claude plugin marketplace add "$PWD/build/repo-local-plugin"
+claude plugin install hexana@hexana-local
+```
 
 ## Assembly and distribution
 

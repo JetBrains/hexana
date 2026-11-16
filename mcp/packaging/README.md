@@ -59,11 +59,14 @@ distribution before running native tasks if Gradle does not auto-detect it. The 
 packages remain on JDK 21; native packaging requires GraalVM 25 because `wasm-language` 25.0.0 uses
 `VectorAPISupport`. JBR and ordinary JDKs can run JVM package gates, but they cannot rebuild the native executable.
 
-Install the Codex plugin into the repo-local marketplace layout with:
+Install the Codex plugin into the repo-local dev marketplace with:
 
 ```bash
 ./gradlew :mcp:installRepoLocalCodexPlugin
 ```
+
+The dev marketplace lives under the gitignored `build/repo-local-plugin/`, not in the tracked root `plugins/hexana/`
+(that directory is the public marketplace layout published to GitHub).
 
 This produces:
 
@@ -96,11 +99,13 @@ mcp/build/packaging-plain/codex-plugin/
 mcp/build/distributions-plain/
 ```
 
-and for repo-local Codex testing:
+and for repo-local testing (Codex writes `.agents/plugins/marketplace.json`, Claude writes
+`.claude-plugin/marketplace.json`; both name the marketplace `hexana-local`):
 
 ```text
-.agents/plugins/marketplace.json
-plugins/hexana/
+build/repo-local-plugin/.agents/plugins/marketplace.json
+build/repo-local-plugin/.claude-plugin/marketplace.json
+build/repo-local-plugin/plugins/hexana/
 ```
 
 ## Package layout and fallback
@@ -135,8 +140,8 @@ direct analysis commands and the split-product `tools` command are deliberately 
 `tools/call` remain available, including `run_binary_script` under the scripting profile.
 
 The `.mcp.json` files checked into `mcp/packaging/*` are the source templates for distributable wrappers. Repo-local
-Codex install is the exception: `./gradlew :mcp:installRepoLocalCodexPlugin` rewrites the installed `plugins/hexana/.mcp.json`
-to an absolute launcher path for local testing.
+Codex install is the exception: `./gradlew :mcp:installRepoLocalCodexPlugin` rewrites the installed
+`build/repo-local-plugin/plugins/hexana/.mcp.json` to an absolute launcher path for local testing.
 
 For ad hoc local testing, you can still override the launcher path explicitly:
 
@@ -150,8 +155,10 @@ When testing a native-enabled assembled package, run the wrapper from the assemb
 mcp/build/packaging-native/claude-plugin/bin/hexana-mcp version
 ```
 
-For Codex local plugin testing, run `./gradlew :mcp:installRepoLocalCodexPlugin`, restart Codex, and install
-`Hexana` from the `Hexana Local` marketplace in the plugin directory (`/plugins` in CLI).
+For Codex local plugin testing, run `./gradlew :mcp:installRepoLocalCodexPlugin`, add the dev marketplace once with
+`codex plugin marketplace add "$PWD/build/repo-local-plugin"`, restart Codex, and install `Hexana` from the
+`Hexana Local` marketplace in the plugin directory (`/plugins` in CLI). Re-run the Gradle task after each change and
+restart Codex to pick up the new build.
 
 ## Runtime configuration
 

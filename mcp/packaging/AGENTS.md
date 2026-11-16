@@ -13,8 +13,12 @@ This folder contains client-specific wrapper layouts for the standalone MCP runt
 - `HEXANA_SERVER_BIN` may override the bundled runtime for local testing.
 - The source `.mcp.json` files in this folder must be safe for distributable ZIP assembly. Do not let
   `./gradlew :mcp:assembleMcpPackaging` write local absolute paths into ZIP artifacts.
-- Repo-local Codex install may rewrite `.mcp.json` to an absolute `plugins/hexana/bin/hexana-mcp` launcher path for
-  local testing only.
+- Repo-local Codex install may rewrite `.mcp.json` to an absolute launcher path under
+  `build/repo-local-plugin/plugins/hexana/bin/hexana-mcp` for local testing only.
+- `installRepoLocalClaudePlugin` and `installRepoLocalCodexPlugin` must install only under the gitignored
+  `build/repo-local-plugin/`. The repo-root `plugins/hexana/`, `.agents/plugins/marketplace.json` and
+  `.claude-plugin/marketplace.json` are the tracked public marketplace layout (`hexana` marketplace); never write dev
+  builds there.
 - Keep local-first defaults. The packaged wrappers should launch the standalone server in `stdio` mode unless a client
   manifest explicitly requires something else.
 - `release-codex-claude-plugins.sh` owns the Codex/Claude release mechanics: package artifacts, GitHub release asset
@@ -67,7 +71,8 @@ This folder contains client-specific wrapper layouts for the standalone MCP runt
 - Prefer smoke checks like `mcp/build/packaging/claude-plugin/bin/hexana-mcp version` and
   `mcp/build/packaging/codex-plugin/bin/hexana-mcp version` over ad hoc script edits.
 - For Codex repo-local install-flow changes, run `./gradlew :mcp:installRepoLocalCodexPlugin` and verify the installed
-  layout under `plugins/hexana/` plus `.agents/plugins/marketplace.json`.
+  layout under `build/repo-local-plugin/plugins/hexana/` plus `build/repo-local-plugin/.agents/plugins/marketplace.json`,
+  and that `git status` stays clean (the tracked root `plugins/hexana/` must not change).
 - If a Codex packaging change could affect plugin discovery, installation, or bundled MCP wiring, also run the UI smoke
   test `./gradlew :idea-plugin:buildPlugin :ui-driver-tests:test --tests org.jetbrains.hexana.ui.HexanaMcpPackagedSmokeTest`
   with `HEXANA_USE_LOCAL_PLUGIN=true` and `HEXANA_LOCAL_PLUGIN_ZIP` pointing at the built IntelliJ plugin ZIP.

@@ -65,6 +65,7 @@ val nativeDistributionDir = layout.buildDirectory.dir("distributions-native")
 val claudeDesktopMcpbArchiveName = "hexana-core-$nativeHostPlatformName.mcpb"
 val claudeDesktopMcpbArchive = nativeDistributionDir.map { it.file(claudeDesktopMcpbArchiveName) }
 val publicMarketplaceDir = layout.projectDirectory.dir("out/teamcity/public-marketplace")
+val repoLocalMarketplaceDir = rootProject.layout.buildDirectory.dir("repo-local-plugin")
 val pluginLicenseFile = layout.projectDirectory.file("packaging/LICENSE.txt")
 val thirdPartyNoticesDir = layout.buildDirectory.dir("generated/third-party-notices")
 val thirdPartyNoticesFileName = "THIRD-PARTY-NOTICES.md"
@@ -1720,7 +1721,7 @@ val assembleNativeCodexPluginPackage = registerPackagingSync(
 
 tasks.register<Sync>("installRepoLocalClaudePlugin") {
     group = "distribution"
-    description = "Install the assembled Claude plugin into the repo-local plugins/hexana path for /plugin testing."
+    description = "Install the assembled Claude plugin and a dev marketplace into build/repo-local-plugin for /plugin testing."
     dependsOn(":mcp:server:installDist", generateThirdPartyNotices)
     from(layout.projectDirectory.dir("packaging/claude-plugin")) {
         filesMatching(".claude-plugin/plugin.json") {
@@ -1738,15 +1739,18 @@ tasks.register<Sync>("installRepoLocalClaudePlugin") {
     from(generateThirdPartyNotices) {
         into("server")
     }
-    into(rootProject.layout.projectDirectory.dir("plugins/hexana"))
+    into(repoLocalMarketplaceDir.map { it.dir("plugins/hexana") })
     doLast {
         rewritePackagedMcpServerLauncherClasspaths(destinationDir)
+        val marketplaceFile = repoLocalMarketplaceDir.get().asFile.resolve(".claude-plugin/marketplace.json")
+        marketplaceFile.parentFile.mkdirs()
+        marketplaceFile.writeText(renderRepoLocalClaudeMarketplace())
     }
 }
 
 tasks.register<Sync>("installRepoLocalCodexPlugin") {
     group = "distribution"
-    description = "Install the assembled Codex plugin into the repo-local plugins/hexana path for /plugins testing."
+    description = "Install the assembled Codex plugin and a dev marketplace into build/repo-local-plugin for /plugins testing."
     dependsOn(":mcp:server:installDist", generateThirdPartyNotices)
     from(layout.projectDirectory.dir("packaging/codex-plugin")) {
         filesMatching(".codex-plugin/plugin.json") {
@@ -1764,11 +1768,14 @@ tasks.register<Sync>("installRepoLocalCodexPlugin") {
     from(generateThirdPartyNotices) {
         into("server")
     }
-    into(rootProject.layout.projectDirectory.dir("plugins/hexana"))
+    into(repoLocalMarketplaceDir.map { it.dir("plugins/hexana") })
     doLast {
         rewritePackagedMcpServerLauncherClasspaths(destinationDir)
         val launcherPath = destinationDir.resolve("bin/hexana-mcp").absolutePath
         destinationDir.resolve(".mcp.json").writeText(renderMcpConfig(launcherPath))
+        val marketplaceFile = repoLocalMarketplaceDir.get().asFile.resolve(".agents/plugins/marketplace.json")
+        marketplaceFile.parentFile.mkdirs()
+        marketplaceFile.writeText(renderRepoLocalCodexMarketplace())
     }
 }
 
@@ -2735,6 +2742,50 @@ tasks.register("validatePublicMarketplaceBundle") {
 }
 
 val GENERATED_VERSION_TOKEN = "__GENERATED_BY_ASSEMBLY__"
+
+fun renderRepoLocalClaudeMarketplace(): String =
+    """
+    {
+      "name": "hexana-local",
+      "owner": {
+        "name": "Hexana developers"
+      },
+      "metadata": {
+        "description": "Repo-local Hexana dev build for Claude Code"
+      },
+      "plugins": [
+        {
+          "name": "hexana",
+          "source": "./plugins/hexana",
+          "category": "Developer Tools"
+        }
+      ]
+    }
+    """.trimIndent() + "\n"
+
+fun renderRepoLocalCodexMarketplace(): String =
+    """
+    {
+      "name": "hexana-local",
+      "interface": {
+        "displayName": "Hexana Local"
+      },
+      "plugins": [
+        {
+          "name": "hexana",
+          "source": {
+            "source": "local",
+            "path": "./plugins/hexana"
+          },
+          "policy": {
+            "installation": "AVAILABLE",
+            "authentication": "ON_INSTALL"
+          },
+          "category": "Developer Tools"
+        }
+      ]
+    }
+    """.trimIndent() + "\n"
 
 fun renderMcpConfig(commandPath: String): String {
     val escapedCommandPath = commandPath.replace("\\", "\\\\")

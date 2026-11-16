@@ -16,7 +16,7 @@ This package is the Codex-facing wrapper for the standalone Hexana MCP runtime i
 
 ## Repo-local install flow
 
-Use the repo marketplace path documented by Codex:
+Use a local marketplace, as documented by Codex:
 
 ```bash
 ./gradlew :mcp:installRepoLocalCodexPlugin
@@ -24,11 +24,17 @@ Use the repo marketplace path documented by Codex:
 
 That task:
 
-- installs the assembled plugin to `plugins/hexana/`
-- keeps the committed repo marketplace at `.agents/plugins/marketplace.json`
-- rewrites the installed `.mcp.json` to the absolute `plugins/hexana/bin/hexana-mcp` launcher path
+- installs the assembled plugin to the gitignored `build/repo-local-plugin/plugins/hexana/`
+- writes the `hexana-local` dev marketplace to `build/repo-local-plugin/.agents/plugins/marketplace.json`
+- rewrites the installed `.mcp.json` to the absolute `build/repo-local-plugin/plugins/hexana/bin/hexana-mcp` launcher path
 
-After running the task, restart Codex and install `Hexana` from the `Hexana Local` marketplace.
+The tracked root `.agents/plugins/marketplace.json` and `plugins/hexana/` are the public marketplace layout and are not
+touched. After running the task, add the dev marketplace once, restart Codex, and install `Hexana` from the
+`Hexana Local` marketplace:
+
+```bash
+codex plugin marketplace add "$PWD/build/repo-local-plugin"
+```
 
 Native-enabled assembly for the current host platform is available with:
 

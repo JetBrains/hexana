@@ -1,7 +1,7 @@
 {
-  "name": "hexana-local",
+  "name": "hexana",
   "interface": {
-    "displayName": "Hexana Local"
+    "displayName": "Hexana"
   },
   "plugins": [
     {

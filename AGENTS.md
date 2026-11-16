@@ -302,7 +302,8 @@ Docker build instructions for the Rust modules already exist in `wasm-modules/RE
   `mcp/build/packaging/*/bin/hexana-mcp version`.
 - MCP downloads publication script changes: run `bash -n mcp/packaging/publish-downloads-release-bundle.sh` and
   `MCP_DOWNLOADS_BUNDLE_SELF_TEST=true bash mcp/packaging/publish-downloads-release-bundle.sh`.
-- Codex packaging or repo-local marketplace/install-flow changes: also run `:mcp:installRepoLocalCodexPlugin` and the
+- Codex packaging or repo-local marketplace/install-flow changes: also run `:mcp:installRepoLocalCodexPlugin` (installs
+  to the gitignored `build/repo-local-plugin/`, never to the tracked root `plugins/hexana/`) and the
   packaged MCP UI smoke test under `ui-driver-tests` when the change could affect Codex discovery, installation, or
   bundled skill/MCP wiring.
 - `plugins-shared/` changes: run `:plugins-shared:build`, then `:idea-plugin:test` and `:vscode-plugin:webview:compileKotlinJs`.
