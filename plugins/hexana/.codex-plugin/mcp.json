@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "hexana": {
+      "command": "./bin/hexana-mcp",
+      "cwd": ".",
+      "args": [
+        "stdio"
+      ]
+    }
+  }
+}

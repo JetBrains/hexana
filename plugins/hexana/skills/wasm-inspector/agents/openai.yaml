@@ -1,0 +1,6 @@
+interface:
+  display_name: "Wasm Inspector"
+  short_description: "Inspect WebAssembly binaries with the bundled Hexana MCP tools."
+  default_prompt: "Use Hexana to inspect the current WebAssembly binary."
+policy:
+  allow_implicit_invocation: true
