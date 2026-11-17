@@ -1,0 +1,25 @@
+{
+  "name": "hexana-vscode-ui-tests",
+  "private": true,
+  "description": "Selenium-WebDriver UI acceptance tests for the Hexana VS Code extension",
+  "scripts": {
+    "compile": "tsc -p ./tsconfig.json",
+    "compile:unit": "tsc -p ./tsconfig.unit.json",
+    "unit-test": "npm run compile:unit && mocha ./out-unit/test/src/unit/*.test.js",
+    "unit": "npm run unit-test",
+    "test": "npm run compile && node ./out/run-tests.js"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.3.16",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.0.0",
+    "chai": "^4.5.0",
+    "mocha": "^10.8.0",
+    "typescript": "^5.3.0",
+    "vscode-extension-tester": "^8.24.0"
+  },
+  "overrides": {
+    "serialize-javascript": "^7.1.3",
+    "@azure/msal-node": "7.1.1"
+  }
+}

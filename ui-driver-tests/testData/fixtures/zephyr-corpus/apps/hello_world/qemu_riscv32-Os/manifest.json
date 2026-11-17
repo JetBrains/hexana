@@ -1,0 +1,11 @@
+{
+  "sample": "hello_world-qemu_riscv32",
+  "board": "qemu_riscv32",
+  "expectedBackend": "Qemu",
+  "machineOrPlatform": "virt",
+  "qemuArgs": ["-machine", "virt", "-bios", "none", "-m", "256", "-nographic"],
+  "bootBannerRegex": "\\*\\*\\* Booting Zephyr OS build [^*]*\\*\\*\\*",
+  "helloRegex": "Hello World! qemu_riscv32/qemu_virt_riscv32",
+  "bannerValidated": true,
+  "negativeKind": null
+}

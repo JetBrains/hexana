@@ -1,0 +1,7 @@
+index.html
+screenshots/columnar-data.png
+screenshots/protobuf-inspection.png
+screenshots/scriptable-tabs.png
+screenshots/structure-tool-window.png
+source.json
+style.css

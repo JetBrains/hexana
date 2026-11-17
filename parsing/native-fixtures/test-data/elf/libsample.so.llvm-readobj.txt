@@ -1,0 +1,578 @@
+
+File: /out/elf/libsample.so
+Format: elf64-x86-64
+Arch: x86_64
+AddressSize: 64bit
+LoadName: <Not found>
+ElfHeader {
+  Ident {
+    Magic: (7F 45 4C 46)
+    Class: 64-bit (0x2)
+    DataEncoding: LittleEndian (0x1)
+    FileVersion: 1
+    OS/ABI: SystemV (0x0)
+    ABIVersion: 0
+    Unused: (00 00 00 00 00 00 00)
+  }
+  Type: SharedObject (0x3)
+  Machine: EM_X86_64 (0x3E)
+  Version: 1
+  Entry: 0x0
+  ProgramHeaderOffset: 0x40
+  SectionHeaderOffset: 0xE60
+  Flags [ (0x0)
+  ]
+  HeaderSize: 64
+  ProgramHeaderEntrySize: 56
+  ProgramHeaderCount: 10
+  SectionHeaderEntrySize: 64
+  SectionHeaderCount: 28
+  StringTableSectionIndex: 26
+}
+Sections [
+  Section {
+    Index: 0
+    Name:  (0)
+    Type: SHT_NULL (0x0)
+    Flags [ (0x0)
+    ]
+    Address: 0x0
+    Offset: 0x0
+    Size: 0
+    Link: 0
+    Info: 0
+    AddressAlignment: 0
+    EntrySize: 0
+  }
+  Section {
+    Index: 1
+    Name: .note.gnu.build-id (1)
+    Type: SHT_NOTE (0x7)
+    Flags [ (0x2)
+      SHF_ALLOC (0x2)
+    ]
+    Address: 0x270
+    Offset: 0x270
+    Size: 24
+    Link: 0
+    Info: 0
+    AddressAlignment: 4
+    EntrySize: 0
+  }
+  Section {
+    Index: 2
+    Name: .dynsym (20)
+    Type: SHT_DYNSYM (0xB)
+    Flags [ (0x2)
+      SHF_ALLOC (0x2)
+    ]
+    Address: 0x288
+    Offset: 0x288
+    Size: 168
+    Link: 5
+    Info: 1
+    AddressAlignment: 8
+    EntrySize: 24
+  }
+  Section {
+    Index: 3
+    Name: .gnu.hash (28)
+    Type: SHT_GNU_HASH (0x6FFFFFF6)
+    Flags [ (0x2)
+      SHF_ALLOC (0x2)
+    ]
+    Address: 0x330
+    Offset: 0x330
+    Size: 60
+    Link: 2
+    Info: 0
+    AddressAlignment: 8
+    EntrySize: 0
+  }
+  Section {
+    Index: 4
+    Name: .hash (38)
+    Type: SHT_HASH (0x5)
+    Flags [ (0x2)
+      SHF_ALLOC (0x2)
+    ]
+    Address: 0x36C
+    Offset: 0x36C
+    Size: 64
+    Link: 2
+    Info: 0
+    AddressAlignment: 4
+    EntrySize: 4
+  }
+  Section {
+    Index: 5
+    Name: .dynstr (44)
+    Type: SHT_STRTAB (0x3)
+    Flags [ (0x2)
+      SHF_ALLOC (0x2)
+    ]
+    Address: 0x3AC
+    Offset: 0x3AC
+    Size: 78
+    Link: 0
+    Info: 0
+    AddressAlignment: 1
+    EntrySize: 0
+  }
+  Section {
+    Index: 6
+    Name: .rela.dyn (52)
+    Type: SHT_RELA (0x4)
+    Flags [ (0x2)
+      SHF_ALLOC (0x2)
+    ]
+    Address: 0x400
+    Offset: 0x400
+    Size: 72
+    Link: 2
+    Info: 0
+    AddressAlignment: 8
+    EntrySize: 24
+  }
+  Section {
+    Index: 7
+    Name: .rela.plt (62)
+    Type: SHT_RELA (0x4)
+    Flags [ (0x42)
+      SHF_ALLOC (0x2)
+      SHF_INFO_LINK (0x40)
+    ]
+    Address: 0x448
+    Offset: 0x448
+    Size: 48
+    Link: 2
+    Info: 16
+    AddressAlignment: 8
+    EntrySize: 24
+  }
+  Section {
+    Index: 8
+    Name: .rodata (72)
+    Type: SHT_PROGBITS (0x1)
+    Flags [ (0x2)
+      SHF_ALLOC (0x2)
+    ]
+    Address: 0x480
+    Offset: 0x480
+    Size: 29
+    Link: 0
+    Info: 0
+    AddressAlignment: 16
+    EntrySize: 0
+  }
+  Section {
+    Index: 9
+    Name: .eh_frame_hdr (80)
+    Type: SHT_PROGBITS (0x1)
+    Flags [ (0x2)
+      SHF_ALLOC (0x2)
+    ]
+    Address: 0x4A0
+    Offset: 0x4A0
+    Size: 44
+    Link: 0
+    Info: 0
+    AddressAlignment: 4
+    EntrySize: 0
+  }
+  Section {
+    Index: 10
+    Name: .eh_frame (94)
+    Type: SHT_PROGBITS (0x1)
+    Flags [ (0x2)
+      SHF_ALLOC (0x2)
+    ]
+    Address: 0x4D0
+    Offset: 0x4D0
+    Size: 156
+    Link: 0
+    Info: 0
+    AddressAlignment: 8
+    EntrySize: 0
+  }
+  Section {
+    Index: 11
+    Name: .text (104)
+    Type: SHT_PROGBITS (0x1)
+    Flags [ (0x6)
+      SHF_ALLOC (0x2)
+      SHF_EXECINSTR (0x4)
+    ]
+    Address: 0x1570
+    Offset: 0x570
+    Size: 228
+    Link: 0
+    Info: 0
+    AddressAlignment: 16
+    EntrySize: 0
+  }
+  Section {
+    Index: 12
+    Name: .plt (110)
+    Type: SHT_PROGBITS (0x1)
+    Flags [ (0x6)
+      SHF_ALLOC (0x2)
+      SHF_EXECINSTR (0x4)
+    ]
+    Address: 0x1660
+    Offset: 0x660
+    Size: 48
+    Link: 0
+    Info: 0
+    AddressAlignment: 16
+    EntrySize: 0
+  }
+  Section {
+    Index: 13
+    Name: .dynamic (115)
+    Type: SHT_DYNAMIC (0x6)
+    Flags [ (0x3)
+      SHF_ALLOC (0x2)
+      SHF_WRITE (0x1)
+    ]
+    Address: 0x2690
+    Offset: 0x690
+    Size: 224
+    Link: 5
+    Info: 0
+    AddressAlignment: 8
+    EntrySize: 16
+  }
+  Section {
+    Index: 14
+    Name: .got (124)
+    Type: SHT_PROGBITS (0x1)
+    Flags [ (0x3)
+      SHF_ALLOC (0x2)
+      SHF_WRITE (0x1)
+    ]
+    Address: 0x2770
+    Offset: 0x770
+    Size: 16
+    Link: 0
+    Info: 0
+    AddressAlignment: 8
+    EntrySize: 0
+  }
+  Section {
+    Index: 15
+    Name: .data (129)
+    Type: SHT_PROGBITS (0x1)
+    Flags [ (0x3)
+      SHF_ALLOC (0x2)
+      SHF_WRITE (0x1)
+    ]
+    Address: 0x3780
+    Offset: 0x780
+    Size: 16
+    Link: 0
+    Info: 0
+    AddressAlignment: 8
+    EntrySize: 0
+  }
+  Section {
+    Index: 16
+    Name: .got.plt (135)
+    Type: SHT_PROGBITS (0x1)
+    Flags [ (0x3)
+      SHF_ALLOC (0x2)
+      SHF_WRITE (0x1)
+    ]
+    Address: 0x3790
+    Offset: 0x790
+    Size: 40
+    Link: 0
+    Info: 0
+    AddressAlignment: 8
+    EntrySize: 0
+  }
+  Section {
+    Index: 17
+    Name: .debug_abbrev (144)
+    Type: SHT_PROGBITS (0x1)
+    Flags [ (0x0)
+    ]
+    Address: 0x0
+    Offset: 0x7B8
+    Size: 175
+    Link: 0
+    Info: 0
+    AddressAlignment: 1
+    EntrySize: 0
+  }
+  Section {
+    Index: 18
+    Name: .debug_info (158)
+    Type: SHT_PROGBITS (0x1)
+    Flags [ (0x0)
+    ]
+    Address: 0x0
+    Offset: 0x867
+    Size: 264
+    Link: 0
+    Info: 0
+    AddressAlignment: 1
+    EntrySize: 0
+  }
+  Section {
+    Index: 19
+    Name: .debug_str_offsets (170)
+    Type: SHT_PROGBITS (0x1)
+    Flags [ (0x0)
+    ]
+    Address: 0x0
+    Offset: 0x96F
+    Size: 84
+    Link: 0
+    Info: 0
+    AddressAlignment: 1
+    EntrySize: 0
+  }
+  Section {
+    Index: 20
+    Name: .debug_str (189)
+    Type: SHT_PROGBITS (0x1)
+    Flags [ (0x30)
+      SHF_MERGE (0x10)
+      SHF_STRINGS (0x20)
+    ]
+    Address: 0x0
+    Offset: 0x9C3
+    Size: 208
+    Link: 0
+    Info: 0
+    AddressAlignment: 1
+    EntrySize: 1
+  }
+  Section {
+    Index: 21
+    Name: .debug_addr (200)
+    Type: SHT_PROGBITS (0x1)
+    Flags [ (0x0)
+    ]
+    Address: 0x0
+    Offset: 0xA93
+    Size: 64
+    Link: 0
+    Info: 0
+    AddressAlignment: 1
+    EntrySize: 0
+  }
+  Section {
+    Index: 22
+    Name: .comment (212)
+    Type: SHT_PROGBITS (0x1)
+    Flags [ (0x30)
+      SHF_MERGE (0x10)
+      SHF_STRINGS (0x20)
+    ]
+    Address: 0x0
+    Offset: 0xAD3
+    Size: 55
+    Link: 0
+    Info: 0
+    AddressAlignment: 1
+    EntrySize: 1
+  }
+  Section {
+    Index: 23
+    Name: .debug_line (221)
+    Type: SHT_PROGBITS (0x1)
+    Flags [ (0x0)
+    ]
+    Address: 0x0
+    Offset: 0xB0A
+    Size: 197
+    Link: 0
+    Info: 0
+    AddressAlignment: 1
+    EntrySize: 0
+  }
+  Section {
+    Index: 24
+    Name: .debug_line_str (233)
+    Type: SHT_PROGBITS (0x1)
+    Flags [ (0x30)
+      SHF_MERGE (0x10)
+      SHF_STRINGS (0x20)
+    ]
+    Address: 0x0
+    Offset: 0xBCF
+    Size: 24
+    Link: 0
+    Info: 0
+    AddressAlignment: 1
+    EntrySize: 1
+  }
+  Section {
+    Index: 25
+    Name: .symtab (249)
+    Type: SHT_SYMTAB (0x2)
+    Flags [ (0x0)
+    ]
+    Address: 0x0
+    Offset: 0xBE8
+    Size: 240
+    Link: 27
+    Info: 4
+    AddressAlignment: 8
+    EntrySize: 24
+  }
+  Section {
+    Index: 26
+    Name: .shstrtab (257)
+    Type: SHT_STRTAB (0x3)
+    Flags [ (0x0)
+    ]
+    Address: 0x0
+    Offset: 0xCD8
+    Size: 275
+    Link: 0
+    Info: 0
+    AddressAlignment: 1
+    EntrySize: 0
+  }
+  Section {
+    Index: 27
+    Name: .strtab (267)
+    Type: SHT_STRTAB (0x3)
+    Flags [ (0x0)
+    ]
+    Address: 0x0
+    Offset: 0xDEB
+    Size: 110
+    Link: 0
+    Info: 0
+    AddressAlignment: 1
+    EntrySize: 0
+  }
+]
+DynamicSection [ (14 entries)
+  Tag                Type     Name/Value
+  0x0000000000000007 RELA     0x400
+  0x0000000000000008 RELASZ   72 (bytes)
+  0x0000000000000009 RELAENT  24 (bytes)
+  0x0000000000000017 JMPREL   0x448
+  0x0000000000000002 PLTRELSZ 48 (bytes)
+  0x0000000000000003 PLTGOT   0x3790
+  0x0000000000000014 PLTREL   RELA
+  0x0000000000000006 SYMTAB   0x288
+  0x000000000000000B SYMENT   24 (bytes)
+  0x0000000000000005 STRTAB   0x3AC
+  0x000000000000000A STRSZ    78 (bytes)
+  0x000000006FFFFEF5 GNU_HASH 0x330
+  0x0000000000000004 HASH     0x36C
+  0x0000000000000000 NULL     0x0
+]
+NeededLibraries [
+]
+Relocations [
+  Section (6) .rela.dyn {
+    0x3788 R_X86_64_64 hexana_add 0x0
+    0x2770 R_X86_64_GLOB_DAT hexana_counter 0x0
+    0x2778 R_X86_64_GLOB_DAT hexana_message 0x0
+  }
+  Section (7) .rela.plt {
+    0x37A8 R_X86_64_JUMP_SLOT hexana_add 0x0
+    0x37B0 R_X86_64_JUMP_SLOT hexana_dispatch 0x0
+  }
+]
+Symbols [
+  Symbol {
+    Name:  (0)
+    Value: 0x0
+    Size: 0
+    Binding: Local (0x0)
+    Type: None (0x0)
+    Other: 0
+    Section: Undefined (0x0)
+  }
+  Symbol {
+    Name: sample.c (1)
+    Value: 0x0
+    Size: 0
+    Binding: Local (0x0)
+    Type: File (0x4)
+    Other: 0
+    Section: Absolute (0xFFF1)
+  }
+  Symbol {
+    Name: hexana_square (10)
+    Value: 0x1610
+    Size: 16
+    Binding: Local (0x0)
+    Type: Function (0x2)
+    Other: 0
+    Section: .text (0xB)
+  }
+  Symbol {
+    Name: _DYNAMIC (101)
+    Value: 0x2690
+    Size: 0
+    Binding: Local (0x0)
+    Type: None (0x0)
+    Other [ (0x2)
+      STV_HIDDEN (0x2)
+    ]
+    Section: .dynamic (0xD)
+  }
+  Symbol {
+    Name: hexana_add (24)
+    Value: 0x1570
+    Size: 29
+    Binding: Global (0x1)
+    Type: Function (0x2)
+    Other: 0
+    Section: .text (0xB)
+  }
+  Symbol {
+    Name: hexana_counter (35)
+    Value: 0x3780
+    Size: 4
+    Binding: Global (0x1)
+    Type: Object (0x1)
+    Other: 0
+    Section: .data (0xF)
+  }
+  Symbol {
+    Name: hexana_dispatch (50)
+    Value: 0x1590
+    Size: 113
+    Binding: Global (0x1)
+    Type: Function (0x2)
+    Other: 0
+    Section: .text (0xB)
+  }
+  Symbol {
+    Name: hexana_message (66)
+    Value: 0x480
+    Size: 29
+    Binding: Global (0x1)
+    Type: Object (0x1)
+    Other: 0
+    Section: .rodata (0x8)
+  }
+  Symbol {
+    Name: main (81)
+    Value: 0x1620
+    Size: 52
+    Binding: Global (0x1)
+    Type: Function (0x2)
+    Other: 0
+    Section: .text (0xB)
+  }
+  Symbol {
+    Name: hexana_add_ptr (86)
+    Value: 0x3788
+    Size: 8
+    Binding: Global (0x1)
+    Type: Object (0x1)
+    Other: 0
+    Section: .data (0xF)
+  }
+]

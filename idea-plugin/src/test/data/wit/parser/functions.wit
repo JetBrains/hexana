@@ -1,0 +1,16 @@
+package local:demo;
+
+interface foo {
+    record r {
+      a: u32,
+      b: f32
+    }
+
+    a1: func();
+    a2: func(x: u32);
+    a3: func(y: u64, z: f32);
+    a4: func() -> u32;
+    a5: func() -> string;
+    a6: func() -> r;
+    a7: func() -> tuple<u32, f32>;
+}

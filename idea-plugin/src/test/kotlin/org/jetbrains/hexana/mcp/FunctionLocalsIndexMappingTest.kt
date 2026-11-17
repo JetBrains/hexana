@@ -1,0 +1,66 @@
+package org.jetbrains.hexana.mcp
+
+import org.jetbrains.hexana.wasm.sections.WasmF32Type
+import org.jetbrains.hexana.wasm.sections.WasmF64Type
+import org.jetbrains.hexana.wasm.sections.WasmI32Type
+import org.jetbrains.hexana.wasm.sections.WasmI64Type
+
+class FunctionLocalsIndexMappingTest : WasmTest() {
+    fun testLocalsForFunctionsReturnsAllRequestedEntriesAcrossMixedIndexSpace() = doTest("functionIndexSpace") { wasmModule ->
+        val results = localsForFunctions(listOf(0, 1, 2, 3, 4, 5), wasmModule)
+
+        assertEquals(listOf(0, 1, 2, 3, 4, 5), results.map { it.funcidx })
+        assertTrue(results[0].locals.isEmpty())
+        assertTrue(results[1].locals.isEmpty())
+
+        assertEquals(1, results[2].locals.size)
+        assertLocalNum(results[2].locals[0], count = 1, type = WasmI32Type.code)
+
+        assertEquals(1, results[3].locals.size)
+        assertLocalNum(results[3].locals[0], count = 2, type = WasmI64Type.code)
+
+        assertEquals(1, results[4].locals.size)
+        assertLocalNum(results[4].locals[0], count = 1, type = WasmF32Type.code)
+
+        assertEquals(2, results[5].locals.size)
+        assertLocalNum(results[5].locals[0], count = 1, type = WasmI32Type.code)
+        assertLocalNum(results[5].locals[1], count = 1, type = WasmI64Type.code)
+    }
+
+    fun testLocalsForFunctionsReturnsOnlyRequestedSparseIndices() = doTest("functionIndexSpace") { wasmModule ->
+        val results = localsForFunctions(listOf(0, 2, 5), wasmModule)
+
+        assertEquals(listOf(0, 2, 5), results.map { it.funcidx })
+        assertTrue(results[0].locals.isEmpty())
+
+        assertEquals(1, results[1].locals.size)
+        assertLocalNum(results[1].locals[0], count = 1, type = WasmI32Type.code)
+
+        assertEquals(2, results[2].locals.size)
+        assertLocalNum(results[2].locals[0], count = 1, type = WasmI32Type.code)
+        assertLocalNum(results[2].locals[1], count = 1, type = WasmI64Type.code)
+    }
+
+    fun testLocalNumRenderedTypeUsesSharedWasmNumTypeMapping() {
+        assertEquals("num:i32", LocalNum(1, WasmI32Type.code).renderedType())
+        assertEquals("num:i64", LocalNum(1, WasmI64Type.code).renderedType())
+        assertEquals("num:f32", LocalNum(1, WasmF32Type.code).renderedType())
+        assertEquals("num:f64", LocalNum(1, WasmF64Type.code).renderedType())
+    }
+
+    fun testMcpLocalTypeLabelsDoNotExposeInternalNamespaces() {
+        assertEquals("i32", LocalNum(1, WasmI32Type.code).renderedMcpType())
+        assertEquals("i64", LocalNum(1, WasmI64Type.code).renderedMcpType())
+        assertEquals("f32", LocalNum(1, WasmF32Type.code).renderedMcpType())
+        assertEquals("f64", LocalNum(1, WasmF64Type.code).renderedMcpType())
+        assertEquals("v128", LocalVec(1).renderedMcpType())
+        assertEquals("i8", LocalPackI8(1).renderedMcpType())
+    }
+
+    private fun assertLocalNum(local: Local, count: Int, type: Byte) {
+        assertTrue(local is LocalNum)
+        local as LocalNum
+        assertEquals(count, local.count)
+        assertEquals(type, local.type)
+    }
+}

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What's New in Hexana 0.16</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+  <section class="hero">
+    <p class="eyebrow">Hexana update</p>
+    <h1>What's New in Hexana 0.16</h1>
+    <p class="lead">Hexana 0.16 focuses on Component Model and Component Model while refining binary inspection inside JetBrains IDEs.</p>
+    <div class="actions">
+      <a class="button primary" href="https://plugins.jetbrains.com/plugin/29090-hexana--webassembly--binary-inspector">Open release notes</a>
+      <a class="button" href="https://github.com/JetBrains/hexana">Open GitHub</a>
+    </div>
+  </section>
+
+  <section class="feature">
+    <div>
+      <p class="eyebrow">Component Model</p>
+      <h2>Read glue-only components in WAT (virtualized)</h2>
+      <p>Component-level imports, exports, types, aliases, and instances now render as foldable WAT sections with byte-accurate links back to Hex.</p>
+        <input class="more-toggle" type="checkbox" id="glue-component-virtualized-wat-more">
+        <ul class="note-list">
+          <li>The <strong>WAT (virtualized)</strong> tab of a Component Model binary no longer goes empty when the component embeds no core modules. <span class="more-continuation">Glue-only components (types, imports, exports, instances, aliases) now render their component-level constructs in the same virtualized panel core modules get.</span></li>
+        </ul>
+        <label class="show-more-link" for="glue-component-virtualized-wat-more">Show more</label>
+        <label class="show-less-link" for="glue-component-virtualized-wat-more">Show less</label>
+    </div>
+      <img src="screenshots/glue-component-virtualized-wat.png" alt="Read glue-only components in WAT (virtualized) screenshot">
+  </section>
+  <section class="feature reversed">
+    <div>
+      <p class="eyebrow">Component Model</p>
+      <h2>Open nested components as editor views</h2>
+      <p>Open embedded components and modules recursively from the Components and Modules tabs, with every nested view retaining its location in the original binary.</p>
+        <input class="more-toggle" type="checkbox" id="nested-component-editor-more">
+        <ul class="note-list">
+          <li>Nested components of a Component Model binary now open in their own editor view. <span class="more-continuation">A <strong>Components</strong> tab lists the embedded component the way <strong>Modules</strong> lists embedded core modules, and clicking the row opens it.</span></li>
+        </ul>
+        <label class="show-more-link" for="nested-component-editor-more">Show more</label>
+        <label class="show-less-link" for="nested-component-editor-more">Show less</label>
+    </div>
+      <img src="screenshots/nested-component-editor.png" alt="Open nested components as editor views screenshot">
+  </section>
+
+</main>
+</body>
+</html>

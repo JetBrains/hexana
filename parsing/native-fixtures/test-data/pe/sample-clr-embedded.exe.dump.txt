@@ -1,0 +1,61 @@
+metadata version: PDB v1.0
+pdb id: guid=ac392da6-2c27-4521-a6b4-0d5948fc1f02 stamp=0x83123A8A
+entry point: 0x06000009
+table Document: 1
+table MethodDebugInformation: 14
+table LocalScope: 7
+table LocalVariable: 2
+table ImportScope: 4
+table CustomDebugInformation: 8
+document 1: /src/clr/Sample.cs hash=8829d00f-11b8-4213-878b-770e8597ac16:48516C4152A0ECABBEC20DB45020A8F6565005F199E132B558BF7F6E9A897128 language=3f5162f8-07c6-11d3-9053-00c04fa302a1
+method 0x06000001: document=0 sequence points=0
+method 0x06000002: document=1 sequence points=4
+  IL_0000 document=1 (19,9)-(19,38)
+  IL_0007 document=1 (19,39)-(19,40)
+  IL_0008 document=1 (19,41)-(19,58)
+  IL_000F document=1 (19,59)-(19,60)
+method 0x06000003: document=1 sequence points=4
+  IL_0000 document=1 (22,9)-(22,10)
+  IL_0001 document=1 (23,13)-(23,23)
+  IL_000D document=1 (24,13)-(24,48)
+  IL_0026 document=1 (25,9)-(25,10)
+method 0x06000004: document=1 sequence points=3
+  IL_0000 document=1 (27,36)-(27,37)
+  IL_0001 document=1 (27,38)-(27,53)
+  IL_000A document=1 (27,54)-(27,55)
+method 0x06000005: document=0 sequence points=0
+method 0x06000006: document=0 sequence points=0
+method 0x06000007: document=1 sequence points=3
+  IL_0000 document=1 (38,41)-(38,42)
+  IL_0001 document=1 (38,43)-(38,61)
+  IL_0010 document=1 (38,62)-(38,63)
+method 0x06000008: document=0 sequence points=0
+method 0x06000009: document=1 sequence points=6
+  IL_0000 document=1 (46,9)-(46,10)
+  IL_0001 document=1 (47,13)-(47,54)
+  IL_001F document=1 (48,13)-(48,42)
+  IL_002A document=1 (49,13)-(49,49)
+  IL_003D document=1 (50,13)-(50,31)
+  IL_0046 document=1 (51,9)-(51,10)
+method 0x0600000A: document=1 sequence points=16
+  IL_0000 document=1 (54,9)-(54,10)
+  IL_0001 document=1 (56,13)-(56,14)
+  IL_0002 document=1 (57,17)-(57,31)
+  IL_0004 document=1 hidden
+  IL_0006 document=1 hidden
+  IL_001A document=1 (59,29)-(59,43)
+  IL_0022 document=1 (60,29)-(60,42)
+  IL_002A document=1 (61,29)-(61,42)
+  IL_0032 document=1 (62,30)-(62,99)
+  IL_0065 document=1 (65,13)-(65,36)
+  IL_0066 document=1 (66,13)-(66,14)
+  IL_0067 document=1 (67,17)-(67,30)
+  IL_006F document=1 (70,13)-(70,14)
+  IL_0070 document=1 (71,17)-(71,35)
+  IL_007C document=1 (72,13)-(72,14)
+  IL_007E document=1 (73,9)-(73,10)
+method 0x0600000B: document=0 sequence points=0
+method 0x0600000C: document=0 sequence points=0
+method 0x0600000D: document=0 sequence points=0
+method 0x0600000E: document=1 sequence points=1
+  IL_0000 document=1 (62,85)-(62,97)

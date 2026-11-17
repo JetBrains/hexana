@@ -1,0 +1,9 @@
+<idea-plugin>
+    <extensions defaultExtensionNs="JavaScript">
+        <frameworkIndexingHandler implementation="org.jetbrains.hexana.javascript.WasmFrameworkIndexingHandler" version="0"/>
+    </extensions>
+    <extensions defaultExtensionNs="com.intellij">
+        <runLineMarkerContributor language="JavaScript"
+                                  implementationClass="org.jetbrains.hexana.javascript.HexanaSuiteRunLineMarkerContributor"/>
+    </extensions>
+</idea-plugin>

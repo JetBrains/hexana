@@ -1,0 +1,13 @@
+{
+  "sample": "hello_world-nucleo_f429zi",
+  "board": "nucleo_f429zi",
+  "expectedBackend": "Renode",
+  "machineOrPlatform": "stm32f429_eval",
+  "expectedReplSource": "Generated",
+  "expectedReplNote": "No dedicated nucleo_f429zi.repl in Renode library; platform generated from DTS via dts2repl",
+  "bootBannerRegex": "\\*\\*\\* Booting Zephyr OS build [^*]*\\*\\*\\*",
+  "helloRegex": "Hello World! nucleo_f429zi",
+  "bannerValidated": false,
+  "bannerValidatedNote": "Renode not installed locally; validated on QEMU-class only",
+  "negativeKind": null
+}

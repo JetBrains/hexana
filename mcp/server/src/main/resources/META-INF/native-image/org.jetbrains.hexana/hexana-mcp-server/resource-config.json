@@ -1,0 +1,11 @@
+{
+  "resources": {
+    "includes": [
+      {
+        "pattern": "META-INF/services/org\\.slf4j\\.spi\\.SLF4JServiceProvider"
+      }
+    ],
+    "excludes": []
+  },
+  "bundles": []
+}

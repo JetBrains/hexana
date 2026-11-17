@@ -1,0 +1,6 @@
+node_modules/
+out/
+.test-extensions/
+test-resources/
+screenshots/
+collected-screenshots/

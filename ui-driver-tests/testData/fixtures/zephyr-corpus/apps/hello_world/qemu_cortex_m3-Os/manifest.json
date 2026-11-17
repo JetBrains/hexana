@@ -1,0 +1,11 @@
+{
+  "sample": "hello_world-qemu_cortex_m3",
+  "board": "qemu_cortex_m3",
+  "expectedBackend": "Qemu",
+  "machineOrPlatform": "lm3s6965evb",
+  "qemuArgs": ["-machine", "lm3s6965evb", "-cpu", "cortex-m3", "-nographic"],
+  "bootBannerRegex": "\\*\\*\\* Booting Zephyr OS build [^*]*\\*\\*\\*",
+  "helloRegex": "Hello World! qemu_cortex_m3",
+  "bannerValidated": true,
+  "negativeKind": null
+}

@@ -1,0 +1,14 @@
+Wat File
+  WatModuleElement(MODULE)
+    PsiElement(()('(')
+    PsiElement(module)('module')
+    PsiWhiteSpace('\n')
+    PsiWhiteSpace('  ')
+    WatFuncElement(FUNC)
+      PsiElement(()('(')
+      PsiElement(func)('func')
+      PsiWhiteSpace(' ')
+      WatPsiIdentifierElement(IDENTIFIER)
+        PsiElement(identifier)('$1')
+      PsiErrorElement:Unexpected end of file
+        <empty list>

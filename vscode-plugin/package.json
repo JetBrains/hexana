@@ -1,0 +1,412 @@
+{
+  "name": "hexana-wasm",
+  "displayName": "Hexana WebAssembly and Native (ELF/PE/Mach-O) Hex Viewer",
+  "description": "Binary hex viewer and analyzer with a focus on WebAssembly and Native (ELF/PE/Mach-O) formats",
+  "version": "0.14.0",
+  "buildDate": "",
+  "author": "JetBrains",
+  "publisher": "JetBrains",
+  "license": "SEE LICENSE IN LICENSE",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JetBrains/hexana"
+  },
+  "homepage": "https://jetbrains.github.io/hexana/",
+  "bugs": {
+    "url": "https://github.com/JetBrains/hexana/issues"
+  },
+  "engines": {
+    "vscode": "^1.102.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Visualization"
+  ],
+  "keywords": [
+    "wasm",
+    "webassembly",
+    "binary",
+    "hex",
+    "hexview",
+    "wasi",
+    "elf",
+    "pe",
+    "mach",
+    "JetBrains"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onDebugResolve:wasm"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "hexana.vscode.mcp",
+        "label": "Hexana MCP"
+      }
+    ],
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "hexanaWasm",
+          "title": "Wasm",
+          "icon": "media/icon.png"
+        }
+      ]
+    },
+    "views": {
+      "hexanaWasm": [
+        {
+          "type": "webview",
+          "id": "hexanaWasmView",
+          "name": "Wasm",
+          "when": "hexana.wasmDebugActive"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "hexana.mcp.updateServer",
+        "title": "Hexana MCP: Update Server"
+      },
+      {
+        "command": "hexana.mcp.reinstallServer",
+        "title": "Hexana MCP: Reinstall Server"
+      },
+      {
+        "command": "hexana.mcp.showServerStatus",
+        "title": "Hexana MCP: Show Server Status"
+      },
+      {
+        "command": "hexana.openWasmView",
+        "title": "Hexana: Open Wasm View",
+        "enablement": "hexana.wasmDebugActive"
+      },
+      {
+        "command": "hexana.openWasmDisassembly",
+        "title": "Hexana: Open WebAssembly Disassembly",
+        "enablement": "hexana.wasmDebugActive"
+      },
+      {
+        "command": "hexana.compareFiles",
+        "title": "Hexana: Compare Files"
+      },
+      {
+        "command": "hexana.wasiSdk.download",
+        "title": "Hexana: Download wasi-sdk..."
+      },
+      {
+        "command": "hexana.wasiSdk.status",
+        "title": "Hexana: wasi-sdk Status"
+      },
+      {
+        "command": "hexana.configureWasmRuntimes",
+        "title": "Hexana: Configure Target Runtimes"
+      },
+      {
+        "command": "hexana.configureFileAssociations",
+        "title": "Hexana: Configure File Parser Associations"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "hexana.compareFiles",
+          "when": "resourceExtname == .wasm || resourceExtname == .o || resourceExtname == .obj || resourceExtname == .so || resourceExtname == .dylib || resourceExtname == .dll || resourceExtname == .exe || resourceExtname == .elf || resourceExtname == .a || resourceExtname == .lib || resourceExtname == .ko || resourceExtname == .sys || resourceExtname == .axf || resourceExtname == .bin || resourceExtname == .out || resourceExtname == ''",
+          "group": "3_compare"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "hexana.compareFiles"
+        }
+      ]
+    },
+    "breakpoints": [
+      { "language": "c" },
+      { "language": "cpp" },
+      { "language": "rust" },
+      { "language": "go" },
+      { "language": "zig" },
+      { "language": "wat" }
+    ],
+    "debuggers": [
+      {
+        "type": "wasm",
+        "label": "WebAssembly Debug",
+        "languages": ["wasm", "c", "cpp", "rust", "go", "zig", "wat"],
+        "configurationAttributes": {
+          "launch": {
+            "required": ["wasmFile"],
+            "properties": {
+              "wasmFile": {
+                "type": "string",
+                "description": "Path to the .wasm file to debug."
+              },
+              "runtime": {
+                "type": "string",
+                "enum": ["wasmtime", "wamr", "nodejs", "browser"],
+                "default": "wasmtime",
+                "description": "Wasm runtime to use for debugging."
+              },
+              "nodePath": {
+                "type": "string",
+                "default": "",
+                "description": "Custom path to the Node.js executable (for nodejs runtime)."
+              },
+              "chromePath": {
+                "type": "string",
+                "default": "",
+                "description": "Custom path to the Chrome/Chromium executable (for browser runtime)."
+              },
+              "programArgs": {
+                "type": "string",
+                "default": "",
+                "description": "Command-line arguments passed to the Wasm program."
+              },
+              "runtimeOptions": {
+                "type": "string",
+                "default": "",
+                "description": "Extra runtime CLI options (e.g. wasmtime flags)."
+              }
+            }
+          }
+        },
+        "configurationSnippets": [
+          {
+            "label": "WebAssembly: Debug with Wasmtime",
+            "description": "Launch a Wasm module under Wasmtime with LLDB debugging.",
+            "body": {
+              "type": "wasm",
+              "request": "launch",
+              "name": "Debug Wasm (Wasmtime)",
+              "wasmFile": "${workspaceFolder}/${1:path/to/module.wasm}",
+              "runtime": "wasmtime"
+            }
+          },
+          {
+            "label": "WebAssembly: Debug with WAMR",
+            "description": "Launch a Wasm module under WAMR with LLDB remote debugging.",
+            "body": {
+              "type": "wasm",
+              "request": "launch",
+              "name": "Debug Wasm (WAMR)",
+              "wasmFile": "${workspaceFolder}/${1:path/to/module.wasm}",
+              "runtime": "wamr"
+            }
+          },
+          {
+            "label": "WebAssembly: Debug with Node.js (CDP)",
+            "description": "Launch a Wasm module under Node.js with Chrome DevTools Protocol debugging.",
+            "body": {
+              "type": "wasm",
+              "request": "launch",
+              "name": "Debug Wasm (Node.js)",
+              "wasmFile": "${workspaceFolder}/${1:path/to/module.wasm}",
+              "runtime": "nodejs"
+            }
+          },
+          {
+            "label": "WebAssembly: Debug with Chrome (CDP)",
+            "description": "Launch a Wasm module in Chrome with Chrome DevTools Protocol debugging.",
+            "body": {
+              "type": "wasm",
+              "request": "launch",
+              "name": "Debug Wasm (Chrome)",
+              "wasmFile": "${workspaceFolder}/${1:path/to/module.wasm}",
+              "runtime": "browser"
+            }
+          }
+        ]
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "hexana.wasmEditor",
+        "displayName": "Hexana Editor",
+        "selector": [
+          {
+            "filenamePattern": "{*.wasm,*.elf,*.exe,*.so,*.o,*.a,*.dll,*.dylib,*.jar,*.zip,*.war,*.apk,*.class,*.dex,*.arsc,*.resources,*.gguf,*.safetensors,*.desc,*.protoset,*.pcap,*.cap,*.pcapng,*.parquet,*.arrow,*.arrows,*.pb,*.tar,*.tgz,*.tar.gz,*.gz}"
+          }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "hexana.binaryEditor",
+        "displayName": "Hexana Binary Editor",
+        "selector": [
+          {
+            "filenamePattern": "*"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "languages": [
+      {
+        "id": "wasm",
+        "extensions": [
+          ".wasm"
+        ],
+        "aliases": [
+          "WebAssembly"
+        ]
+      },
+      {
+        "id": "wat",
+        "extensions": [
+          ".wat"
+        ],
+        "aliases": [
+          "WebAssembly Text"
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "Hexana",
+      "properties": {
+        "hexana.enableStatistics": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable anonymous usage statistics collection. When disabled, no analytics events are sent regardless of the global VS Code telemetry setting."
+        },
+        "hexana.wasmRuntime": {
+          "type": "string",
+          "default": "ask",
+          "enum": ["wasmtime", "wamr", "graalwasm", "wazero", "browser", "nodejs", "ask"],
+          "enumDescriptions": [
+            "Wasmtime — full-featured runtime with Component Model support",
+            "WAMR (iwasm) — lightweight runtime for core modules",
+            "GraalWasm — GraalVM WebAssembly launcher for core modules",
+            "Wazero — zero-dependency Go-based runtime for core modules",
+            "Default Browser — run the module in the system browser via a local HTTP server",
+            "Node.js — run the module using Node.js built-in WebAssembly API",
+            "Show all runtimes every time — display a picker before each run"
+          ],
+          "description": "WebAssembly runtime to use when running exports from the hex viewer."
+        },
+        "hexana.wasmtimePath": {
+          "type": "string",
+          "default": "",
+          "description": "Custom path to the wasmtime executable. When empty, the extension looks for wasmtime on the system PATH."
+        },
+        "hexana.wamrPath": {
+          "type": "string",
+          "default": "",
+          "description": "Custom path to the iwasm (WAMR) executable. When empty, the extension looks for iwasm on the system PATH."
+        },
+        "hexana.nodePath": {
+          "type": "string",
+          "default": "",
+          "description": "Custom path to the Node.js executable. When empty, the extension looks for node on the system PATH."
+        },
+        "hexana.wazeroPath": {
+          "type": "string",
+          "default": "",
+          "description": "Custom path to the wazero executable. When empty, the extension looks for wazero on the system PATH."
+        },
+        "hexana.graalVmHome": {
+          "type": "string",
+          "default": "",
+          "description": "Path to a GraalVM installation directory. The extension compiles and runs a thin Java wrapper using 'bin/java' from this directory. The JDK must be a GraalVM distribution (it includes the WebAssembly engine on its module path). When empty, falls back to GRAALVM_HOME, then JAVA_HOME (if it is a GraalVM JDK), and finally scans common JVM installation directories automatically."
+        },
+        "hexana.lldbDapPath": {
+          "type": "string",
+          "default": "",
+          "description": "Custom path to the lldb-dap executable (LLDB's Debug Adapter Protocol server). When empty, the extension searches the system PATH and common LLVM installation directories."
+        },
+        "hexana.lldbPath": {
+          "type": "string",
+          "default": "",
+          "description": "Custom path to the lldb executable, used for WAMR remote debugging. When empty, the extension searches the system PATH."
+        },
+        "hexana.tabsPanelPosition": {
+          "type": "string",
+          "enum": [
+            "bottom",
+            "right"
+          ],
+          "enumDescriptions": [
+            "Below the hex view, as a horizontal tab bar.",
+            "To the right of the hex view, with the tabs listed vertically."
+          ],
+          "default": "bottom",
+          "scope": "application",
+          "description": "Where the Hexana editor shows its analysis tabs. The button next to the tabs' \"+\" switches it for every open editor."
+        },
+        "hexana.showSemanticHighlighting": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show semantic highlighting in the hex viewer, coloring bytes by their structural section with labels and navigation arrows."
+        },
+        "hexana.maxLoadedFileSizeMB": {
+          "type": "number",
+          "default": 512,
+          "minimum": 1,
+          "maximum": 2047,
+          "markdownDescription": "How much of a file the Hexana editor loads up front, in megabytes. A larger local file still opens whole but read-only: the hex view, search and data inspector read the rest from disk as needed, and the tabs parse what was loaded. ELF, Mach-O, ZIP, tar, `ar`, PDB, Parquet and Arrow tabs also read the tables they need past that point (up to 256 MB of them); the toolbar says when tabs leave something out. A larger file that is not on the local disk cannot be opened. Raising the limit costs memory in both the extension host and the editor."
+        },
+        "hexana.mcp.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Register the downloaded Hexana MCP server in VS Code."
+        },
+        "hexana.mcp.javaHome": {
+          "type": "string",
+          "default": "",
+          "scope": "application",
+          "description": "Path to a Java 21 or later home used by the Hexana MCP server. Leave empty to use JAVA_HOME or java on PATH."
+        },
+        "hexana.mcp.logLevel": {
+          "type": "string",
+          "enum": [
+            "quiet",
+            "info",
+            "debug"
+          ],
+          "default": "quiet",
+          "description": "Human-readable stderr logging level for the Hexana MCP server."
+        }
+      }
+    },
+    "configurationDefaults": {
+      "workbench.editorAssociations": {
+        "{*.wasm,*.elf,*.exe,*.so,*.o,*.a,*.dll,*.dylib,*.pcap,*.cap,*.pcapng}": "hexana.wasmEditor"
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./tsconfig.json",
+    "watch": "tsc -watch -p ./tsconfig.json",
+    "mock:mcp-release": "node scripts/mock-mcp-downloads-server.js",
+    "test:unit": "npm run compile && npm --prefix test install && npm --prefix test run unit",
+    "package": "npx @vscode/vsce package",
+    "publish:vscode": "vsce publish --packagePath",
+    "publish:openvsx": "ovsx publish",
+    "obfuscate": "javascript-obfuscator out/ --output out/ --compact true --string-array true --string-array-encoding rc4 --self-defending false --source-map false && javascript-obfuscator extension-lib/build/kotlin-webpack/js/productionExecutable/extension-lib.js --output extension-lib/build/kotlin-webpack/js/productionExecutable/extension-lib.js --compact true --string-array true --string-array-encoding rc4 --self-defending false --source-map false && javascript-obfuscator webview/build/kotlin-webpack/js/productionExecutable/webview.js --output webview/build/kotlin-webpack/js/productionExecutable/webview.js --compact true --string-array true --string-array-encoding rc4 --self-defending false --source-map false"
+  },
+  "dependencies": {
+    "adm-zip": "^0.6.1",
+    "semver": "^7.8.5"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/semver": "^7.7.1",
+    "@types/vscode": "^1.102.0",
+    "@vscode/vsce": "^3.9.3-12",
+    "javascript-obfuscator": "^4.1.1",
+    "ovsx": "^0.10.0",
+    "typescript": "^5.3.0"
+  },
+  "overrides": {
+    "form-data": "4.0.6",
+    "js-yaml": "5.4.1",
+    "markdown-it": "14.3.3",
+    "secretlint": "13.0.7",
+    "@azure/msal-node": "7.1.1",
+    "minimatch": "11.0.4",
+    "glob": "14.0.3"
+  }
+}

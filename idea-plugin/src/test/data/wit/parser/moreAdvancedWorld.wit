@@ -1,0 +1,10 @@
+package local:demo;
+
+world command {
+    import wasi:filesystem/filesystem;
+    import wasi:random/random;
+    import wasi:clocks/monotonic-clock;
+    // ...
+
+    export main: func(args: list<string>);
+}

@@ -1,0 +1,10 @@
+package wasi:io@0.3.0-rc-2026-03-15;
+
+@since(version = 0.2.0)
+world imports {
+    @since(version = 0.2.0)
+    import streams;
+
+    @since(version = 0.2.0)
+    import poll;
+}

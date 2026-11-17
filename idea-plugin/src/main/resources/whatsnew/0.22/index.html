@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What's New in Hexana 0.22</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+  <section class="hero">
+    <p class="eyebrow">Hexana update</p>
+    <h1>What's New in Hexana 0.22</h1>
+    <p class="lead">Hexana 0.22 focuses on .NET, Android, and Network captures while refining binary inspection inside JetBrains IDEs.</p>
+    <div class="actions">
+      <a class="button primary" href="https://plugins.jetbrains.com/plugin/29090-hexana--webassembly--binary-inspector">Open release notes</a>
+      <a class="button" href="https://github.com/JetBrains/hexana">Open GitHub</a>
+    </div>
+  </section>
+
+  <section class="feature">
+    <div>
+      <p class="eyebrow">.NET</p>
+      <h2>Read managed code, from metadata to IL</h2>
+      <p>Inspect .NET assembly identity, types and methods, expand resolved IL instructions, and trace code back to matching Portable PDB source lines. The Top tab attributes IL, metadata and ReadyToRun bytes.</p>
+        <input class="more-toggle" type="checkbox" id="managed-code-022-more">
+        <ul class="note-list">
+          <li><strong>.NET assemblies.</strong> PE files with a CLR runtime header (<code>.dll</code> / <code>.exe</code> built for .NET or .NET Framework) are labelled <code>PE32 (.NET)</code> and get managed-code tabs: <strong>.NET</strong> (runtime header flags, platform target, entry point, target framework, ReadyToRun, assembly identity and MVID), <strong>Types</strong> (every type definition with its kind, modifiers and base type; expand a type to see its fields and methods with decoded C#-style signatures), <strong>Methods</strong> (signature, modifiers, RVA and IL size; selecting one highlights its IL body) and <strong>Assembly Refs</strong> (versions and public key tokens). <span class="more-continuation">A <strong>.NET Metadata</strong> tab groups the lower-level views: metadata streams, tables with row counts, type and member references, user strings (<code>ldstr</code> literals) and embedded resources.</span></li>
+          <li><strong>IL Disassembly</strong> tab for .NET assemblies: an ILDasm-style listing with one foldable section per type (fields, then every method with <code>.maxstack</code>, <code>.locals</code>, its instructions and <code>.try</code> clauses). <span class="more-continuation">Call targets, fields, types and <code>ldstr</code> literals are resolved to names, including generic instantiations such as <code>Box&lt;int&gt;::Map&lt;string&gt;</code>.</span></li>
+          <li><strong>Top</strong> tab for .NET assemblies breaks every section down by what owns its bytes: ReadyToRun native code per method (namespace → type → method, generic instantiations included, and code compiled in from other assemblies grouped by assembly), ReadyToRun tables, IL method bodies, metadata streams and tables, managed resources and PE data directories, with alignment padding and anything left over shown separately so a section&#x27;s rows always add up.</li>
+          <li><strong>Source lines from PDBs.</strong> When a PE image&#x27;s PDB is next to it (under the name its CodeView record gives, or the image&#x27;s own name) and is the one the image was built with — same GUID and age for a Windows PDB, same GUID and timestamp for a Portable PDB — Hexana loads it: the <strong>Disassembly</strong> tabs show the source line of each instruction, and a <strong>Debug Info</strong> tab summarizes the line table. <span class="more-continuation">For .NET assemblies a matching Portable PDB — or one embedded in the assembly with <code>-debug:embedded</code> — adds ILDasm-style <code>.line</code> directives to <strong>IL Disassembly</strong> and a <strong>Source</strong> column (<code>Program.cs:42</code>) to <strong>Methods</strong>.</span></li>
+        </ul>
+        <label class="show-more-link" for="managed-code-022-more">Show more</label>
+        <label class="show-less-link" for="managed-code-022-more">Show less</label>
+    </div>
+      <img src="screenshots/managed-code-022.png" alt="Read managed code, from metadata to IL screenshot">
+  </section>
+  <section class="feature reversed">
+    <div>
+      <p class="eyebrow">Android</p>
+      <h2>Browse every class in an APK</h2>
+      <p>Open one Classes tab across all DEX files, filter by DEX, and reveal a class in its original DEX editor.</p>
+        <input class="more-toggle" type="checkbox" id="apk-classes-022-more">
+        <ul class="note-list">
+          <li><strong>Classes</strong> tab for <code>.apk</code> files listing every class across all of the archive&#x27;s DEX files (<code>classes.dex</code>, <code>classes2.dex</code>, …), with a filter per DEX file. <span class="more-continuation">The DEX files are only read once the tab is opened, and off the UI thread.</span></li>
+        </ul>
+        <label class="show-more-link" for="apk-classes-022-more">Show more</label>
+        <label class="show-less-link" for="apk-classes-022-more">Show less</label>
+    </div>
+      <img src="screenshots/apk-classes-022.png" alt="Browse every class in an APK screenshot">
+  </section>
+  <section class="feature">
+    <div>
+      <p class="eyebrow">Network captures</p>
+      <h2>Turn captured requests into live requests</h2>
+      <p>Edit a captured HTTP request and resend it from the Packets tab. Inspect the response in the same window, or export the request to the bundled HTTP Client when available.</p>
+        <input class="more-toggle" type="checkbox" id="http-replay-022-more">
+        <ul class="note-list">
+          <li><strong>Replay HTTP requests from a PCAP.</strong> Right-click an HTTP request row in a capture&#x27;s <strong>Packets</strong> tab and choose <strong>Replay HTTP Request…</strong> to edit the method, URL, headers and body and send it again; the response (status, headers, decompressed body) shows in the same window, which stays open so the request can be tweaked and re-sent. <span class="more-continuation">Cleartext requests are reassembled across TCP segments, skipping retransmissions; HTTPS requests work once an SSL key log decrypts them (one TLS record&#x27;s worth of body).</span></li>
+        </ul>
+        <label class="show-more-link" for="http-replay-022-more">Show more</label>
+        <label class="show-less-link" for="http-replay-022-more">Show less</label>
+    </div>
+      <img src="screenshots/http-replay-022.png" alt="Turn captured requests into live requests screenshot">
+  </section>
+
+  <section class="notes">
+    <h2>Also in 0.22</h2>
+    <ul class="improvements">
+      <li>
+        <strong>Decode managed resource sets</strong>
+        <span>Inspect standalone .resources files and embedded resource sets, including decoded values and byte or stream content types.</span>
+      </li>
+      <li>
+        <strong>Inspect Windows and Portable PDBs</strong>
+        <span>Browse symbol metadata, streams and source files. Matching symbols beside a PE image add source lines to disassembly and explain their match in Debug Context.</span>
+      </li>
+      <li>
+        <strong>Run APKs with an existing Android SDK</strong>
+        <span>Launch an on-disk APK on a running emulator or an existing AVD when the local Android SDK has the emulator package.</span>
+      </li>
+    </ul>
+  </section>
+
+</main>
+</body>
+</html>

@@ -1,0 +1,9 @@
+package local:demo;
+
+world my-world {
+    import host: interface {
+      log: func(param: string);
+    }
+
+    export run: func();
+}

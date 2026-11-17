@@ -1,0 +1,111 @@
+{
+  "clusters": [
+    {
+      "asset": "screenshots/managed-code-022.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**.NET assemblies.** PE files with a CLR runtime header (`.dll` / `.exe` built for .NET or .NET Framework) are labelled `PE32 (.NET)` and get managed-code tabs: **.NET** (runtime header flags, platform target, entry point, target framework, ReadyToRun, assembly identity and MVID), **Types** (every type definition with its kind, modifiers and base type; expand a type to see its fields and methods with decoded C#-style signatures), **Methods** (signature, modifiers, RVA and IL size; selecting one highlights its IL body) and **Assembly Refs** (versions and public key tokens). A **.NET Metadata** tab groups the lower-level views: metadata streams, tables with row counts, type and member references, user strings (`ldstr` literals) and embedded resources. The size breakdown shows the metadata streams and embedded resources inside their section."
+        },
+        {
+          "section": "Added",
+          "text": "**IL Disassembly** tab for .NET assemblies: an ILDasm-style listing with one foldable section per type (fields, then every method with `.maxstack`, `.locals`, its instructions and `.try` clauses). Call targets, fields, types and `ldstr` literals are resolved to names, including generic instantiations such as `Box<int>::Map<string>`. Types are decoded only when expanded, so large assemblies such as `System.Private.CoreLib` open instantly; search finds types and methods, and clicking an instruction's offset selects its bytes. The **Disassembly** tabs are no longer shown for .NET assemblies whose code all comes from IL \u2014 IL-only and ReadyToRun (crossgen) images, where they could only sweep metadata as if it were code; mixed-mode (C++/CLI) assemblies keep them. The **.NET** tab names the target of ReadyToRun images, e.g. `ARM64 (ReadyToRun, macOS)`."
+        },
+        {
+          "section": "Added",
+          "text": "**Top** tab for .NET assemblies breaks every section down by what owns its bytes: ReadyToRun native code per method (namespace \u2192 type \u2192 method, generic instantiations included, and code compiled in from other assemblies grouped by assembly), ReadyToRun tables, IL method bodies, metadata streams and tables, managed resources and PE data directories, with alignment padding and anything left over shown separately so a section's rows always add up."
+        },
+        {
+          "section": "Added",
+          "text": "**Source lines from PDBs.** When a PE image's PDB is next to it (under the name its CodeView record gives, or the image's own name) and is the one the image was built with \u2014 same GUID and age for a Windows PDB, same GUID and timestamp for a Portable PDB \u2014 Hexana loads it: the **Disassembly** tabs show the source line of each instruction, and a **Debug Info** tab summarizes the line table. For .NET assemblies a matching Portable PDB \u2014 or one embedded in the assembly with `-debug:embedded` \u2014 adds ILDasm-style `.line` directives to **IL Disassembly** and a **Source** column (`Program.cs:42`) to **Methods**. **Debug Context** says which PDB was loaded, or why the one found was not (for example, rebuilt since: its age differs)."
+        }
+      ],
+      "eyebrow": ".NET",
+      "id": "managed-code-022",
+      "recipe": "managed-code-022",
+      "summary": "Inspect .NET assembly identity, types and methods, expand resolved IL instructions, and trace code back to matching Portable PDB source lines. The Top tab attributes IL, metadata and ReadyToRun bytes.",
+      "title": "Read managed code, from metadata to IL"
+    },
+    {
+      "asset": "screenshots/apk-classes-022.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**Classes** tab for `.apk` files listing every class across all of the archive's DEX files (`classes.dex`, `classes2.dex`, \u2026), with a filter per DEX file. The DEX files are only read once the tab is opened, and off the UI thread. Right-click a class and choose **Reveal in DEX** to open its DEX file with the class selected on the **Classes** tab; a DEX file already open in a tab is reused."
+        }
+      ],
+      "eyebrow": "Android",
+      "id": "apk-classes-022",
+      "recipe": "apk-classes-022",
+      "summary": "Open one Classes tab across all DEX files, filter by DEX, and reveal a class in its original DEX editor.",
+      "title": "Browse every class in an APK"
+    },
+    {
+      "asset": "screenshots/http-replay-022.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**Replay HTTP requests from a PCAP.** Right-click an HTTP request row in a capture's **Packets** tab and choose **Replay HTTP Request\u2026** to edit the method, URL, headers and body and send it again; the response (status, headers, decompressed body) shows in the same window, which stays open so the request can be tweaked and re-sent. Cleartext requests are reassembled across TCP segments, skipping retransmissions; HTTPS requests work once an SSL key log decrypts them (one TLS record's worth of body). Connection-level headers and `Content-Length` are recomputed rather than copied, redirects are reported rather than followed, and TLS trusts the certificates the IDE trusts. In IDEs with the bundled **HTTP Client**, **Open Request in HTTP Client** (also in the replay window) writes the request to a scratch `.http` file instead; a binary body goes into a file next to it, read with `<`."
+        }
+      ],
+      "eyebrow": "Network captures",
+      "id": "http-replay-022",
+      "recipe": "http-replay-022",
+      "summary": "Edit a captured HTTP request and resend it from the Packets tab. Inspect the response in the same window, or export the request to the bundled HTTP Client when available.",
+      "title": "Turn captured requests into live requests"
+    },
+    {
+      "asset": null,
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**.NET `.resources` files** open in Hexana with a **Header** tab (reader and resource set types, format version, user types) and a **Resources** tab listing every entry with its type and decoded value \u2014 strings, numbers, `decimal`, `DateTime`, `TimeSpan`, byte arrays and streams (with the content type of common images and archives); serialized objects show their type and size. Resource sets embedded in an assembly expand to the same entries in its **.NET Metadata \u2192 Resources** tab."
+        }
+      ],
+      "eyebrow": ".NET resources",
+      "id": "managed-resources-022",
+      "recipe": "managed-resources-022",
+      "summary": "Inspect standalone .resources files and embedded resource sets, including decoded values and byte or stream content types.",
+      "title": "Decode managed resource sets"
+    },
+    {
+      "asset": null,
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**PDB debug symbols** open in Hexana, recognized by content (a Protein Data Bank `.pdb` text file is left alone). A **Windows PDB** (MSVC, `lld-link`, `clang-cl`) gets a **PDB** tab (GUID and age \u2014 what a PE image's CodeView record must name to match it \u2014 machine, toolchain, flags, type record counts), **Streams** (every MSF stream with what it holds; selecting one highlights its first block, and the hex view outlines every block run), **Modules** (object files with their symbol and line-info sizes), **Source Files** and **Section Contributions**. A **.NET Portable PDB** (Roslyn) gets a **Portable PDB** tab (PDB id, entry point, languages), **Documents** (source files with their hash), and the metadata **Streams** and **Tables**. The PE **Debug** tab names embedded Portable PDB and PDB checksum entries."
+        }
+      ],
+      "eyebrow": "Debug symbols",
+      "id": "pdb-symbols-022",
+      "recipe": "pdb-symbols-022",
+      "summary": "Browse symbol metadata, streams and source files. Matching symbols beside a PE image add source lines to disassembly and explain their match in Debug Context.",
+      "title": "Inspect Windows and Portable PDBs"
+    },
+    {
+      "asset": null,
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**Run** button for on-disk `.apk` files when a local Android SDK already has the emulator package (as installed by Android Studio): reuses a running emulator or boots an existing AVD (prompting to create one in Device Manager if there is none), installs the APK with `adb`, and launches its launcher activity."
+        }
+      ],
+      "eyebrow": "Android emulator",
+      "id": "apk-run-022",
+      "recipe": "apk-run-022",
+      "summary": "Launch an on-disk APK on a running emulator or an existing AVD when the local Android SDK has the emulator package.",
+      "title": "Run APKs with an existing Android SDK"
+    }
+  ],
+  "date": "2026-10-24",
+  "schema": 1,
+  "sources": {
+    "assets": "docs/whatsnew/assets.yml",
+    "assets_sha256": "dde3a43b7488084312d022ae4870a8bf668c1ff930c233ab5ae97d38a3e700db",
+    "changelog": "idea-plugin/CHANGELOG.md",
+    "changelog_sha256": "a790390c25c20e24e768e1b530773f4923fd0bf7bdb8705874f84f4e4a2ee6e3",
+    "design": "docs/whatsnew/DESIGN.md",
+    "design_sha256": "46a170a15744493a36718e673ca921b17c716cb241cea22a9b7e2896f327e05d"
+  },
+  "version": "0.22"
+}

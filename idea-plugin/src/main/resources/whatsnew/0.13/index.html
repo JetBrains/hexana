@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What's New in Hexana 0.13</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+  <section class="hero">
+    <p class="eyebrow">Hexana update</p>
+    <h1>What's New in Hexana 0.13</h1>
+    <p class="lead">Hexana 0.13 focuses on Data, Protobuf, and Navigation while refining binary inspection inside JetBrains IDEs.</p>
+    <div class="actions">
+      <a class="button primary" href="https://plugins.jetbrains.com/plugin/29090-hexana--webassembly--binary-inspector">Open release notes</a>
+      <a class="button" href="https://github.com/JetBrains/hexana">Open GitHub</a>
+    </div>
+  </section>
+
+  <section class="feature">
+    <div>
+      <p class="eyebrow">Data</p>
+      <h2>Inspect Parquet and Arrow data in Hexana</h2>
+      <p>Columnar files now open with schema, metadata, batch structure, decoded rows, and row-to-hex byte highlighting.</p>
+        <input class="more-toggle" type="checkbox" id="columnar-data-more">
+        <ul class="note-list">
+          <li>Open Apache Parquet and Apache Arrow IPC file-format binaries for inspection. <span class="more-continuation">Both are recognised by content magic (<code>PAR1</code> for Parquet, <code>ARROW1</code> for Arrow IPC files) rather than by extension.</span></li>
+          <li>Parquet and Arrow files gain a <strong>Data</strong> tab that decodes the actual contents into a table (one column per schema leaf field, one row per record) and links the table to the hex view: selecting a row highlights that record&#x27;s bytes in the hex editor as disjoint spans, at the best granularity each value allows (an exact per-value range for uncompressed PLAIN data, a page or chunk box for compressed or encoded data). <span class="more-continuation">The first row group (Parquet) or first record batch (Arrow) is decoded, capped at 10,000 rows, with a note when more rows or batches exist.</span></li>
+          <li>Parquet INT96 values (legacy 12-byte timestamps) are decoded and shown as their signed 96-bit integer in base-10, matching the BigInteger representation other Parquet tooling exposes.</li>
+        </ul>
+        <label class="show-more-link" for="columnar-data-more">Show more</label>
+        <label class="show-less-link" for="columnar-data-more">Show less</label>
+    </div>
+      <img src="screenshots/columnar-data.png" alt="Inspect Parquet and Arrow data in Hexana screenshot">
+  </section>
+  <section class="feature reversed">
+    <div>
+      <p class="eyebrow">Protobuf</p>
+      <h2>Browse Protobuf schemas and raw wire messages</h2>
+      <p>Descriptor sets open as structured tables, and any file can be decoded as a schema-less Protobuf wire message from the Hexana context menu.</p>
+        <input class="more-toggle" type="checkbox" id="protobuf-inspection-more">
+        <ul class="note-list">
+          <li>Open compiled Protocol Buffers descriptor sets (<code>.desc</code> / <code>.protoset</code>, produced by <code>protoc --descriptor_set_out</code>) for inspection. <span class="more-continuation">They are recognised by content structure (a leading length-delimited field whose embedded <code>FileDescriptorProto</code> name ends in <code>.proto</code>) as well as by the <code>.desc</code> / <code>.protoset</code>.</span></li>
+          <li><strong>Open As Protobuf Message</strong> (project-view context menu) decodes any file as a raw Protocol Buffers wire message, best-effort and without a schema. <span class="more-continuation">Because a bare wire message has no magic bytes, this is an explicit action rather than auto-detection.</span></li>
+        </ul>
+        <label class="show-more-link" for="protobuf-inspection-more">Show more</label>
+        <label class="show-less-link" for="protobuf-inspection-more">Show less</label>
+    </div>
+      <img src="screenshots/protobuf-inspection.png" alt="Browse Protobuf schemas and raw wire messages screenshot">
+  </section>
+  <section class="feature">
+    <div>
+      <p class="eyebrow">Navigation</p>
+      <h2>Navigate binaries from the IDE Structure tool window</h2>
+      <p>Core WASM modules and ELF binaries now populate the IDE Structure tool window with byte-range trees, functions, symbols, and Run Export actions for runnable WASM exports.</p>
+        <input class="more-toggle" type="checkbox" id="structure-tool-window-more">
+        <ul class="note-list">
+          <li>Core WASM modules and ELF binaries now integrate with the IDE <strong>Structure</strong> tool window, and runnable WASM function exports expose a <strong>Run Export</strong> action from the structure tree context menu. <span class="more-continuation">The tree exposes sections and records as navigable byte ranges, so choosing an entry scrolls and selects the corresponding bytes in the Hexana editor.</span></li>
+        </ul>
+        <label class="show-more-link" for="structure-tool-window-more">Show more</label>
+        <label class="show-less-link" for="structure-tool-window-more">Show less</label>
+    </div>
+      <img src="screenshots/structure-tool-window.png" alt="Navigate binaries from the IDE Structure tool window screenshot">
+  </section>
+  <section class="feature reversed">
+    <div>
+      <p class="eyebrow">Automation</p>
+      <h2>Add custom scriptable analysis tabs</h2>
+      <p>Attach JavaScript tabs to an opened binary, print custom output, and render CSV or TSV results as searchable tables.</p>
+        <ul class="note-list">
+          <li>Support for showing custom scriptable info tabs – write a JS script that uses &#x27;print&#x27; to show information and &#x27;binary&#x27; to access binary data; use &quot;+&quot; to add a script tab – a dialog with instructions and an API reference will be shown; csv and tsv are shown as tables.</li>
+        </ul>
+    </div>
+      <img src="screenshots/scriptable-tabs.png" alt="Add custom scriptable analysis tabs screenshot">
+  </section>
+
+  <section class="notes">
+    <h2>Also in 0.13</h2>
+    <ul class="improvements">
+      <li>
+        <strong>Run with Wazero and search tables consistently</strong>
+        <span>WASM run configurations add Wazero for module execution, while Hexana tables share one faster searchable control.</span>
+      </li>
+    </ul>
+  </section>
+
+</main>
+</body>
+</html>

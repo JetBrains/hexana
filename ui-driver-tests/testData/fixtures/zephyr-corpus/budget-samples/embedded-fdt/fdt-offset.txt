@@ -1,0 +1,8 @@
+fdt_magic_offset_in_elf: 65540
+fdt_magic_offset_hex: 0x10004
+fdt_blob_size: 211
+memory_node: memory@40000000
+memory_origin: 0x40000000
+memory_size: 0x8000000
+memory_size_dec: 134217728
+note: blob embedded in .rodata section of image.elf

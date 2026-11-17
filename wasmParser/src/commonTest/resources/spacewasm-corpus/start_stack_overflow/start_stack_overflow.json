@@ -1,0 +1,3 @@
+{"source_filename": "tests/regression/start_stack_overflow.wast",
+ "commands": [
+  {"type": "assert_uninstantiable", "line": 5, "filename": "start_stack_overflow.0.wasm", "text": "stack overflow", "module_type": "binary"}]}

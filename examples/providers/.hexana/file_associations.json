@@ -1,0 +1,7 @@
+{
+    "$schema": "./file_associations.schema.json",
+    "version": 1,
+    "associations": {
+        "firmware-image.bin": "user:acme-fw"
+    }
+}

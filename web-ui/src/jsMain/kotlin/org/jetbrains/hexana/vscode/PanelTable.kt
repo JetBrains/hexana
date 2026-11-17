@@ -1,0 +1,676 @@
+package org.jetbrains.hexana.vscode
+
+import androidx.compose.runtime.*
+import kotlinx.coroutines.delay
+import org.jetbrains.compose.web.attributes.InputType
+import org.jetbrains.compose.web.css.*
+import org.jetbrains.compose.web.dom.*
+import kotlinx.browser.document
+import kotlinx.browser.window
+import org.w3c.dom.HTMLElement
+import org.w3c.dom.HTMLInputElement
+import org.w3c.dom.HTMLTableElement
+import org.w3c.dom.HTMLTableRowElement
+import org.w3c.dom.events.EventListener
+import org.w3c.dom.events.KeyboardEvent
+
+/** Sort direction for table columns. */
+enum class SortDirection { NONE, ASC, DESC }
+
+/** Mutable sort state shared between the header and the DOM reorder effect. */
+internal class TableSortState(
+    initialColumn: Int = -1,
+    initialDirection: SortDirection = SortDirection.NONE,
+) {
+    var columnIndex by mutableStateOf(initialColumn)
+    var direction by mutableStateOf(initialDirection)
+
+    fun toggle(index: Int) {
+        if (columnIndex == index) {
+            direction = when (direction) {
+                SortDirection.NONE -> SortDirection.ASC
+                SortDirection.ASC -> SortDirection.DESC
+                SortDirection.DESC -> SortDirection.ASC
+            }
+        } else {
+            columnIndex = index
+            direction = SortDirection.ASC
+        }
+    }
+}
+
+/**
+ * Wraps a [PanelTable] with an inline search bar that appears on Cmd/Ctrl+F.
+ * When a query is entered, table body rows whose text content does not contain
+ * the query (case-insensitive) are hidden.
+ */
+@Composable
+fun SearchableTable(
+    headers: List<String>,
+    columnAligns: List<String> = emptyList(),
+    defaultSortColumn: Int = headers.indexOf("ID").takeIf { it >= 0 } ?: -1,
+    defaultSortDirection: SortDirection = SortDirection.ASC,
+    alwaysShowSearch: Boolean = false,
+    searchBarLeading: (@Composable () -> Unit)? = null,
+    footer: (@Composable () -> Unit)? = null,
+    onSortToggle: ((columnIndex: Int) -> Unit)? = null,
+    /**
+     * When set, the table sizes itself to its content up to this CSS length
+     * instead of filling the available height.
+     *
+     * A table normally owns its pane and stretches to it, which needs a parent
+     * that gives it a height. Pass this to place several tables one after another
+     * in a document — a script tab interleaving text and tables — where the
+     * parent height comes from the content itself.
+     */
+    maxBodyHeight: String? = null,
+    /**
+     * Whether this table claims Cmd/Ctrl+F to reveal its own search bar.
+     *
+     * The shortcut is bound on the window so it works while focus is on the
+     * surrounding tab, which means several tables in one pane would all open
+     * their search at once. Turn it off for embedded tables whose pane provides
+     * its own filter.
+     */
+    enableFindShortcut: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    var searchVisible by remember { mutableStateOf(alwaysShowSearch) }
+    var query by remember { mutableStateOf("") }
+    var debouncedQuery by remember { mutableStateOf("") }
+    var containerRef by remember { mutableStateOf<HTMLElement?>(null) }
+
+    // Debounce the search query so DOM filtering only runs after the user
+    // pauses typing, avoiding UI freezes on large tables.
+    LaunchedEffect(query) {
+        delay(300)
+        debouncedQuery = query
+    }
+
+    Div({
+        classes("hexana-searchable-table")
+        tabIndex(-1)
+        style {
+            property("outline", "none")
+            display(DisplayStyle.Flex)
+            property("flex-direction", "column")
+            property("min-height", "0")
+            if (maxBodyHeight == null) property("flex", "1")
+        }
+        ref { container ->
+            containerRef = container
+            if (!enableFindShortcut) {
+                return@ref onDispose { containerRef = null }
+            }
+            // Listen on window (capture phase) so we receive Cmd+F even when
+            // focus is on the parent hexana-tab-content rather than this div.
+            val keyListener = EventListener { event ->
+                val ke = event as? KeyboardEvent ?: return@EventListener
+                val target = ke.target as? HTMLElement
+                if (target != null && !container.contains(target) && target != container) {
+                    val tabContent = container.closest(".hexana-tab-content")
+                    if (target != tabContent) return@EventListener
+                }
+                if (ke.key == "f" && (ke.metaKey || ke.ctrlKey)) {
+                    ke.preventDefault()
+                    ke.stopPropagation()
+                    searchVisible = true
+                    kotlinx.browser.window.requestAnimationFrame {
+                        container.querySelector(".hexana-search-input")
+                            ?.let { (it as? HTMLInputElement)?.focus() }
+                    }
+                }
+            }
+            kotlinx.browser.window.addEventListener("keydown", keyListener, true)
+            onDispose {
+                containerRef = null
+                kotlinx.browser.window.removeEventListener("keydown", keyListener, true)
+            }
+        }
+    }) {
+        if (searchVisible) {
+            SearchBar(
+                query = query,
+                onQueryChange = { query = it },
+                onClose = {
+                    if (!alwaysShowSearch) {
+                        searchVisible = false
+                    }
+                    query = ""
+                },
+                leading = searchBarLeading,
+            )
+        }
+
+        val sortState = remember {
+            if (defaultSortColumn >= 0) TableSortState(defaultSortColumn, defaultSortDirection)
+            else TableSortState()
+        }
+
+        Div({
+            style {
+                if (maxBodyHeight != null) {
+                    property("max-height", maxBodyHeight)
+                } else {
+                    property("flex", "1")
+                }
+                property("min-height", "0")
+                property("overflow-y", "auto")
+            }
+        }) {
+            PanelTable(
+                headers = headers,
+                columnAligns = columnAligns,
+                sortState = sortState,
+                onSortToggle = onSortToggle,
+                content = content,
+            )
+        }
+
+        if (footer != null) {
+            footer()
+        }
+
+        // Re-apply the filter and sort whenever the debounced query or sort state changes.
+        // Use requestAnimationFrame to ensure the DOM is fully rendered before
+        // manipulating row order – on the very first composition the table body
+        // may not yet be populated when DisposableEffect fires synchronously.
+        DisposableEffect(debouncedQuery, sortState.columnIndex, sortState.direction) {
+            val colIdx = sortState.columnIndex
+            val dir = sortState.direction
+            val q = debouncedQuery
+            val rafId = kotlinx.browser.window.requestAnimationFrame {
+                val container = containerRef
+                if (container != null) {
+                    val table = container.querySelector("table.hexana-panel-table") as? HTMLTableElement
+                    if (table != null) {
+                        applySortOrder(table, colIdx, dir)
+                        applySearchFilter(table, q)
+                    }
+                }
+            }
+            onDispose {
+                kotlinx.browser.window.cancelAnimationFrame(rafId)
+            }
+        }
+    }
+}
+
+/**
+ * Inline search bar displayed above the table.
+ */
+@Composable
+internal fun SearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onClose: () -> Unit,
+    leading: (@Composable () -> Unit)? = null,
+) {
+    Div({
+        classes("hexana-search-bar")
+    }) {
+        if (leading != null) {
+            leading()
+        }
+        Input(InputType.Text) {
+            classes("hexana-search-input")
+            value(query)
+            attr("placeholder", "Search\u2026")
+            onInput { event ->
+                onQueryChange(event.value)
+            }
+            onKeyDown { event ->
+                val ke = event.nativeEvent as? KeyboardEvent
+                if (ke != null && ke.key == "Escape") {
+                    ke.preventDefault()
+                    onClose()
+                }
+            }
+            ref { input ->
+                input.focus()
+                onDispose { }
+            }
+        }
+        Span({
+            classes("hexana-search-close")
+            attr("title", "Close search (Esc)")
+            onClick { onClose() }
+        }) {
+            Text("\u2715")
+        }
+    }
+}
+
+/**
+ * Reorders `<tr>` rows inside a [table]'s `<tbody>` based on the text
+ * content of the cell at [columnIndex]. Compares numerically when both
+ * values parse as numbers, otherwise falls back to lexicographic order.
+ */
+private fun applySortOrder(table: HTMLTableElement, columnIndex: Int, direction: SortDirection) {
+    val tbodyElement = table.querySelector("tbody") ?: return
+    if (columnIndex < 0 || direction == SortDirection.NONE) {
+        // Restore original order using the data attribute stored on first sort
+        val rows = tbodyElement.querySelectorAll("tr[data-orig-index]")
+        val sorted = (0 until rows.length)
+            .mapNotNull { rows.item(it) as? HTMLTableRowElement }
+            .sortedBy { it.getAttribute("data-orig-index")?.toIntOrNull() ?: 0 }
+        for (row in sorted) {
+            tbodyElement.appendChild(row)
+        }
+        return
+    }
+
+    val rows = tbodyElement.querySelectorAll("tr")
+    val rowList = (0 until rows.length).mapNotNull { rows.item(it) as? HTMLTableRowElement }
+
+    // Stamp original indices on first encounter
+    for ((i, row) in rowList.withIndex()) {
+        if (!row.hasAttribute("data-orig-index")) {
+            row.setAttribute("data-orig-index", i.toString())
+        }
+    }
+
+    val sorted = rowList.sortedWith(Comparator { a, b ->
+        val aText = a.querySelectorAll("td").let { cells ->
+            if (columnIndex < cells.length) (cells.item(columnIndex) as? HTMLElement)?.textContent?.trim() ?: ""
+            else ""
+        }
+        val bText = b.querySelectorAll("td").let { cells ->
+            if (columnIndex < cells.length) (cells.item(columnIndex) as? HTMLElement)?.textContent?.trim() ?: ""
+            else ""
+        }
+        val cmp = compareValues(aText, bText)
+        if (direction == SortDirection.DESC) -cmp else cmp
+    })
+    for (row in sorted) {
+        tbodyElement.appendChild(row)
+    }
+}
+
+/**
+ * Compares two cell text values. Attempts numeric comparison first
+ * (handling common suffixes like "B", "KB", "%"), then falls back to
+ * case-insensitive lexicographic order.
+ */
+private fun compareValues(a: String, b: String): Int {
+    val aNum = parseNumericValue(a)
+    val bNum = parseNumericValue(b)
+    if (aNum != null && bNum != null) return aNum.compareTo(bNum)
+    return a.compareTo(b, ignoreCase = true)
+}
+
+/** Extracts a numeric value from text, normalizing size suffixes to bytes. */
+private fun parseNumericValue(text: String): Double? {
+    if (text.isEmpty()) return null
+    // Strip hex prefix
+    if (text.startsWith("0x", ignoreCase = true)) {
+        return text.substring(2).toLongOrNull(16)?.toDouble()
+    }
+    // Extract optional leading sign and the rest of the text
+    val sign: Double
+    val body: String
+    val trimmed = text.trim()
+    when {
+        trimmed.startsWith("+") -> { sign = 1.0; body = trimmed.substring(1).trimStart() }
+        trimmed.startsWith("-") || trimmed.startsWith("\u2212") -> { sign = -1.0; body = trimmed.substring(1).trimStart() }
+        else -> { sign = 1.0; body = trimmed }
+    }
+    // Detect unit suffixes and convert to a common base so that, e.g.,
+    // "1 KB" (= 1024) sorts correctly after "900 bytes" (= 900).
+    val mbMatch = Regex("^([\\d,.]+)\\s*MB$", RegexOption.IGNORE_CASE).find(body)
+    if (mbMatch != null) return mbMatch.groupValues[1].replace(",", "").toDoubleOrNull()?.times(sign * 1024.0 * 1024)
+    val kbMatch = Regex("^([\\d,.]+)\\s*KB$", RegexOption.IGNORE_CASE).find(body)
+    if (kbMatch != null) return kbMatch.groupValues[1].replace(",", "").toDoubleOrNull()?.times(sign * 1024.0)
+    // Strip remaining suffixes: "123 bytes", "45.6%", "12 B"
+    val stripped = body
+        .replace(Regex("\\s*bytes$", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("\\s*B$", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("%$"), "")
+        .replace(",", "")
+        .trim()
+    return stripped.toDoubleOrNull()?.times(sign)
+}
+
+/**
+ * Hides/shows `<tr>` rows inside a [table] based on whether their text
+ * content matches [query] (case-insensitive).
+ *
+ * Each row's lowercase text is cached in a `data-search-text` attribute
+ * on first access so that subsequent filter passes avoid the expensive
+ * DOM `.textContent` traversal.
+ */
+private fun applySearchFilter(table: HTMLTableElement, query: String) {
+    val tbodyElement = table.querySelector("tbody") ?: return
+    val rows = tbodyElement.querySelectorAll("tr")
+    val lowerQuery = query.lowercase()
+    for (i in 0 until rows.length) {
+        val row = rows.item(i) as? HTMLTableRowElement ?: continue
+        if (lowerQuery.isEmpty()) {
+            row.style.removeProperty("display")
+        } else {
+            val cached = row.getAttribute("data-search-text")
+            val text = if (cached != null) cached else {
+                val t = row.textContent?.lowercase() ?: ""
+                row.setAttribute("data-search-text", t)
+                t
+            }
+            row.style.display = if (text.contains(lowerQuery)) "" else "none"
+        }
+    }
+}
+
+/**
+ * Reusable table component for panel tabs. Renders a styled HTML <table>
+ * with a sticky header row.
+ */
+@Composable
+internal fun PanelTable(
+    headers: List<String>,
+    columnAligns: List<String> = emptyList(),
+    sortState: TableSortState? = null,
+    onSortToggle: ((columnIndex: Int) -> Unit)? = null,
+    content: @Composable () -> Unit,
+) {
+    Table({
+        classes("hexana-panel-table")
+        // Narrower than this, the scrolling parent scrolls sideways instead of squeezing columns.
+        style { property("min-width", panelTableMinWidth(headers, emptyList())) }
+    }) {
+        Thead {
+            Tr({
+                style {
+                    property("border-bottom", "1px solid var(--hexana-border, #333)")
+                }
+            }) {
+                headers.forEachIndexed { index, header ->
+                    val align = columnAligns.getOrElse(index) { "left" }
+                    val isNarrow = header == "ID" || header == ""
+                    val isSorted = sortState != null && sortState.columnIndex == index
+                    val indicator = when {
+                        isSorted && sortState!!.direction == SortDirection.ASC -> " \u25B2"
+                        isSorted && sortState!!.direction == SortDirection.DESC -> " \u25BC"
+                        else -> ""
+                    }
+                    Th({
+                        classes("panel-th")
+                        if (isNarrow) classes("panel-th-narrow")
+                        if (sortState != null && header.isNotEmpty()) classes("panel-th-sortable")
+                        style {
+                            property("text-align", align)
+                            if (sortState != null && header.isNotEmpty()) {
+                                property("cursor", "pointer")
+                                property("user-select", "none")
+                            }
+                        }
+                        if (sortState != null && header.isNotEmpty()) {
+                            onClick {
+                                if (onSortToggle != null) {
+                                    onSortToggle(index)
+                                } else {
+                                    sortState.toggle(index)
+                                }
+                            }
+                        }
+                    }) { Text(header + indicator) }
+                }
+            }
+        }
+        Tbody {
+            content()
+        }
+    }
+}
+
+/**
+ * The narrowest a `table-layout: fixed` panel table may get: measured columns at their `ch`
+ * width, and every other column wide enough for its title (at least [MIN_FILL_COLUMN_CH]), plus
+ * the cells' 8px side padding. Without it a narrow pane — tabs docked beside the hex view —
+ * squeezes fill columns to nothing; with it the table's scrolling parent scrolls sideways.
+ */
+internal fun panelTableMinWidth(headers: List<String>, columnWidthsCh: List<Int?>): String {
+    var ch = 0
+    for ((index, header) in headers.withIndex()) {
+        ch += columnWidthsCh.getOrNull(index) ?: when {
+            header.isEmpty() || header == "ID" -> NARROW_COLUMN_CH
+            else -> maxOf(header.length + SORT_INDICATOR_CH, MIN_FILL_COLUMN_CH)
+        }
+    }
+    return "calc(${ch}ch + ${headers.size * CELL_SIDE_PADDING_PX * 2}px)"
+}
+
+private const val MIN_FILL_COLUMN_CH = 12
+private const val NARROW_COLUMN_CH = 4
+private const val SORT_INDICATOR_CH = 3
+private const val CELL_SIDE_PADDING_PX = 8
+
+/**
+ * Mutable holder for row callbacks so that a stable keydown listener
+ * always invokes the latest lambdas without re-registering.
+ */
+private class RowCallbacks {
+    var onClick: (() -> Unit)? = null
+    var onDoubleClick: (() -> Unit)? = null
+    var onSelect: (() -> Unit)? = null
+    var onActivate: (() -> Unit)? = null
+}
+
+/**
+ * Reusable table row that supports click-to-highlight behaviour.
+ * Rows are focusable and support ArrowUp / ArrowDown keyboard navigation
+ * between sibling rows, preventing the hex viewer from stealing focus.
+ */
+@Composable
+fun PanelTableRow(
+    isHighlighted: Boolean = false,
+    backgroundColor: String? = null,
+    attrs: Map<String, String> = emptyMap(),
+    onClick: () -> Unit = {},
+    onDoubleClick: (() -> Unit)? = null,
+    onSelect: (() -> Unit)? = null,
+    onActivate: (() -> Unit)? = null,
+    onContextMenu: ((x: Int, y: Int) -> Unit)? = null,
+    /**
+     * Fixed row height, for virtualized tables: their spacers stand in for off-screen rows at
+     * exactly this height, so a row of any other height shifts the content whenever the
+     * rendered window moves. `null` leaves the height to the content.
+     */
+    heightPx: Int? = null,
+    content: @Composable () -> Unit,
+) {
+    // Keep a stable callbacks holder across recompositions; update its
+    // fields on every recomposition so the keydown listener (registered
+    // once in ref{}) always sees the current lambdas.
+    val callbacks = remember { RowCallbacks() }
+    callbacks.onClick = onClick
+    callbacks.onDoubleClick = onDoubleClick
+    callbacks.onSelect = onSelect
+    callbacks.onActivate = onActivate
+    Tr({
+        classes("hexana-panel-row")
+        for ((k, v) in attrs) attr(k, v)
+        tabIndex(0)
+        style {
+            property("cursor", "pointer")
+            if (heightPx != null) {
+                property("height", "${heightPx}px")
+                property("box-sizing", "border-box")
+            }
+            if (isHighlighted && backgroundColor != null) {
+                // Layer the selection highlight over the classification background
+                property("background", "linear-gradient(var(--hexana-selection, rgba(156, 183, 255, 0.2)), var(--hexana-selection, rgba(156, 183, 255, 0.2))), $backgroundColor")
+            } else if (isHighlighted) {
+                property("background", "var(--hexana-selection, rgba(156, 183, 255, 0.2))")
+            } else if (backgroundColor != null) {
+                property("background", backgroundColor)
+            }
+        }
+        onClick { event ->
+            // Run the selection/navigation callback first, then focus the
+            // <tr> in the next animation frame.  The onClick callback may
+            // trigger scrollHexViewerTo() which moves focus to the hex
+            // viewer; re-focusing the row afterwards ensures subsequent
+            // ArrowUp/Down events are received by the global handler.
+            onClick()
+            var el = event.target as? HTMLElement
+            while (el != null && el.tagName != "TR") el = el.parentElement as? HTMLElement
+            el?.let { tr -> window.requestAnimationFrame { tr.asDynamic().focus(js("({preventScroll: true})")) } }
+        }
+        onDoubleClick { event ->
+            onDoubleClick?.invoke()
+            var el = event.target as? HTMLElement
+            while (el != null && el.tagName != "TR") el = el.parentElement as? HTMLElement
+            el?.let { tr -> window.requestAnimationFrame { tr.asDynamic().focus(js("({preventScroll: true})")) } }
+        }
+        if (onContextMenu != null) {
+            onContextMenu { event ->
+                event.preventDefault()
+                event.stopPropagation()
+                val me = event.nativeEvent as? org.w3c.dom.events.MouseEvent
+                if (me != null) {
+                    onContextMenu(me.clientX, me.clientY)
+                }
+            }
+        }
+        // Store the stable callbacks holder on the DOM element so that
+        // the window-level arrow-key handler can read the row's current
+        // callbacks.
+        ref { element ->
+            element.asDynamic().__callbacks = callbacks
+            onDispose { }
+        }
+    }) {
+        content()
+    }
+}
+
+/**
+ * Global window-level keydown handler for [PanelTableRow] arrow-key navigation.
+ *
+ * VSCode webviews intercept keydown events before they reach focused DOM
+ * elements, so per-row `addEventListener("keydown")` never fires.  This
+ * composable installs a single `window`-level listener (the same pattern
+ * [HexViewerPanel] uses) that checks whether `document.activeElement` is a
+ * `.hexana-panel-row` and performs row navigation from there.
+ *
+ * Must be composed once near the app root (e.g. in [BinaryEditorApp]).
+ */
+@Composable
+fun PanelTableRowKeyboardHandler() {
+    DisposableEffect(Unit) {
+        val handler = EventListener { event ->
+            val ke = event as? KeyboardEvent ?: return@EventListener
+            val row = document.activeElement as? HTMLElement ?: return@EventListener
+            if (!row.classList.contains("hexana-panel-row")) return@EventListener
+            val cb = row.asDynamic().__callbacks as? RowCallbacks ?: return@EventListener
+            when (ke.key) {
+                "ArrowDown" -> {
+                    ke.preventDefault()
+                    ke.stopPropagation()
+                    nextVisibleRow(row)?.let { target ->
+                        val targetCb = target.asDynamic().__callbacks as? RowCallbacks
+                        if (targetCb?.onSelect != null) {
+                            targetCb.onSelect!!()
+                        } else {
+                            target.click()
+                        }
+                        // Re-focus after the callback — it may trigger
+                        // scrollHexViewerTo() which steals focus.
+                        window.requestAnimationFrame {
+                            target.asDynamic().focus(js("({preventScroll: true})"))
+                            scrollRowIntoView(target)
+                        }
+                    }
+                }
+                "ArrowUp" -> {
+                    ke.preventDefault()
+                    ke.stopPropagation()
+                    previousVisibleRow(row)?.let { target ->
+                        val targetCb = target.asDynamic().__callbacks as? RowCallbacks
+                        if (targetCb?.onSelect != null) {
+                            targetCb.onSelect!!()
+                        } else {
+                            target.click()
+                        }
+                        // Re-focus after the callback — it may trigger
+                        // scrollHexViewerTo() which steals focus.
+                        window.requestAnimationFrame {
+                            target.asDynamic().focus(js("({preventScroll: true})"))
+                            scrollRowIntoView(target)
+                        }
+                    }
+                }
+                "ArrowLeft", "ArrowRight" -> {
+                    ke.preventDefault()
+                    ke.stopPropagation()
+                    if (cb.onActivate != null) {
+                        cb.onActivate!!()
+                        // Re-focus after onActivate — expand/collapse may
+                        // trigger recomposition that destroys the current
+                        // <tr>.  Locate the [data-focused] row in the next
+                        // animation frame (after Compose settles) and focus it.
+                        val table = row.closest(".hexana-panel-table")
+                        window.requestAnimationFrame {
+                            val target = table?.querySelector("tr[data-focused]")
+                                ?: table?.querySelector(".hexana-panel-row")
+                            target?.asDynamic()?.focus(js("({preventScroll: true})"))
+                        }
+                    } else {
+                        cb.onClick?.invoke()
+                    }
+                }
+                "Enter", " " -> {
+                    ke.preventDefault()
+                    ke.stopPropagation()
+                    cb.onClick?.invoke()
+                }
+            }
+        }
+        // Use capture phase — VSCode webviews may swallow keydown events
+        // during the bubble phase for arrow keys.
+        window.addEventListener("keydown", handler, true)
+        onDispose { window.removeEventListener("keydown", handler, true) }
+    }
+}
+
+/**
+ * Scrolls a table row into view within its scroll container, adjusting for
+ * the sticky `<thead>` header.  Uses direct `scrollTop` manipulation instead
+ * of `Element.scrollIntoView()` to avoid triggering a scroll-event feedback
+ * loop with virtual-scroll recomposition on large tables.
+ */
+private fun scrollRowIntoView(row: HTMLElement) {
+    val wrapper = row.closest(".hexana-panel-table")?.parentElement ?: return
+    val wrapperRect = wrapper.getBoundingClientRect()
+    val rowRect = row.getBoundingClientRect()
+    val headerHeight = row.closest("table")?.querySelector("thead")
+        ?.getBoundingClientRect()?.height ?: 0.0
+    val visibleTop = wrapperRect.top + headerHeight
+    val visibleBottom = wrapperRect.bottom
+    if (rowRect.top < visibleTop) {
+        // Row is above the visible area (behind the sticky header).
+        wrapper.scrollTop -= (visibleTop - rowRect.top)
+    } else if (rowRect.bottom > visibleBottom) {
+        // Row is below the visible area.
+        wrapper.scrollTop += (rowRect.bottom - visibleBottom)
+    }
+}
+
+/** Returns the next visible sibling row, skipping hidden and spacer ones. */
+private fun nextVisibleRow(row: HTMLElement): HTMLElement? {
+    var sibling = row.nextElementSibling as? HTMLElement
+    while (sibling != null) {
+        if (sibling.style.display != "none" && sibling.classList.contains("hexana-panel-row")) return sibling
+        sibling = sibling.nextElementSibling as? HTMLElement
+    }
+    return null
+}
+
+/** Returns the previous visible sibling row, skipping hidden and spacer ones. */
+private fun previousVisibleRow(row: HTMLElement): HTMLElement? {
+    var sibling = row.previousElementSibling as? HTMLElement
+    while (sibling != null) {
+        if (sibling.style.display != "none" && sibling.classList.contains("hexana-panel-row")) return sibling
+        sibling = sibling.previousElementSibling as? HTMLElement
+    }
+    return null
+}

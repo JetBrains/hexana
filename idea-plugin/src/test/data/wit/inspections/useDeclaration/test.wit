@@ -1,0 +1,13 @@
+package pkg:name;
+
+use some:path/inter; // Top-level is OK
+
+world my-world {
+    <error descr="Nested use declaration must specify names to import">use some:path/inter;</error>
+    use some:path/inter.{name}; // OK
+}
+
+interface my-inter {
+    <error descr="Nested use declaration must specify names to import">use some:path/inter;</error>
+    use some:path/inter.{name}; // OK
+}

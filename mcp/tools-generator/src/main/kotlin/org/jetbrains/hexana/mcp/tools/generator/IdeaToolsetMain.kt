@@ -1,0 +1,1355 @@
+package org.jetbrains.hexana.mcp.tools.generator
+
+import com.squareup.kotlinpoet.ClassName
+import com.squareup.kotlinpoet.CodeBlock
+import com.squareup.kotlinpoet.FileSpec
+import com.squareup.kotlinpoet.FunSpec
+import com.squareup.kotlinpoet.KModifier
+import com.squareup.kotlinpoet.MemberName
+import com.squareup.kotlinpoet.ParameterSpec
+import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
+import com.squareup.kotlinpoet.PropertySpec
+import com.squareup.kotlinpoet.TypeSpec
+import com.squareup.kotlinpoet.TypeName
+import com.squareup.kotlinpoet.asTypeName
+import org.jetbrains.hexana.mcp.tools.ClassSpec
+import org.jetbrains.hexana.mcp.tools.FieldDefaultValue
+import org.jetbrains.hexana.mcp.tools.FieldPresence
+import org.jetbrains.hexana.mcp.tools.FieldSpec
+import org.jetbrains.hexana.mcp.tools.HexanaToolSchemaCompatibility
+import org.jetbrains.hexana.mcp.tools.HexanaIdeaTools
+import org.jetbrains.hexana.mcp.tools.IdeaTool
+import org.jetbrains.hexana.mcp.tools.IdeaTypedInvocationSpec
+import org.jetbrains.hexana.mcp.tools.SchemaClassPlan
+import org.jetbrains.hexana.mcp.tools.SchemaFieldPlan
+import org.jetbrains.hexana.mcp.tools.SchemaIntValue
+import org.jetbrains.hexana.mcp.tools.SchemaScalarKind
+import org.jetbrains.hexana.mcp.tools.SchemaTypePlan
+import org.jetbrains.hexana.mcp.tools.ToolInputPattern
+import org.jetbrains.hexana.mcp.tools.compileSchemaPlan
+import org.jetbrains.hexana.mcp.tools.input
+import org.jetbrains.hexana.mcp.tools.mcpDescription
+import org.jetbrains.hexana.mcp.tools.name
+import org.jetbrains.hexana.mcp.tools.output
+import java.nio.file.Files
+import java.nio.file.Path
+import kotlin.system.exitProcess
+
+private const val IDEA_PACKAGE = "org.jetbrains.hexana.mcp"
+private const val PROJECT_PATH_FIELD = "projectPath"
+private const val PATH_DESCRIPTION = "Path relative to the project root"
+private const val PROJECT_PATH_DESCRIPTION =
+    "The project path. Pass this value ALWAYS if you are aware of it. It reduces numbers of ambiguous calls. " +
+        "In the case you know only the current working directory you can use it as the project path. " +
+        "If you're not aware about the project path you can ask user about it."
+
+private val MCP_TOOL = ClassName("com.intellij.mcpserver", "McpTool")
+private val MCP_TOOLS_PROVIDER = ClassName("com.intellij.mcpserver", "McpToolsProvider")
+private val MCP_TOOL_CALL_RESULT = ClassName("com.intellij.mcpserver", "McpToolCallResult")
+private val MCP_TOOL_DESCRIPTOR = ClassName("com.intellij.mcpserver", "McpToolDescriptor")
+private val MCP_TOOL_SCHEMA = ClassName("com.intellij.mcpserver", "McpToolSchema")
+private val MCP_FAIL = MemberName("com.intellij.mcpserver", "mcpFail")
+private val HEXANA_ANALYSIS_LIMITS = ClassName("org.jetbrains.hexana.mcp", "HexanaAnalysisLimits")
+private val JSON_ELEMENT = ClassName("kotlinx.serialization.json", "JsonElement")
+private val JSON_ARRAY = ClassName("kotlinx.serialization.json", "JsonArray")
+private val JSON_OBJECT = ClassName("kotlinx.serialization.json", "JsonObject")
+private val JSON_PRIMITIVE = ClassName("kotlinx.serialization.json", "JsonPrimitive")
+private val JSON_NULL = ClassName("kotlinx.serialization.json", "JsonNull")
+private val WASM_FRAME_INPUT = ClassName("org.jetbrains.hexana.mcp.model.functions", "WasmFrameInput")
+private val SOURCE_LOCATION_INPUT = ClassName("org.jetbrains.hexana.mcp.model.functions", "SourceLocationInput")
+private val BUILD_JSON_OBJECT = MemberName("kotlinx.serialization.json", "buildJsonObject")
+private val BUILD_JSON_ARRAY = MemberName("kotlinx.serialization.json", "buildJsonArray")
+private val ENCODE_HEXANA_JSON = MemberName("org.jetbrains.hexana.mcp", "encodeHexanaJson")
+private val ENCODE_HEXANA_JSON_ELEMENT = MemberName("org.jetbrains.hexana.mcp", "encodeHexanaJsonElement")
+private val LIST = ClassName("kotlin.collections", "List")
+
+fun main(args: Array<String>) {
+    val outputRoot = args.firstOrNull()?.let(Path::of) ?: run {
+        System.err.println("Usage: toolset-generator <output-root>")
+        exitProcess(1)
+    }
+    Files.createDirectories(outputRoot)
+    val fileSpec = buildToolsetFile(HexanaIdeaTools)
+    fileSpec.writeTo(outputRoot)
+    println("Wrote ${fileSpec.packageName}.${fileSpec.name} to $outputRoot")
+}
+
+internal fun buildToolsetFile(tools: List<IdeaTool>): FileSpec {
+    val mcpTools = tools
+    val typedRequests = mcpTools.mapNotNull { tool -> tool.typedInvocation?.also { it.validateFor(tool.input) } }
+    val generatedTypeNames = listOf("HexanaToolset", "HexanaMcpToolCompatibility") +
+        typedRequests.map(IdeaTypedInvocationSpec::requestTypeName)
+    val collidingTypeNames = generatedTypeNames.groupBy { it }.filterValues { it.size > 1 }.keys
+    require(collidingTypeNames.isEmpty()) {
+        "IDEA generated top-level type declarations collide: ${collidingTypeNames.joinToString()}."
+    }
+    val cls = TypeSpec.classBuilder("HexanaToolset")
+        .addSuperinterface(MCP_TOOLS_PROVIDER)
+        .addKdoc("Generated by `:mcp:tools-generator`. Do not edit by hand.")
+        .addFunction(buildGetToolsMethod(mcpTools))
+        .build()
+
+    return FileSpec.builder(IDEA_PACKAGE, "HexanaToolset")
+        .addFileComment("Generated by :mcp:tools-generator. Do not edit by hand.")
+        .addImport(
+            "kotlinx.serialization.json",
+            "booleanOrNull",
+            "int",
+            "intOrNull",
+            "jsonArray",
+            "jsonObject",
+            "jsonPrimitive",
+            "longOrNull",
+        )
+        .addType(buildCompatibilityObject())
+        .addType(cls)
+        .apply {
+            mcpTools.mapNotNull { tool -> tool.typedInvocation?.let { tool to it } }.forEach { (tool, invocation) ->
+                addType(buildIdeaRequestType(tool, invocation))
+                addFunction(buildIdeaRequestDecoder(tool, invocation))
+            }
+        }
+        .addFunction(requireStringArgumentFunction())
+        .addFunction(requireIntArgumentFunction())
+        .addFunction(optionalStringArgumentFunction())
+        .addFunction(optionalIntArgumentFunction())
+        .addFunction(optionalBooleanArgumentFunction())
+        .addFunction(requireMaxItemsFunction())
+        .addFunction(requireStringListArgumentFunction())
+        .addFunction(optionalStringListArgumentFunction())
+        .addFunction(requireIntListArgumentFunction())
+        .addFunction(optionalIntListArgumentFunction())
+        .addFunction(requireWasmFrameListArgumentFunction())
+        .addFunction(optionalWasmFrameListArgumentFunction())
+        .addFunction(requireSourceLocationListArgumentFunction())
+        .addFunction(requireIntMapArgumentFunction())
+        .build()
+}
+
+private fun buildCompatibilityObject(): TypeSpec {
+    return TypeSpec.objectBuilder("HexanaMcpToolCompatibility")
+        .addModifiers(KModifier.PUBLIC)
+        .addKdoc("Generated MCP tool schema compatibility marker.\n")
+        .addProperty(
+            PropertySpec.builder("SCHEMA_VERSION", Int::class, KModifier.CONST)
+                .initializer("%L", HexanaToolSchemaCompatibility.schemaVersion)
+                .build()
+        )
+        .addProperty(
+            PropertySpec.builder("POLICY", String::class, KModifier.CONST)
+                .initializer("%S", HexanaToolSchemaCompatibility.policy)
+                .build()
+        )
+        .build()
+}
+
+private fun buildGetToolsMethod(tools: List<IdeaTool>): FunSpec {
+    val builder = FunSpec.builder("getTools")
+        .addModifiers(KModifier.OVERRIDE)
+        .returns(LIST.parameterizedBy(MCP_TOOL))
+
+    val code = CodeBlock.builder()
+    code.add("return listOf(\n")
+    tools.forEachIndexed { index, spec ->
+        code.add(buildToolObject(spec))
+        if (index != tools.lastIndex) {
+            code.add(",")
+        }
+        code.add("\n")
+    }
+    code.add(")\n")
+    builder.addCode(code.build())
+    return builder.build()
+}
+
+private fun buildToolObject(spec: IdeaTool): CodeBlock {
+    val inputSchema = compileSchemaPlan(spec.input).root
+    val outputSchema = compileSchemaPlan(spec.output).root
+    return CodeBlock.builder()
+        .add("object : %T {\n", MCP_TOOL)
+        .indent()
+        .add("override val descriptor: %T = hexanaToolDescriptor(\n", MCP_TOOL_DESCRIPTOR)
+        .indent()
+        .add("name = %S,\n", spec.name)
+        .add("description = %S,\n", spec.mcpDescription)
+        .add("fullyQualifiedName = %S,\n", "$IDEA_PACKAGE.HexanaToolset.${spec.name.toToolsetMethodName()}")
+        .add("inputSchema = %L,\n", buildIdeaInputSchema(spec, inputSchema))
+        .add("outputSchema = %L,\n", buildToolSchema(outputSchema, includeDescriptions = false, includeNestedClasses = false))
+        .unindent()
+        .add(")\n")
+        .add("override suspend fun call(args: %T): %T {\n", JSON_OBJECT, MCP_TOOL_CALL_RESULT)
+        .indent()
+        .add(buildToolBody(spec))
+        .unindent()
+        .add("}\n")
+        .unindent()
+        .add("}")
+        .build()
+}
+
+private fun buildToolBody(spec: IdeaTool): CodeBlock {
+    spec.typedInvocation?.let { return buildTypedToolBody(spec, it) }
+    val pattern = requireNotNull(spec.inputPattern)
+    val code = CodeBlock.builder()
+    if (pattern.isBinaryPattern()) {
+        code.addStatement("val path = args.optionalStringArgument(%S)", "path")
+        code.addStatement("val bytesBase64 = args.optionalStringArgument(%S)", "bytesBase64")
+        code.addStatement(
+            "val bytes = args.optionalIntListArgument(%S%L)",
+            "bytes",
+            maxItemsArgument(inputField(spec.input, "bytes")),
+        )
+    } else {
+        code.addStatement("val path = args.requireStringArgument(%S)", "path")
+    }
+    when (pattern) {
+        ToolInputPattern.WasmOnly -> Unit
+        ToolInputPattern.WasmPathLabel -> Unit
+        ToolInputPattern.WasmWithBaseline ->
+            code.addStatement("val baselinePath = args.requireStringArgument(%S)", "baselinePath")
+        ToolInputPattern.WasmWithBinding ->
+            code.addStatement("val bindingPath = args.requireStringArgument(%S)", "bindingPath")
+        ToolInputPattern.Funcidx ->
+            code.addStatement("val funcidx = args.requireIntArgument(%S)", "funcidx")
+        ToolInputPattern.FunctionNameSearch -> {
+            val limit = inputField(spec.input, "limit").defaultOrError<Int>()
+            code.addStatement("val query = args.requireStringArgument(%S)", "query")
+            code.addStatement("val limit = args.optionalIntArgument(%S) ?: %L", "limit", limit)
+        }
+        ToolInputPattern.ExportNameSearch -> {
+            val limit = inputField(spec.input, "limit").defaultOrError<Int>()
+            code.addStatement(
+                "val query = args.requireStringListArgument(%S%L)",
+                "query",
+                maxItemsArgument(inputField(spec.input, "query")),
+            )
+            code.addStatement("val limit = args.optionalIntArgument(%S) ?: %L", "limit", limit)
+        }
+        ToolInputPattern.Indices ->
+            code.addStatement(
+                "val indices = args.requireIntListArgument(%S%L)",
+                "indices",
+                maxItemsArgument(inputField(spec.input, "indices")),
+            )
+        ToolInputPattern.SourceMappedIndices -> {
+            code.addStatement(
+                "val indices = args.requireIntListArgument(%S%L)",
+                "indices",
+                maxItemsArgument(inputField(spec.input, "indices")),
+            )
+            code.addStatement("val sourceMapPath = args.optionalStringArgument(%S)", "sourceMapPath")
+        }
+        ToolInputPattern.WasmFrames -> {
+            code.addStatement(
+                "val frames = args.optionalWasmFrameListArgument(%S%L).orEmpty()",
+                "frames",
+                maxItemsArgument(inputField(spec.input, "frames")),
+            )
+            code.addStatement("val crashReportPath = args.optionalStringArgument(%S)", "crashReportPath")
+            code.addStatement("val sourceMapPath = args.optionalStringArgument(%S)", "sourceMapPath")
+        }
+        ToolInputPattern.SourceLocations -> {
+            code.addStatement(
+                "val locations = args.requireSourceLocationListArgument(%S%L)",
+                "locations",
+                maxItemsArgument(inputField(spec.input, "locations")),
+            )
+            code.addStatement("val sourceMapPath = args.optionalStringArgument(%S)", "sourceMapPath")
+        }
+        is ToolInputPattern.ClosedRange -> {
+            code.addStatement("val %N = args.requireIntMapArgument(%S)", pattern.parameterName, pattern.parameterName)
+            code.addStatement(
+                "val range = %M(%N, %S)",
+                REQUIRE_CLOSED_RANGE,
+                pattern.parameterName,
+                pattern.parameterName,
+            )
+        }
+        ToolInputPattern.DataPayloadPolicyAudit -> {
+            code.addStatement("val policyPath = args.requireStringArgument(%S)", "policyPath")
+        }
+        ToolInputPattern.LocalStackBudgetAudit -> {
+            val countParams = inputField(spec.input, "countParams").defaultOrError<Boolean>()
+            code.addStatement("val policyPath = args.optionalStringArgument(%S)", "policyPath")
+            code.addStatement("val logPath = args.optionalStringArgument(%S)", "logPath")
+            code.addStatement(
+                "val checkedExports = args.optionalStringListArgument(%S%L)",
+                "checkedExports",
+                maxItemsArgument(inputField(spec.input, "checkedExports")),
+            )
+            code.addStatement("val maxLocals = args.optionalIntArgument(%S)", "maxLocals")
+            code.addStatement("val countParams = args.optionalBooleanArgument(%S) ?: %L", "countParams", countParams)
+        }
+        ToolInputPattern.ArtifactQuery -> {
+            val operation = inputField(spec.input, "operation").defaultOrError<String>()
+            val limit = inputField(spec.input, "limit").defaultOrError<Int>()
+            val detail = inputField(spec.input, "detail").defaultOrError<String>()
+            val maxBytes = inputField(spec.input, "maxBytes").defaultOrError<Int>()
+            code.addStatement("val operation = args.optionalStringArgument(%S) ?: %S", "operation", operation)
+            code.addStatement(
+                "val entityTypes = args.optionalStringListArgument(%S%L)",
+                "entityTypes",
+                maxItemsArgument(inputField(spec.input, "entityTypes")),
+            )
+            code.addStatement(
+                "val query = args.optionalStringListArgument(%S%L)",
+                "query",
+                maxItemsArgument(inputField(spec.input, "query")),
+            )
+            code.addStatement("val baselinePath = args.optionalStringArgument(%S)", "baselinePath")
+            code.addStatement("val bindingPath = args.optionalStringArgument(%S)", "bindingPath")
+            code.addStatement("val startName = args.optionalStringArgument(%S)", "startName")
+            code.addStatement("val startFuncidx = args.optionalIntArgument(%S)", "startFuncidx")
+            code.addStatement(
+                "val relations = args.optionalStringListArgument(%S%L)",
+                "relations",
+                maxItemsArgument(inputField(spec.input, "relations")),
+            )
+            code.addStatement("val limit = args.optionalIntArgument(%S) ?: %L", "limit", limit)
+            code.addStatement("val detail = args.optionalStringArgument(%S) ?: %S", "detail", detail)
+            code.addStatement("val maxBytes = args.optionalIntArgument(%S) ?: %L", "maxBytes", maxBytes)
+        }
+        ToolInputPattern.PolicyWithBaselineAndLog -> {
+            code.addStatement("val baselinePath = args.requireStringArgument(%S)", "baselinePath")
+            code.addStatement("val policyPath = args.requireStringArgument(%S)", "policyPath")
+            code.addStatement("val logPath = args.optionalStringArgument(%S)", "logPath")
+        }
+        ToolInputPattern.GlobalStatePolicyAudit -> {
+            val detail = inputField(spec.input, "detail").defaultOrError<String>()
+            code.addStatement("val baselinePath = args.requireStringArgument(%S)", "baselinePath")
+            code.addStatement("val policyPath = args.requireStringArgument(%S)", "policyPath")
+            code.addStatement("val logPath = args.optionalStringArgument(%S)", "logPath")
+            code.addStatement("val detail = args.optionalStringArgument(%S) ?: %S", "detail", detail)
+        }
+        ToolInputPattern.RuntimeCompatibility -> {
+            code.addStatement("val runtime = args.requireStringArgument(%S)", "runtime")
+            code.addStatement("val version = args.optionalStringArgument(%S)", "version")
+        }
+        ToolInputPattern.ComponentSurface -> Unit
+        ToolInputPattern.ComponentDependencies -> {
+            code.addStatement("val projectRoot = args.optionalStringArgument(%S)", "projectRoot")
+            code.addStatement(
+                "val scanRoots = args.optionalStringListArgument(%S%L)",
+                "scanRoots",
+                maxItemsArgument(inputField(spec.input, "scanRoots")),
+            )
+        }
+        ToolInputPattern.ComponentCompatibility -> {
+            code.addStatement(
+                "val dependencyPaths = args.optionalStringListArgument(%S%L)",
+                "dependencyPaths",
+                maxItemsArgument(inputField(spec.input, "dependencyPaths")),
+            )
+            code.addStatement("val projectRoot = args.optionalStringArgument(%S)", "projectRoot")
+            code.addStatement("val previousPath = args.optionalStringArgument(%S)", "previousPath")
+            code.addStatement("val dependencyLockPath = args.optionalStringArgument(%S)", "dependencyLockPath")
+        }
+        ToolInputPattern.BinaryOnly -> Unit
+        ToolInputPattern.BoundedBinaryQuery -> {
+            val operation = inputField(spec.input, "operation").defaultOrError<String>()
+            val offset = inputField(spec.input, "offset").defaultOrError<Int>()
+            val limit = inputField(spec.input, "limit").defaultOrError<Int>()
+            val detail = inputField(spec.input, "detail").defaultOrError<String>()
+            val maxBytes = inputField(spec.input, "maxBytes").defaultOrError<Int>()
+            code.addStatement("val operation = args.optionalStringArgument(%S) ?: %S", "operation", operation)
+            code.addStatement(
+                "val entityTypes = args.optionalStringListArgument(%S%L)",
+                "entityTypes",
+                maxItemsArgument(inputField(spec.input, "entityTypes")),
+            )
+            code.addStatement(
+                "val query = args.optionalStringListArgument(%S%L)",
+                "query",
+                maxItemsArgument(inputField(spec.input, "query")),
+            )
+            code.addStatement("val offset = args.optionalIntArgument(%S) ?: %L", "offset", offset)
+            code.addStatement("val limit = args.optionalIntArgument(%S) ?: %L", "limit", limit)
+            code.addStatement("val detail = args.optionalStringArgument(%S) ?: %S", "detail", detail)
+            code.addStatement("val maxBytes = args.optionalIntArgument(%S) ?: %L", "maxBytes", maxBytes)
+        }
+        ToolInputPattern.BinaryFunctionPage -> {
+            val offset = inputField(spec.input, "offset").defaultOrError<Int>()
+            val limit = inputField(spec.input, "limit").defaultOrError<Int>()
+            code.addStatement("val offset = args.optionalIntArgument(%S) ?: %L", "offset", offset)
+            code.addStatement("val limit = args.optionalIntArgument(%S) ?: %L", "limit", limit)
+        }
+        ToolInputPattern.BinaryFunctionSearch -> {
+            val offset = inputField(spec.input, "offset").defaultOrError<Int>()
+            val limit = inputField(spec.input, "limit").defaultOrError<Int>()
+            code.addStatement(
+                "val query = args.requireStringListArgument(%S%L)",
+                "query",
+                maxItemsArgument(inputField(spec.input, "query")),
+            )
+            code.addStatement("val offset = args.optionalIntArgument(%S) ?: %L", "offset", offset)
+            code.addStatement("val limit = args.optionalIntArgument(%S) ?: %L", "limit", limit)
+        }
+    }
+    if (pattern.isBinaryPattern()) {
+        code.addStatement(
+            "val input = %M(path = path, bytesBase64 = bytesBase64, bytes = bytes)",
+            REQUIRE_BINARY_PROVIDER_INPUT,
+        )
+        code.addStatement("val provider = input.provider")
+        code.addStatement("val pathLabel = input.pathLabel")
+    } else {
+        code.addStatement("val file = %M(path)", REQUIRE_WASM_FILE)
+        if (pattern.isComponentPattern()) {
+            code.addStatement("val provider = file.%M()", REQUIRE_COMPONENT_WASM_BINARY_PROVIDER)
+        } else {
+            code.addStatement("val provider = file.%M()", REQUIRE_CORE_WASM_BINARY_PROVIDER)
+        }
+    }
+    if (pattern.usesOptionalSourceMap()) {
+        code.addStatement("val sourceMapText = sourceMapPath?.let { %M(it) }", REQUIRE_TEXT_FILE)
+    }
+    if (pattern == ToolInputPattern.WasmFrames) {
+        code.addStatement("if (frames.isEmpty() && crashReportPath == null) %M(%S)", MCP_FAIL, "Either frames or crashReportPath must be provided")
+        code.addStatement("val crashReportText = crashReportPath?.let { %M(it) }", REQUIRE_TEXT_FILE)
+    }
+
+    val handlerMember = spec.handlerMemberName()
+    if (pattern == ToolInputPattern.ArtifactQuery) {
+        code.addStatement(
+            "val baselineProvider = baselinePath?.let { %M(it).%M() }",
+            REQUIRE_WASM_FILE,
+            REQUIRE_CORE_WASM_BINARY_PROVIDER,
+        )
+        code.addStatement(
+            "val bindingText = bindingPath?.let { %M(it) }",
+            REQUIRE_TEXT_FILE,
+        )
+        code.addStatement(
+            "val result = provider.%M(" +
+                "baseline = baselineProvider, " +
+                "bindingText = bindingText, " +
+                "operation = operation, " +
+                "entityTypes = entityTypes.orEmpty(), " +
+                "query = query.orEmpty(), " +
+                "startName = startName, " +
+                "startFuncidx = startFuncidx, " +
+                "relations = relations.orEmpty(), " +
+                "limit = limit, " +
+                "detail = detail, " +
+                "maxBytes = maxBytes, " +
+                "pathLabel = path, " +
+                "baselinePathLabel = baselinePath, " +
+                "bindingPathLabel = bindingPath" +
+                ")",
+            handlerMember,
+        )
+    } else if (pattern == ToolInputPattern.DataPayloadPolicyAudit) {
+        code.addStatement("val policyText = %M(policyPath)", REQUIRE_TEXT_FILE)
+        code.addStatement(
+            "val result = provider.%M(policyText = policyText, pathLabel = path, policyPathLabel = policyPath)",
+            handlerMember,
+        )
+    } else if (pattern == ToolInputPattern.LocalStackBudgetAudit) {
+        code.addStatement("val policyText = policyPath?.let { %M(it) }", REQUIRE_TEXT_FILE)
+        code.addStatement("val logText = logPath?.let { %M(it) }", REQUIRE_TEXT_FILE)
+        code.addStatement(
+            "val result = provider.%M(" +
+                "policyText = policyText, " +
+                "logText = logText, " +
+                "checkedExports = checkedExports.orEmpty(), " +
+                "maxLocals = maxLocals, " +
+                "countParams = countParams, " +
+                "pathLabel = path, " +
+                "policyPathLabel = policyPath, " +
+                "logPathLabel = logPath" +
+                ")",
+            handlerMember,
+        )
+    } else if (pattern == ToolInputPattern.PolicyWithBaselineAndLog || pattern == ToolInputPattern.GlobalStatePolicyAudit) {
+        code.addStatement(
+            "val baselineProvider = %M(baselinePath).%M()",
+            REQUIRE_WASM_FILE,
+            REQUIRE_CORE_WASM_BINARY_PROVIDER,
+        )
+        code.addStatement("val policyText = %M(policyPath)", REQUIRE_TEXT_FILE)
+        code.addStatement("val logText = logPath?.let { %M(it) }", REQUIRE_TEXT_FILE)
+        val detailArgument = if (pattern == ToolInputPattern.GlobalStatePolicyAudit) {
+            ", detail = detail"
+        } else {
+            ""
+        }
+        code.addStatement(
+            "val result = provider.%M(" +
+                "baseline = baselineProvider, " +
+                "policyText = policyText, " +
+                "logText = logText, " +
+                "pathLabel = path, " +
+                "baselinePathLabel = baselinePath, " +
+                "policyPathLabel = policyPath, " +
+                "logPathLabel = logPath" +
+                detailArgument +
+                ")",
+            handlerMember,
+        )
+    } else if (pattern == ToolInputPattern.WasmWithBaseline) {
+        code.addStatement(
+            "val baselineProvider = %M(baselinePath).%M()",
+            REQUIRE_WASM_FILE,
+            REQUIRE_CORE_WASM_BINARY_PROVIDER,
+        )
+        code.addStatement(
+            "val result = provider.%M(baseline = baselineProvider, pathLabel = path, baselinePathLabel = baselinePath)",
+            handlerMember,
+        )
+    } else if (pattern == ToolInputPattern.WasmWithBinding) {
+        code.addStatement("val bindingText = %M(bindingPath)", REQUIRE_TEXT_FILE)
+        code.addStatement(
+            "val result = provider.%M(bindingText = bindingText, pathLabel = path, bindingPathLabel = bindingPath)",
+            handlerMember,
+        )
+    } else {
+        val callArgs: String = when (pattern) {
+            ToolInputPattern.WasmOnly -> "()"
+            ToolInputPattern.WasmPathLabel -> "(pathLabel = path)"
+            ToolInputPattern.WasmWithBaseline -> error("Handled above")
+            ToolInputPattern.WasmWithBinding -> error("Handled above")
+            ToolInputPattern.Funcidx -> "(funcidx)"
+            ToolInputPattern.FunctionNameSearch -> "(query, limit)"
+            ToolInputPattern.ExportNameSearch -> "(query, limit)"
+            ToolInputPattern.Indices -> "(indices)"
+            ToolInputPattern.SourceMappedIndices -> "(indices, sourceMapText, sourceMapPath)"
+            ToolInputPattern.WasmFrames -> "(frames, sourceMapText, sourceMapPath, crashReportText, crashReportPath)"
+            ToolInputPattern.SourceLocations -> "(locations, sourceMapText, sourceMapPath)"
+            is ToolInputPattern.ClosedRange -> "(range)"
+            ToolInputPattern.DataPayloadPolicyAudit -> error("Handled above")
+            ToolInputPattern.LocalStackBudgetAudit -> error("Handled above")
+            ToolInputPattern.ArtifactQuery -> error("Handled above")
+            ToolInputPattern.PolicyWithBaselineAndLog -> error("Handled above")
+            ToolInputPattern.GlobalStatePolicyAudit -> error("Handled above")
+            ToolInputPattern.RuntimeCompatibility -> "(runtime, version)"
+            ToolInputPattern.ComponentSurface -> "(pathLabel = path)"
+            ToolInputPattern.ComponentDependencies ->
+                "(path = file.path, projectRoot = projectRoot, scanRoots = scanRoots.orEmpty())"
+            ToolInputPattern.ComponentCompatibility ->
+                "(path = file.path, dependencyPaths = dependencyPaths.orEmpty(), projectRoot = projectRoot, previousPath = previousPath, dependencyLockPath = dependencyLockPath)"
+            ToolInputPattern.BinaryOnly -> "(pathLabel = pathLabel)"
+            ToolInputPattern.BoundedBinaryQuery ->
+                "(operation = operation, entityTypes = entityTypes.orEmpty(), query = query.orEmpty(), offset = offset, limit = limit, detail = detail, maxBytes = maxBytes, pathLabel = pathLabel)"
+            ToolInputPattern.BinaryFunctionPage -> "(offset = offset, limit = limit, pathLabel = pathLabel)"
+            ToolInputPattern.BinaryFunctionSearch -> "(query = query, offset = offset, limit = limit, pathLabel = pathLabel)"
+        }
+        code.addStatement("val result = provider.%M$callArgs", handlerMember)
+    }
+    code.addStatement("val text = %M(result)", ENCODE_HEXANA_JSON)
+    code.addStatement("val structuredContent = %M(result).jsonObject", ENCODE_HEXANA_JSON_ELEMENT)
+    code.addStatement("return %T.text(text, structuredContent)", MCP_TOOL_CALL_RESULT)
+    return code.build()
+}
+
+private fun typedInputFields(spec: IdeaTool, invocation: IdeaTypedInvocationSpec): List<SchemaFieldPlan> {
+    val input = compileSchemaPlan(spec.input).root
+    return (listOf(invocation.source.field) + invocation.fields).map { schemaInputField(input, it.name) }
+}
+
+private fun buildIdeaRequestType(spec: IdeaTool, invocation: IdeaTypedInvocationSpec): TypeSpec {
+    val fields = typedInputFields(spec, invocation)
+    return TypeSpec.classBuilder(invocation.requestTypeName)
+        .addModifiers(KModifier.PRIVATE, KModifier.DATA)
+        .primaryConstructor(FunSpec.constructorBuilder().apply {
+            fields.forEachIndexed { index, field ->
+                addParameter(field.name, ideaRequestFieldType(field, index == 0, invocation.halfOpenRanges.any { it.name == field.name }))
+            }
+        }.build())
+        .apply {
+            fields.forEachIndexed { index, field ->
+                addProperty(PropertySpec.builder(field.name, ideaRequestFieldType(field, index == 0, invocation.halfOpenRanges.any { it.name == field.name })).initializer("%N", field.name).build())
+            }
+        }
+        .build()
+}
+
+private fun ideaRequestFieldType(field: SchemaFieldPlan, requiredSource: Boolean, halfOpenRange: Boolean): TypeName {
+    if (halfOpenRange) return IntRange::class.asTypeName()
+    val scalar = field.type as? SchemaTypePlan.Scalar
+        ?: error("IDEA typed request field `${field.wireName}` must be scalar.")
+    val type = when (scalar.kind) {
+        SchemaScalarKind.Int32 -> Int::class.asTypeName()
+        SchemaScalarKind.String -> String::class.asTypeName()
+        SchemaScalarKind.Boolean -> Boolean::class.asTypeName()
+        else -> error("IDEA typed request does not support ${scalar.kind} for `${field.wireName}`.")
+    }
+    return if (requiredSource || (!field.nullable && (field.presence == FieldPresence.Required ||
+        (field.presence is FieldPresence.Defaulted && field.defaultValue != FieldDefaultValue.Null)
+    ))) type else type.copy(nullable = true)
+}
+
+private fun buildIdeaRequestDecoder(spec: IdeaTool, invocation: IdeaTypedInvocationSpec): FunSpec {
+    val fields = typedInputFields(spec, invocation)
+    return FunSpec.builder("decode${invocation.requestTypeName}")
+        .addModifiers(KModifier.PRIVATE)
+        .addParameter("args", JSON_OBJECT)
+        .returns(ClassName(IDEA_PACKAGE, invocation.requestTypeName))
+        .addCode(CodeBlock.builder().apply {
+            fields.forEachIndexed { index, field ->
+                if (invocation.halfOpenRanges.any { it.name == field.name }) {
+                    val range = (field.type as SchemaTypePlan.ClassRef).clazz
+                    val fromField = range.fields.single { it.name == "from" }
+                    val toField = range.fields.single { it.name == "to" }
+                    val map = "${field.name}Map"
+                    val from = "${field.name}From"
+                    val to = "${field.name}ToExclusive"
+                    addStatement("val %N = args.requireIntMapArgument(%S)", map, field.wireName)
+                    addStatement("val %N = %N[%S] ?: %M(%S)", from, map, fromField.wireName, MCP_FAIL,
+                        "Invalid ${field.wireName} no `${fromField.wireName}`")
+                    addStatement("val %N = %N[%S] ?: %T.MAX_VALUE", to, map, toField.wireName, Int::class)
+                    addStatement("if (%N > %N) %M(%S)", from, to, MCP_FAIL,
+                        "Invalid ${field.wireName} `${toField.wireName}` must be >= `${fromField.wireName}`")
+                    addStatement("val %N = %N until %N", field.name, from, to)
+                    return@forEachIndexed
+                }
+                val scalarKind = (field.type as SchemaTypePlan.Scalar).kind
+                if (index > 0 && field.nullable && field.presence != FieldPresence.Required && scalarKind == SchemaScalarKind.Int32) {
+                    addStatement("val %N = args.optionalIntArgument(%S)", field.name, field.wireName)
+                    return@forEachIndexed
+                }
+                if (index > 0 && field.nullable) {
+                    val elementName = "${field.name}Element"
+                    val missing = if (field.presence == FieldPresence.Required) {
+                        CodeBlock.of("%M(%S)", MCP_FAIL, "Missing required argument `${field.wireName}`")
+                    } else {
+                        field.defaultValue?.takeUnless { it == FieldDefaultValue.Null }?.let(::schemaDefaultValue)
+                            ?: CodeBlock.of("null")
+                    }
+                    val parsed = when (scalarKind) {
+                        SchemaScalarKind.Int32 -> CodeBlock.of("%N.jsonPrimitive.int", elementName)
+                        SchemaScalarKind.String -> CodeBlock.of("%N.jsonPrimitive.content", elementName)
+                        SchemaScalarKind.Boolean -> CodeBlock.of(
+                            "%N.jsonPrimitive.booleanOrNull ?: %M(%S)", elementName, MCP_FAIL,
+                            "Invalid argument `${field.wireName}`: expected boolean",
+                        )
+                        else -> error("Unsupported IDEA typed field `${field.wireName}`.")
+                    }
+                    addStatement("val %N = args[%S]", elementName, field.wireName)
+                    add("val %N = when (%N) {\n", field.name, elementName)
+                    indent()
+                    addStatement("null -> %L", missing)
+                    addStatement("%T -> null", JSON_NULL)
+                    addStatement("else -> %L", parsed)
+                    unindent()
+                    add("}\n")
+                    return@forEachIndexed
+                }
+                val method = when (scalarKind) {
+                    SchemaScalarKind.Int32 -> if (field.presence == FieldPresence.Required) "requireIntArgument" else "optionalIntArgument"
+                    SchemaScalarKind.String -> if (index == 0 || field.presence == FieldPresence.Required) "requireStringArgument" else "optionalStringArgument"
+                    SchemaScalarKind.Boolean -> if (field.presence == FieldPresence.Required) null else "optionalBooleanArgument"
+                    else -> error("Unsupported IDEA typed field `${field.wireName}`.")
+                }
+                if (method == null) {
+                    addStatement(
+                        "val %N = args[%S]?.jsonPrimitive?.booleanOrNull ?: %M(%S)",
+                        field.name, field.wireName, MCP_FAIL, "Missing or invalid argument `${field.wireName}`",
+                    )
+                    return@forEachIndexed
+                }
+                val default = field.defaultValue?.takeUnless { it == FieldDefaultValue.Null }
+                if (default == null) addStatement("val %N = args.%N(%S)", field.name, method, field.wireName)
+                else addStatement("val %N = args.%N(%S) ?: %L", field.name, method, field.wireName, schemaDefaultValue(default))
+            }
+            add("return %T(", ClassName(IDEA_PACKAGE, invocation.requestTypeName))
+            fields.forEachIndexed { index, field ->
+                if (index > 0) add(", ")
+                add("%N", field.name)
+            }
+            add(")\n")
+        }.build())
+        .build()
+}
+
+private fun buildTypedToolBody(spec: IdeaTool, invocation: IdeaTypedInvocationSpec): CodeBlock {
+    val code = CodeBlock.builder()
+    code.addStatement("val request = decode%N(args)", invocation.requestTypeName)
+    code.addStatement("val file = %M(request.%N)", REQUIRE_WASM_FILE, invocation.source.field.name)
+    code.addStatement("val provider = file.%M()", REQUIRE_CORE_WASM_BINARY_PROVIDER)
+    code.add("val result = provider.%M(", spec.handlerMemberName())
+    invocation.fields.forEachIndexed { index, field ->
+        if (index > 0) code.add(", ")
+        code.add("request.%N", field.name)
+        if (field in invocation.zeroWhenNull) code.add(" ?: 0")
+    }
+    code.add(")\n")
+    code.addStatement("val text = %M(result)", ENCODE_HEXANA_JSON)
+    code.addStatement("val structuredContent = %M(result).jsonObject", ENCODE_HEXANA_JSON_ELEMENT)
+    code.addStatement("return %T.text(text, structuredContent)", MCP_TOOL_CALL_RESULT)
+    return code.build()
+}
+
+private fun buildIdeaInputSchema(spec: IdeaTool, input: SchemaClassPlan): CodeBlock {
+    val patternFields = spec.typedInvocation?.fields?.map { schemaInputField(input, it.name) }
+        ?: inputFieldsForPattern(spec, input)
+    val baseFields = if (spec.typedInvocation != null) emptyList() else inputBaseFieldsForPattern(spec, input)
+    val pathWireName = spec.typedInvocation?.source?.field?.name?.let { schemaInputField(input, it).wireName } ?: "path"
+    val pathRequired = spec.typedInvocation != null || spec.inputPattern?.isBinaryPattern() == false
+    val builder = CodeBlock.builder()
+    builder.add("%T.ofPropertiesSchema(\n", MCP_TOOL_SCHEMA)
+    builder.add("properties = %M {\n", BUILD_JSON_OBJECT)
+    if (pathRequired) {
+        builder.add("  put(%S, %M {\n", pathWireName, BUILD_JSON_OBJECT)
+        builder.add("    put(%S, %T(%S))\n", "type", JSON_PRIMITIVE, "string")
+        builder.add("    put(%S, %T(%S))\n", "description", JSON_PRIMITIVE, PATH_DESCRIPTION)
+        builder.add("  })\n")
+    }
+    baseFields.forEach { field ->
+        builder.add("  put(%S, ", field.wireName)
+        builder.add(fieldSchemaObject(field, schemaIndent = "    ", closingIndent = "  "))
+        builder.add(")\n")
+    }
+    patternFields.forEach { field ->
+        builder.add("  put(%S, ", field.wireName)
+        builder.add(fieldSchemaObject(field, schemaIndent = "    ", closingIndent = "  "))
+        builder.add(")\n")
+    }
+    builder.add("  put(%S, %M {\n", PROJECT_PATH_FIELD, BUILD_JSON_OBJECT)
+    builder.add("    put(%S, %T(%S))\n", "type", JSON_PRIMITIVE, "string")
+    builder.add("    put(%S, %T(%S))\n", "description", JSON_PRIMITIVE, PROJECT_PATH_DESCRIPTION)
+    builder.add("  })\n")
+    builder.add("},\n")
+    builder.add("requiredProperties = setOf(")
+    val requiredFields = (baseFields + patternFields).filter { it.presence == FieldPresence.Required }
+    if (pathRequired) {
+        builder.add("%S", pathWireName)
+        if (requiredFields.isNotEmpty()) builder.add(", ")
+    }
+    requiredFields.forEachIndexed { index, field ->
+        if (index > 0) builder.add(", ")
+        builder.add("%S", field.wireName)
+    }
+    builder.add("),\n")
+    builder.add("definitions = emptyMap<String, %T>(),\n", JSON_ELEMENT)
+    builder.add(")")
+    return builder.build()
+}
+
+private fun inputBaseFieldsForPattern(spec: IdeaTool, input: SchemaClassPlan): List<SchemaFieldPlan> {
+    return if (requireNotNull(spec.inputPattern).isBinaryPattern()) {
+        listOf(
+            schemaInputField(input, "path"),
+            schemaInputField(input, "bytesBase64"),
+            schemaInputField(input, "bytes"),
+        )
+    } else {
+        emptyList()
+    }
+}
+
+private fun inputFieldsForPattern(spec: IdeaTool, input: SchemaClassPlan): List<SchemaFieldPlan> {
+    fun fields(vararg names: String): List<SchemaFieldPlan> = names.map { schemaInputField(input, it) }
+    return when (val pattern = requireNotNull(spec.inputPattern)) {
+        ToolInputPattern.WasmOnly -> emptyList()
+        ToolInputPattern.WasmPathLabel -> emptyList()
+        ToolInputPattern.WasmWithBaseline -> fields("baselinePath")
+        ToolInputPattern.WasmWithBinding -> fields("bindingPath")
+        ToolInputPattern.Funcidx -> fields("funcidx")
+        ToolInputPattern.FunctionNameSearch -> fields("query", "limit")
+        ToolInputPattern.ExportNameSearch -> fields("query", "limit")
+        ToolInputPattern.Indices -> fields("indices")
+        ToolInputPattern.SourceMappedIndices -> fields("indices", "sourceMapPath")
+        ToolInputPattern.WasmFrames -> fields("frames", "crashReportPath", "sourceMapPath")
+        ToolInputPattern.SourceLocations -> fields("locations", "sourceMapPath")
+        is ToolInputPattern.ClosedRange -> fields(pattern.parameterName)
+        ToolInputPattern.DataPayloadPolicyAudit -> fields("policyPath")
+        ToolInputPattern.LocalStackBudgetAudit -> fields(
+            "policyPath", "logPath", "checkedExports", "maxLocals", "countParams",
+        )
+        ToolInputPattern.ArtifactQuery -> fields(
+            "operation", "entityTypes", "query", "baselinePath", "bindingPath", "startName",
+            "startFuncidx", "relations", "limit", "detail", "maxBytes",
+        )
+        ToolInputPattern.PolicyWithBaselineAndLog -> fields("baselinePath", "policyPath", "logPath")
+        ToolInputPattern.GlobalStatePolicyAudit -> fields("baselinePath", "policyPath", "logPath", "detail")
+        ToolInputPattern.RuntimeCompatibility -> fields("runtime", "version")
+        ToolInputPattern.ComponentSurface -> emptyList()
+        ToolInputPattern.ComponentDependencies -> fields("projectRoot", "scanRoots")
+        ToolInputPattern.ComponentCompatibility -> fields(
+            "dependencyPaths", "projectRoot", "previousPath", "dependencyLockPath",
+        )
+        ToolInputPattern.BinaryOnly -> emptyList()
+        ToolInputPattern.BoundedBinaryQuery -> fields(
+            "operation", "entityTypes", "query", "offset", "limit", "detail", "maxBytes",
+        )
+        ToolInputPattern.BinaryFunctionPage -> fields("offset", "limit")
+        ToolInputPattern.BinaryFunctionSearch -> fields("query", "offset", "limit")
+    }
+}
+
+private fun ToolInputPattern.isBinaryPattern(): Boolean =
+    this == ToolInputPattern.BinaryOnly ||
+        this == ToolInputPattern.BoundedBinaryQuery ||
+        this == ToolInputPattern.BinaryFunctionPage ||
+        this == ToolInputPattern.BinaryFunctionSearch
+
+private fun ToolInputPattern.isComponentPattern(): Boolean =
+    this == ToolInputPattern.ComponentSurface ||
+        this == ToolInputPattern.ComponentDependencies ||
+        this == ToolInputPattern.ComponentCompatibility
+
+private fun ToolInputPattern.usesOptionalSourceMap(): Boolean =
+    this == ToolInputPattern.SourceMappedIndices ||
+        this == ToolInputPattern.WasmFrames ||
+        this == ToolInputPattern.SourceLocations
+
+private fun buildToolSchema(
+    cls: SchemaClassPlan,
+    includeDescriptions: Boolean = true,
+    includeNestedClasses: Boolean = true,
+): CodeBlock {
+    val builder = CodeBlock.builder()
+    builder.add("%T.ofPropertiesSchema(\n", MCP_TOOL_SCHEMA)
+    builder.add("properties = %M {\n", BUILD_JSON_OBJECT)
+    cls.fields.forEach { field ->
+        builder.add("  put(%S, ", field.wireName)
+        builder.add(
+            fieldSchemaObject(
+                field,
+                schemaIndent = "    ",
+                closingIndent = "  ",
+                includeDescriptions = includeDescriptions,
+                includeNestedClasses = includeNestedClasses,
+            )
+        )
+        builder.add(")\n")
+    }
+    builder.add("},\n")
+    builder.add("requiredProperties = setOf(")
+    val required = cls.fields.filter { it.presence == FieldPresence.Required }.map { it.wireName }
+    required.forEachIndexed { index, key ->
+        if (index > 0) builder.add(", ")
+        builder.add("%S", key)
+    }
+    builder.add("),\n")
+    builder.add("definitions = emptyMap<String, %T>(),\n", JSON_ELEMENT)
+    builder.add(")")
+    return builder.build()
+}
+
+private fun fieldSchemaObject(
+    field: SchemaFieldPlan,
+    schemaIndent: String,
+    closingIndent: String,
+    includeDescriptions: Boolean = true,
+    includeNestedClasses: Boolean = true,
+): CodeBlock {
+    val b = CodeBlock.builder()
+    b.add("%M {\n", BUILD_JSON_OBJECT)
+    emitTypeSchema(
+        field,
+        b,
+        indent = schemaIndent,
+        includeDescriptions = includeDescriptions,
+        includeNestedClasses = includeNestedClasses,
+    )
+    if (includeDescriptions) field.description?.let {
+        b.add("${schemaIndent}put(%S, %T(%S))\n", "description", JSON_PRIMITIVE, it)
+    }
+    field.defaultValue?.takeUnless { it == FieldDefaultValue.Null }?.let {
+        b.add("${schemaIndent}put(%S, %T(%L))\n", "default", JSON_PRIMITIVE, schemaDefaultValue(it))
+    }
+    emitFieldConstraints(field, b, indent = schemaIndent)
+    b.add("$closingIndent}")
+    return b.build()
+}
+
+private fun emitTypeSchema(
+    field: SchemaFieldPlan,
+    builder: CodeBlock.Builder,
+    indent: String,
+    includeDescriptions: Boolean,
+    includeNestedClasses: Boolean,
+) {
+    when (val type = field.type) {
+        is SchemaTypePlan.ListOf -> {
+            emitJsonType(builder, indent, "array", nullable = field.nullable)
+            builder.add("${indent}put(%S, %M {\n", "items", BUILD_JSON_OBJECT)
+            emitTypeSchema(
+                type.element,
+                builder,
+                indent = "$indent  ",
+                includeDescriptions = includeDescriptions,
+                includeNestedClasses = includeNestedClasses,
+            )
+            field.constraints.itemMinimum?.let {
+                builder.add("$indent  put(%S, %T(%L))\n", "minimum", JSON_PRIMITIVE, it)
+            }
+            field.constraints.itemMaximum?.let {
+                builder.add("$indent  put(%S, %T(%L))\n", "maximum", JSON_PRIMITIVE, it)
+            }
+            builder.add("${indent}})\n")
+        }
+        is SchemaTypePlan.MapOf -> {
+            emitJsonType(builder, indent, "object", nullable = field.nullable)
+            builder.add("${indent}put(%S, %M {\n", "additionalProperties", BUILD_JSON_OBJECT)
+            emitTypeSchema(
+                type.value,
+                builder,
+                indent = "$indent  ",
+                includeDescriptions = includeDescriptions,
+                includeNestedClasses = includeNestedClasses,
+            )
+            builder.add("${indent}})\n")
+        }
+        else -> emitTypeSchema(
+            type,
+            builder,
+            indent,
+            nullable = field.nullable,
+            includeDescriptions = includeDescriptions,
+            includeNestedClasses = includeNestedClasses,
+        )
+    }
+}
+
+private fun emitTypeSchema(
+    type: SchemaTypePlan,
+    builder: CodeBlock.Builder,
+    indent: String,
+    nullable: Boolean = false,
+    includeDescriptions: Boolean,
+    includeNestedClasses: Boolean,
+) {
+    when (type) {
+        is SchemaTypePlan.Scalar -> emitJsonType(builder, indent, type.kind.jsonSchemaType(), nullable)
+        is SchemaTypePlan.ListOf -> {
+            emitJsonType(builder, indent, "array", nullable)
+            builder.add("${indent}put(%S, %M {\n", "items", BUILD_JSON_OBJECT)
+            emitTypeSchema(
+                type.element,
+                builder,
+                indent = "$indent  ",
+                includeDescriptions = includeDescriptions,
+                includeNestedClasses = includeNestedClasses,
+            )
+            builder.add("${indent}})\n")
+        }
+        is SchemaTypePlan.MapOf -> {
+            emitJsonType(builder, indent, "object", nullable)
+            builder.add("${indent}put(%S, %M {\n", "additionalProperties", BUILD_JSON_OBJECT)
+            emitTypeSchema(
+                type.value,
+                builder,
+                indent = "$indent  ",
+                includeDescriptions = includeDescriptions,
+                includeNestedClasses = includeNestedClasses,
+            )
+            builder.add("${indent}})\n")
+        }
+        is SchemaTypePlan.ClassRef -> {
+            emitJsonType(builder, indent, "object", nullable)
+            if (!includeNestedClasses) return
+            builder.add("${indent}put(%S, %M {\n", "properties", BUILD_JSON_OBJECT)
+            type.clazz.fields.forEach { nested ->
+                builder.add("$indent  put(%S, ", nested.wireName)
+                builder.add(
+                    fieldSchemaObject(
+                        nested,
+                        schemaIndent = "$indent    ",
+                        closingIndent = "$indent  ",
+                        includeDescriptions = includeDescriptions,
+                        includeNestedClasses = includeNestedClasses,
+                    )
+                )
+                builder.add(")\n")
+            }
+            builder.add("${indent}})\n")
+            val requiredFields = type.clazz.fields.filter { it.presence == FieldPresence.Required }
+            if (requiredFields.isNotEmpty()) {
+                builder.add("${indent}put(%S, %M {\n", "required", BUILD_JSON_ARRAY)
+                requiredFields.forEach { req ->
+                    builder.add("$indent  add(%T(%S))\n", JSON_PRIMITIVE, req.wireName)
+                }
+                builder.add("${indent}})\n")
+            }
+        }
+    }
+}
+
+private fun emitJsonType(
+    builder: CodeBlock.Builder,
+    indent: String,
+    jsonType: String,
+    nullable: Boolean,
+) {
+    if (!nullable) {
+        builder.add("${indent}put(%S, %T(%S))\n", "type", JSON_PRIMITIVE, jsonType)
+        return
+    }
+
+    builder.add("${indent}put(%S, %M {\n", "type", BUILD_JSON_ARRAY)
+    builder.add("$indent  add(%T(%S))\n", JSON_PRIMITIVE, jsonType)
+    builder.add("$indent  add(%T(%S))\n", JSON_PRIMITIVE, "null")
+    builder.add("${indent}})\n")
+}
+
+private fun SchemaScalarKind.jsonSchemaType(): String = when (this) {
+    SchemaScalarKind.Int32,
+    SchemaScalarKind.Int64,
+    SchemaScalarKind.UInt32,
+    SchemaScalarKind.Byte -> "integer"
+    SchemaScalarKind.Float64 -> "number"
+    SchemaScalarKind.Boolean -> "boolean"
+    SchemaScalarKind.String, SchemaScalarKind.ByteArray -> "string"
+    SchemaScalarKind.JsonObject -> "object"
+}
+
+private fun emitFieldConstraints(field: SchemaFieldPlan, builder: CodeBlock.Builder, indent: String) {
+    field.constraints.minimum?.let {
+        builder.add("${indent}put(%S, %T(%L))\n", "minimum", JSON_PRIMITIVE, it)
+    }
+    field.constraints.maximum?.let {
+        builder.add("${indent}put(%S, %T(%L))\n", "maximum", JSON_PRIMITIVE, it)
+    }
+    field.constraints.maxItems?.let {
+        builder.add("${indent}put(%S, %T(%L))\n", "maxItems", JSON_PRIMITIVE, schemaIntValue(it))
+    }
+    field.constraints.maxLength?.let {
+        builder.add("${indent}put(%S, %T(%L))\n", "maxLength", JSON_PRIMITIVE, schemaIntValue(it))
+    }
+}
+
+private fun schemaIntValue(value: SchemaIntValue): CodeBlock {
+    return when (value) {
+        is SchemaIntValue.Literal -> CodeBlock.of("%L", value.value)
+        SchemaIntValue.MaxInlineWasmBytes -> CodeBlock.of("%T.MAX_INLINE_WASM_BYTES", HEXANA_ANALYSIS_LIMITS)
+        SchemaIntValue.MaxInlineWasmBase64Length ->
+            CodeBlock.of("((%T.MAX_INLINE_WASM_BYTES + 2) / 3) * 4", HEXANA_ANALYSIS_LIMITS)
+        SchemaIntValue.MaxInlineBinaryBytes -> CodeBlock.of("%T.MAX_INLINE_BINARY_BYTES", HEXANA_ANALYSIS_LIMITS)
+        SchemaIntValue.MaxInlineBinaryBase64Length ->
+            CodeBlock.of("((%T.MAX_INLINE_BINARY_BYTES + 2) / 3) * 4", HEXANA_ANALYSIS_LIMITS)
+    }
+}
+
+private fun maxItemsArgument(field: FieldSpec): CodeBlock {
+    return field.maxItems?.let {
+        CodeBlock.of(", maxItems = %L", schemaIntValue(it))
+    } ?: CodeBlock.of("")
+}
+
+private fun schemaDefaultValue(value: FieldDefaultValue): CodeBlock {
+    return when (value) {
+        FieldDefaultValue.Null -> error("IDEA schemas must omit null defaults.")
+        is FieldDefaultValue.IntValue -> CodeBlock.of("%L", value.value)
+        is FieldDefaultValue.LongValue -> CodeBlock.of("%L", value.value)
+        is FieldDefaultValue.DoubleValue -> CodeBlock.of("%L", value.value)
+        is FieldDefaultValue.BooleanValue -> CodeBlock.of("%L", value.value)
+        is FieldDefaultValue.StringValue -> CodeBlock.of("%S", value.value)
+    }
+}
+
+private fun requireStringArgumentFunction(): FunSpec {
+    return FunSpec.builder("requireStringArgument")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_OBJECT)
+        .addParameter("name", String::class)
+        .returns(String::class)
+        .addCode(
+            """
+            return this[name]?.jsonPrimitive?.content
+                ?: %M("Missing required argument `${'$'}name`")
+            """.trimIndent(),
+            MCP_FAIL,
+        )
+        .build()
+}
+
+private fun requireIntArgumentFunction(): FunSpec {
+    return FunSpec.builder("requireIntArgument")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_OBJECT)
+        .addParameter("name", String::class)
+        .returns(Int::class)
+        .addCode(
+            """
+            return this[name]?.jsonPrimitive?.int
+                ?: %M("Missing required argument `${'$'}name`")
+            """.trimIndent(),
+            MCP_FAIL,
+        )
+        .build()
+}
+
+private fun optionalStringArgumentFunction(): FunSpec {
+    return FunSpec.builder("optionalStringArgument")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_OBJECT)
+        .addParameter("name", String::class)
+        .returns(String::class.asTypeName().copy(nullable = true))
+        .addCode("return this[name]?.jsonPrimitive?.content\n")
+        .build()
+}
+
+private fun optionalIntArgumentFunction(): FunSpec {
+    return FunSpec.builder("optionalIntArgument")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_OBJECT)
+        .addParameter("name", String::class)
+        .returns(Int::class.asTypeName().copy(nullable = true))
+        .addCode("return this[name]?.jsonPrimitive?.intOrNull\n")
+        .build()
+}
+
+private fun optionalBooleanArgumentFunction(): FunSpec {
+    return FunSpec.builder("optionalBooleanArgument")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_OBJECT)
+        .addParameter("name", String::class)
+        .returns(Boolean::class.asTypeName().copy(nullable = true))
+        .addCode("return this[name]?.jsonPrimitive?.booleanOrNull\n")
+        .build()
+}
+
+private fun requireMaxItemsFunction(): FunSpec {
+    return FunSpec.builder("requireMaxItems")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_ARRAY)
+        .addParameter("name", String::class)
+        .addParameter(
+            ParameterSpec.builder("maxItems", Int::class.asTypeName().copy(nullable = true))
+                .defaultValue("null")
+                .build()
+        )
+        .addCode(
+            """
+            if (maxItems != null && size > maxItems) {
+                %M("`${'$'}name` must contain at most ${'$'}maxItems items")
+            }
+            """.trimIndent(),
+            MCP_FAIL,
+        )
+        .build()
+}
+
+private fun requireStringListArgumentFunction(): FunSpec {
+    return FunSpec.builder("requireStringListArgument")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_OBJECT)
+        .addParameter("name", String::class)
+        .addParameter(
+            ParameterSpec.builder("maxItems", Int::class.asTypeName().copy(nullable = true))
+                .defaultValue("null")
+                .build()
+        )
+        .returns(LIST.parameterizedBy(String::class.asTypeName()))
+        .addCode(
+            """
+            val array = this[name]?.jsonArray ?: %M("Missing required argument `${'$'}name`")
+            array.requireMaxItems(name, maxItems)
+            return array.map { it.jsonPrimitive.content }
+            """.trimIndent(),
+            MCP_FAIL,
+        )
+        .build()
+}
+
+private fun optionalStringListArgumentFunction(): FunSpec {
+    return FunSpec.builder("optionalStringListArgument")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_OBJECT)
+        .addParameter("name", String::class)
+        .addParameter(
+            ParameterSpec.builder("maxItems", Int::class.asTypeName().copy(nullable = true))
+                .defaultValue("null")
+                .build()
+        )
+        .returns(LIST.parameterizedBy(String::class.asTypeName()).copy(nullable = true))
+        .addCode(
+            """
+            val array = this[name]?.jsonArray ?: return null
+            array.requireMaxItems(name, maxItems)
+            return array.map { it.jsonPrimitive.content }
+            """.trimIndent()
+        )
+        .build()
+}
+
+private fun requireIntListArgumentFunction(): FunSpec {
+    return FunSpec.builder("requireIntListArgument")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_OBJECT)
+        .addParameter("name", String::class)
+        .addParameter(
+            ParameterSpec.builder("maxItems", Int::class.asTypeName().copy(nullable = true))
+                .defaultValue("null")
+                .build()
+        )
+        .returns(LIST.parameterizedBy(Int::class.asTypeName()))
+        .addCode(
+            """
+            val array = this[name]?.jsonArray ?: %M("Missing required argument `${'$'}name`")
+            array.requireMaxItems(name, maxItems)
+            return array.map { it.jsonPrimitive.int }
+            """.trimIndent(),
+            MCP_FAIL,
+        )
+        .build()
+}
+
+private fun optionalIntListArgumentFunction(): FunSpec {
+    return FunSpec.builder("optionalIntListArgument")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_OBJECT)
+        .addParameter("name", String::class)
+        .addParameter(
+            ParameterSpec.builder("maxItems", Int::class.asTypeName().copy(nullable = true))
+                .defaultValue("null")
+                .build()
+        )
+        .returns(LIST.parameterizedBy(Int::class.asTypeName()).copy(nullable = true))
+        .addCode(
+            """
+            val array = this[name]?.jsonArray ?: return null
+            array.requireMaxItems(name, maxItems)
+            return array.map { it.jsonPrimitive.int }
+            """.trimIndent()
+        )
+        .build()
+}
+
+private fun requireWasmFrameListArgumentFunction(): FunSpec {
+    return FunSpec.builder("requireWasmFrameListArgument")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_OBJECT)
+        .addParameter("name", String::class)
+        .addParameter(
+            ParameterSpec.builder("maxItems", Int::class.asTypeName().copy(nullable = true))
+                .defaultValue("null")
+                .build()
+        )
+        .returns(LIST.parameterizedBy(WASM_FRAME_INPUT))
+        .addCode(
+            """
+            val array = this[name]?.jsonArray ?: %M("Missing required argument `${'$'}name`")
+            array.requireMaxItems(name, maxItems)
+            return array.mapIndexed { index, element ->
+                val value = element.jsonObject
+                %T(
+                    funcidx = value["funcidx"]?.jsonPrimitive?.int
+                        ?: %M("Invalid `${'$'}name[${'$'}index].funcidx`: expected integer"),
+                    codeOffset = value["codeOffset"]?.jsonPrimitive?.longOrNull,
+                    module = value["module"]?.jsonPrimitive?.content,
+                    label = value["label"]?.jsonPrimitive?.content,
+                )
+            }
+            """.trimIndent(),
+            MCP_FAIL,
+            WASM_FRAME_INPUT,
+            MCP_FAIL,
+        )
+        .build()
+}
+
+private fun optionalWasmFrameListArgumentFunction(): FunSpec {
+    return FunSpec.builder("optionalWasmFrameListArgument")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_OBJECT)
+        .addParameter("name", String::class)
+        .addParameter(
+            ParameterSpec.builder("maxItems", Int::class.asTypeName().copy(nullable = true))
+                .defaultValue("null")
+                .build()
+        )
+        .returns(LIST.parameterizedBy(WASM_FRAME_INPUT).copy(nullable = true))
+        .addCode(
+            """
+            val array = this[name]?.jsonArray ?: return null
+            array.requireMaxItems(name, maxItems)
+            return array.mapIndexed { index, element ->
+                val value = element.jsonObject
+                %T(
+                    funcidx = value["funcidx"]?.jsonPrimitive?.int
+                        ?: %M("Invalid `${'$'}name[${'$'}index].funcidx`: expected integer"),
+                    codeOffset = value["codeOffset"]?.jsonPrimitive?.longOrNull,
+                    module = value["module"]?.jsonPrimitive?.content,
+                    label = value["label"]?.jsonPrimitive?.content,
+                )
+            }
+            """.trimIndent(),
+            WASM_FRAME_INPUT,
+            MCP_FAIL,
+        )
+        .build()
+}
+
+private fun requireSourceLocationListArgumentFunction(): FunSpec {
+    return FunSpec.builder("requireSourceLocationListArgument")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_OBJECT)
+        .addParameter("name", String::class)
+        .addParameter(
+            ParameterSpec.builder("maxItems", Int::class.asTypeName().copy(nullable = true))
+                .defaultValue("null")
+                .build()
+        )
+        .returns(LIST.parameterizedBy(SOURCE_LOCATION_INPUT))
+        .addCode(
+            """
+            val array = this[name]?.jsonArray ?: %M("Missing required argument `${'$'}name`")
+            array.requireMaxItems(name, maxItems)
+            return array.map { element ->
+                val value = element.jsonObject
+                %T(
+                    funcidx = value["funcidx"]?.jsonPrimitive?.intOrNull,
+                    codeOffset = value["codeOffset"]?.jsonPrimitive?.longOrNull,
+                )
+            }
+            """.trimIndent(),
+            MCP_FAIL,
+            SOURCE_LOCATION_INPUT,
+        )
+        .build()
+}
+
+private fun requireIntMapArgumentFunction(): FunSpec {
+    return FunSpec.builder("requireIntMapArgument")
+        .addModifiers(KModifier.PRIVATE)
+        .receiver(JSON_OBJECT)
+        .addParameter("name", String::class)
+        .returns(Map::class.asTypeName().parameterizedBy(String::class.asTypeName(), Int::class.asTypeName()))
+        .addCode(
+            """
+            val element = this[name] ?: %M("Missing required argument `${'$'}name`")
+            val value = element as? %T
+                ?: %M("Invalid `${'$'}name`: expected object { from: int, to: int }")
+            return value.mapValues { (key, field) ->
+                (field as? %T)?.takeUnless { it.isString }?.intOrNull
+                    ?: %M("Invalid `${'$'}name.${'$'}key`: expected integer")
+            }
+            """.trimIndent(),
+            MCP_FAIL,
+            JSON_OBJECT,
+            MCP_FAIL,
+            JSON_PRIMITIVE,
+            MCP_FAIL,
+        )
+        .build()
+}
+
+private fun inputField(cls: ClassSpec, fieldName: String): FieldSpec =
+    cls.fields.single { it.name == fieldName }
+
+private fun schemaInputField(cls: SchemaClassPlan, fieldName: String): SchemaFieldPlan =
+    cls.fields.single { it.name == fieldName }
+
+private inline fun <reified T : Any> FieldSpec.defaultOrError(): T {
+    val defaultValue = default ?: error("Field '$name' must declare a default value.")
+    return defaultValue as? T
+        ?: error("Field '$name' default must be ${T::class.simpleName}, got ${defaultValue::class.simpleName}.")
+}
+
+private fun String.toToolsetMethodName(): String {
+    val parts = split('_')
+    return parts.first() + parts.drop(1).joinToString("") { it.replaceFirstChar(Char::uppercaseChar) }
+}
+
+private fun IdeaTool.handlerMemberName(): MemberName =
+    MemberName(handlerFqn.substringBeforeLast('.'), handlerFqn.substringAfterLast('.'))
+
+private val REQUIRE_WASM_FILE = MemberName(IDEA_PACKAGE, "requireWasmFile")
+private val REQUIRE_TEXT_FILE = MemberName(IDEA_PACKAGE, "requireTextFile")
+private val REQUIRE_BINARY_PROVIDER_INPUT = MemberName(IDEA_PACKAGE, "requireBinaryProviderInput")
+private val REQUIRE_CLOSED_RANGE = MemberName(IDEA_PACKAGE, "requireClosedRange")
+private val REQUIRE_CORE_WASM_BINARY_PROVIDER = MemberName(IDEA_PACKAGE, "requireCoreWasmBinaryProvider")
+private val REQUIRE_COMPONENT_WASM_BINARY_PROVIDER = MemberName(IDEA_PACKAGE, "requireComponentWasmBinaryProvider")

@@ -1,0 +1,12 @@
+{
+  "sample": "hello_world-nrf52840dk",
+  "board": "nrf52840dk/nrf52840",
+  "expectedBackend": "Renode",
+  "machineOrPlatform": "nrf52840",
+  "expectedReplSource": "Library",
+  "bootBannerRegex": "\\*\\*\\* Booting Zephyr OS build [^*]*\\*\\*\\*",
+  "helloRegex": "Hello World! nrf52840dk/nrf52840",
+  "bannerValidated": false,
+  "bannerValidatedNote": "Renode not installed locally; validated on QEMU-class only",
+  "negativeKind": null
+}

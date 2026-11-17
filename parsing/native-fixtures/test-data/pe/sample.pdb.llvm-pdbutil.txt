@@ -1,0 +1,178 @@
+
+
+                          Summary                           
+============================================================
+  Block Size: 4096
+  Number of blocks: 18
+  Number of streams: 15
+  Signature: 2931633123
+  Age: 1
+  GUID: {AEBD2BE3-8B00-6D1E-4C4C-44205044422E}
+  Features: 0x1
+  Has Debug Info: true
+  Has Types: true
+  Has IDs: true
+  Has Globals: true
+  Has Publics: true
+  Is incrementally linked: false
+  Has conflicting types: false
+  Is stripped: false
+
+
+                          Streams                           
+============================================================
+  Stream  0 (   0 bytes): [Old MSF Directory]
+  Stream  1 (  93 bytes): [PDB Stream]
+  Stream  2 ( 192 bytes): [TPI Stream]
+  Stream  3 ( 930 bytes): [DBI Stream]
+  Stream  4 (1204 bytes): [IPI Stream]
+  Stream  5 (   0 bytes): [Named Stream "/LinkInfo"]
+  Stream  6 ( 616 bytes): [Global Symbol Hash]
+  Stream  7 ( 656 bytes): [Public Symbol Hash]
+  Stream  8 ( 404 bytes): [Symbol Records]
+  Stream  9 (  48 bytes): [TPI Hash]
+  Stream 10 ( 200 bytes): [Section Header Data]
+  Stream 11 ( 836 bytes): [Module "/tmp/sample-5bae4d.o"]
+  Stream 12 ( 576 bytes): [Module "* Linker *"]
+  Stream 13 (  56 bytes): [Named Stream "/names"]
+  Stream 14 (  48 bytes): [IPI Hash]
+
+
+                        String Table                        
+============================================================
+  ID | String
+  2 | '/src/src/sample.c'
+
+
+                          Modules                           
+============================================================
+  Mod 0000 | `/tmp/sample-5bae4d.o`: 
+  SC[.text]  | mod = 0, 0001:0000, size = 196, data crc = 414378288, reloc crc = 0
+          IMAGE_SCN_CNT_CODE | IMAGE_SCN_ALIGN_16BYTES | IMAGE_SCN_MEM_EXECUTE | 
+          IMAGE_SCN_MEM_READ
+  Obj: `/tmp/sample-5bae4d.o`: 
+  debug stream: 11, # files: 1, has ec info: false
+  pdb file ni: 0 ``, src file ni: 0 ``
+Mod 0001 | `* Linker *`: 
+SC[???]  | mod = 65535, 65535:0000, size = -1, data crc = 0, reloc crc = 0
+        none
+Obj: ``: 
+debug stream: 12, # files: 0, has ec info: false
+pdb file ni: 1 `/out/pe/sample.pdb`, src file ni: 0 ``
+
+                           Files                            
+============================================================
+Mod 0000 | `/tmp/sample-5bae4d.o`: 
+- (MD5: 4719A2F6022504F833D7D57F95641C28) /src/src/sample.c
+Mod 0001 | `* Linker *`: 
+
+                           Lines                            
+============================================================
+Mod 0000 | `/tmp/sample-5bae4d.o`: 
+/src/src/sample.c (MD5: 4719A2F6022504F833D7D57F95641C28)
+  0001:00000000-00000019, line/addr entries = 2
+    10 00000000 !   11 00000008 ! 
+  
+  0001:00000020-00000092, line/addr entries = 6
+    20 00000020 !   21 00000028 !   23 0000004F !   25 00000067 !   27 0000007A !   29 00000089 ! 
+  
+  0001:000000A0-000000B0, line/addr entries = 2
+    14 000000A0 !   15 000000A5 ! 
+  
+  0001:000000B0-000000C4, line/addr entries = 2
+    32 000000B0 !   33 000000B4 ! 
+  
+Mod 0001 | `* Linker *`: 
+
+                    Cross Module Exports                    
+============================================================
+Mod 0000 | `/tmp/sample-5bae4d.o`: 
+Mod 0001 | `* Linker *`: 
+
+                     Types (TPI Stream)                     
+============================================================
+  Showing 10 records
+  0x1000 | LF_ARGLIST [size = 16]
+           0x0074 (int): `int`
+           0x0074 (int): `int`
+  0x1001 | LF_PROCEDURE [size = 16]
+           return type = 0x0074 (int), # args = 2, param list = 0x1000
+           calling conv = cdecl, options = None
+  0x1002 | LF_ARGLIST [size = 12]
+           0x0074 (int): `int`
+  0x1003 | LF_PROCEDURE [size = 16]
+           return type = 0x0074 (int), # args = 1, param list = 0x1002
+           calling conv = cdecl, options = None
+  0x1004 | LF_ARGLIST [size = 8]
+  0x1005 | LF_PROCEDURE [size = 16]
+           return type = 0x0074 (int), # args = 0, param list = 0x1004
+           calling conv = cdecl, options = None
+  0x1006 | LF_MODIFIER [size = 12]
+           referent = 0x0074 (int), modifiers = volatile
+  0x1007 | LF_MODIFIER [size = 12]
+           referent = 0x0070 (char), modifiers = const
+  0x1008 | LF_ARRAY [size = 16]
+           size: 29, index type: 0x0023 (unsigned __int64), element type: 0x1007
+  0x1009 | LF_POINTER [size = 12]
+           referent = 0x1001, mode = pointer, opts = None, kind = ptr64
+
+                     Types (IPI Stream)                     
+============================================================
+  Showing 10 records
+  0x1000 | LF_FUNC_ID [size = 24]
+           name = hexana_add, type = 0x1001, parent scope = <no type>
+  0x1001 | LF_FUNC_ID [size = 28]
+           name = hexana_dispatch, type = 0x1003, parent scope = <no type>
+  0x1002 | LF_FUNC_ID [size = 28]
+           name = hexana_square, type = 0x1003, parent scope = <no type>
+  0x1003 | LF_FUNC_ID [size = 28]
+           name = mainCRTStartup, type = 0x1005, parent scope = <no type>
+  0x1004 | LF_STRING_ID [size = 16] ID: <no type>, String: /work
+  0x1005 | LF_STRING_ID [size = 28] ID: <no type>, String: /src/src/sample.c
+  0x1006 | LF_STRING_ID [size = 12] ID: <no type>, String: 
+  0x1007 | LF_STRING_ID [size = 36] ID: <no type>, String: /usr/lib/llvm-14/bin/clang
+  0x1008 | LF_STRING_ID [size = 920] ID: <no type>, String: "-cc1" "-triple" "x86_64-unknown-windows-msvc19.20.0" "-emit-obj" "-mrelax-all" "-mincremental-linker-compatible" "--mrelax-relocations" "-disable-free" "-clear-ast-before-backend" "-disable-llvm-verifier" "-discard-value-names" "-mrelocation-model" "pic" "-pic-level" "2" "-mframe-pointer=none" "-fmath-errno" "-ffp-contract=on" "-fno-rounding-math" "-mconstructor-aliases" "-funwind-tables=2" "-target-cpu" "x86-64" "-tune-cpu" "generic" "-mllvm" "-treat-scalable-fixed-error-as-warning" "-gno-column-info" "-gcodeview" "-debug-info-kind=constructor" "-fcoverage-compilation-dir=/work" "-resource-dir" "/usr/lib/llvm-14/lib/clang/14.0.6" "-internal-isystem" "/usr/lib/llvm-14/lib/clang/14.0.6/include" "-O0" "-fdebug-compilation-dir=/work" "-ferror-limit" "19" "-fno-use-cxa-atexit" "-fms-extensions" "-fms-compatibility" "-fms-compatibility-version=19.20" "-fdelayed-template-parsing" "-faddrsig" "-x" "c"
+  0x1009 | LF_BUILDINFO [size = 28]
+           0x1004: `/work`
+           0x1007: `/usr/lib/llvm-14/bin/clang`
+           0x1005: `/src/src/sample.c`
+           0x1006: ``
+           0x1008: `"-cc1" "-triple" "x86_64-unknown-windows-msvc19.20.0" "-emit-obj" "-mrelax-all" "-mincremental-linker-compatible" "--mrelax-relocations" "-disable-free" "-clear-ast-before-backend" "-disable-llvm-verifier" "-discard-value-names" "-mrelocation-model" "pic" "-pic-level" "2" "-mframe-pointer=none" "-fmath-errno" "-ffp-contract=on" "-fno-rounding-math" "-mconstructor-aliases" "-funwind-tables=2" "-target-cpu" "x86-64" "-tune-cpu" "generic" "-mllvm" "-treat-scalable-fixed-error-as-warning" "-gno-column-info" "-gcodeview" "-debug-info-kind=constructor" "-fcoverage-compilation-dir=/work" "-resource-dir" "/usr/lib/llvm-14/lib/clang/14.0.6" "-internal-isystem" "/usr/lib/llvm-14/lib/clang/14.0.6/include" "-O0" "-fdebug-compilation-dir=/work" "-ferror-limit" "19" "-fno-use-cxa-atexit" "-fms-extensions" "-fms-compatibility" "-fms-compatibility-version=19.20" "-fdelayed-template-parsing" "-faddrsig" "-x" "c"`
+
+                   Section Contributions                    
+============================================================
+  SC[.text]   | mod = 0, 0001:0000, size = 196, data crc = 414378288, reloc crc = 0
+                IMAGE_SCN_CNT_CODE | IMAGE_SCN_ALIGN_16BYTES | IMAGE_SCN_MEM_EXECUTE | 
+                IMAGE_SCN_MEM_READ
+  SC[.rdata]  | mod = 0, 0002:0000, size = 29, data crc = 1109597320, reloc crc = 0
+                IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_ALIGN_16BYTES | IMAGE_SCN_MEM_READ
+  SC[.rdata]  | mod = 1, 0002:0032, size = 28, data crc = 0, reloc crc = 0
+                IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ
+  SC[.rdata]  | mod = 1, 0002:0060, size = 43, data crc = 0, reloc crc = 0
+                IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ
+  SC[.rdata]  | mod = 1, 0002:0103, size = 40, data crc = 0, reloc crc = 0
+                IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ
+  SC[.rdata]  | mod = 1, 0002:0143, size = 11, data crc = 0, reloc crc = 0
+                IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ
+  SC[.rdata]  | mod = 1, 0002:0154, size = 12, data crc = 0, reloc crc = 0
+                IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ
+  SC[.rdata]  | mod = 1, 0002:0166, size = 8, data crc = 0, reloc crc = 0
+                IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ
+  SC[.rdata]  | mod = 1, 0002:0174, size = 4, data crc = 0, reloc crc = 0
+                IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ
+  SC[.rdata]  | mod = 1, 0002:0178, size = 11, data crc = 0, reloc crc = 0
+                IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ
+  SC[.rdata]  | mod = 1, 0002:0189, size = 16, data crc = 0, reloc crc = 0
+                IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_READ
+  SC[.rdata]  | mod = 0, 0002:0208, size = 32, data crc = 2665772412, reloc crc = 0
+                IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_ALIGN_4BYTES | IMAGE_SCN_MEM_READ
+  SC[.data]   | mod = 0, 0003:0000, size = 16, data crc = 4261017717, reloc crc = 0
+                IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_ALIGN_8BYTES | IMAGE_SCN_MEM_READ | 
+                IMAGE_SCN_MEM_WRITE
+  SC[.data]   | mod = 0, 0003:0016, size = 0, data crc = 4294967295, reloc crc = 0
+                IMAGE_SCN_CNT_UNINITIALIZED_DATA | IMAGE_SCN_ALIGN_4BYTES | IMAGE_SCN_MEM_READ | 
+                IMAGE_SCN_MEM_WRITE
+  SC[.pdata]  | mod = 0, 0004:0000, size = 48, data crc = 1865395872, reloc crc = 0
+                IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_ALIGN_4BYTES | IMAGE_SCN_MEM_READ
+  SC[.reloc]  | mod = 1, 0005:0000, size = 12, data crc = 0, reloc crc = 0
+                IMAGE_SCN_CNT_INITIALIZED_DATA | IMAGE_SCN_MEM_DISCARDABLE | IMAGE_SCN_MEM_READ

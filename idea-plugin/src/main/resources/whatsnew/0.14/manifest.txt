@@ -1,0 +1,7 @@
+index.html
+screenshots/component-dependencies.png
+screenshots/large-wasm-analysis.png
+screenshots/native-binary-size-diff.png
+screenshots/semantic-highlighting.png
+source.json
+style.css

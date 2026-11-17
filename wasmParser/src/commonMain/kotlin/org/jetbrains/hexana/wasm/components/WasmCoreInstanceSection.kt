@@ -1,0 +1,260 @@
+package org.jetbrains.hexana.wasm.components
+
+import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.wasm.components.ComponentCoreInstance.componentCoreInstance
+import org.jetbrains.hexana.wasm.sections.WasmSection
+import org.jetbrains.hexana.wasm.sections.WasmSectionUnresolved
+import org.jetbrains.hexana.wasm.sections.consumeArray
+import org.jetbrains.hexana.wasm.sections.consumeString
+import org.jetbrains.hexana.wasm.sections.consumeUnsignedUInt
+
+class WasmCoreInstanceSection(sectionSize: Int, sectionOffset: Int, contentSize: Int, contentOffset: Int): WasmSection("Instance", sectionSize,
+    sectionOffset,
+    contentSize,
+    contentOffset
+) {
+    companion object {
+        const val SECTION_ID: Byte = 2
+    }
+    constructor(s: WasmSectionUnresolved): this(s.sectionSize, s.sectionOffset, s.contentSize, s.contentOffset)
+
+    fun CommonByteBuffer.parseCoreInstances(): List<InstanceCoreExpression> {
+        position(contentOffset)
+        val instances = mutableListOf<InstanceCoreExpression>()
+        var entryOffset = contentOffset
+        try {
+            consumeArray(contentOffset + contentSize) {
+                entryOffset = position()
+                instances.add(componentCoreInstance())
+            }
+        } catch (e: Exception) {
+            // A misencoded entry poisons the rest of the section (entry sizes are
+            // not self-delimiting): record the remainder as one corrupt region.
+            val end = contentOffset + contentSize
+            instances.add(CorruptInstanceCoreExpression(
+                offset = entryOffset,
+                size = (end - entryOffset).coerceAtLeast(1),
+                message = e.message ?: "core-instance entry could not be decoded",
+            ))
+        }
+        return instances
+    }
+
+    /** Decodes at most [maxProblems] malformed core-instance records. */
+    fun CommonByteBuffer.parseCoreInstanceProblems(maxProblems: Int): List<InstanceCoreExpression> {
+        if (maxProblems <= 0) return emptyList()
+        position(contentOffset)
+        val problems = mutableListOf<InstanceCoreExpression>()
+        var entryOffset = contentOffset
+        try {
+            consumeArray(contentOffset + contentSize) {
+                entryOffset = position()
+                val expression = componentCoreInstance()
+                if (expression is UnknownInstanceCoreExpression) {
+                    problems.add(expression)
+                    if (problems.size == maxProblems) throw CoreInstanceProblemLimitReached
+                }
+            }
+        } catch (_: CoreInstanceProblemLimitReached) {
+            return problems
+        } catch (e: Exception) {
+            problems.add(CorruptInstanceCoreExpression(
+                offset = entryOffset,
+                size = (contentOffset + contentSize - entryOffset).coerceAtLeast(1),
+                message = e.message ?: "core-instance entry could not be decoded",
+            ))
+        }
+        return problems
+    }
+}
+
+private object CoreInstanceProblemLimitReached : RuntimeException()
+
+
+data class InstanceCoreInlineExportDescriptor(
+    val name: String,
+    val sortIndex: ComponentCoreSortIndex,
+)
+
+data class InstanceInlineExportDescriptor(
+    val name: String,
+    val sortIndex: ComponentSortIndex,
+)
+
+
+
+sealed class InstanceCoreExpression
+class ModuleInstanceCoreExpression(
+    val moduleIndex: UInt,
+    val instantiateArgs: List<InstantiateArg>
+): InstanceCoreExpression()
+
+class InlineInstanceCoreExpression(val e: List<InlineInstanceCoreInlineExpression>): InstanceCoreExpression()
+
+/**
+ * A core-instance entry whose leading tag byte is not a known encoding
+ * (the spec defines only 0x00 instantiate and 0x01 inline exports).
+ * Only the tag byte is consumed; [offset] is its absolute position.
+ */
+class UnknownInstanceCoreExpression(val tag: Byte, val offset: Int): InstanceCoreExpression()
+
+/**
+ * Remainder of a core-instance section that failed to decode. Covers the
+ * region from the start of the failing entry ([offset], [size] bytes) to the
+ * section end; [message] carries the decode failure.
+ */
+class CorruptInstanceCoreExpression(val offset: Int, val size: Int, val message: String): InstanceCoreExpression()
+
+sealed class InlineInstanceCoreInlineExpression
+class FuncInlineCoreExpression(val name: String, val index: UInt): InlineInstanceCoreInlineExpression()
+class TableInlineCoreExpression(val name: String, val index: UInt): InlineInstanceCoreInlineExpression()
+class MemoryInlineCoreExpression(val name: String, val index: UInt): InlineInstanceCoreInlineExpression()
+class GlobalInlineCoreExpression(val name: String, val index: UInt): InlineInstanceCoreInlineExpression()
+class TypeInlineCoreExpression(val name: String, val index: UInt): InlineInstanceCoreInlineExpression()
+class ModuleInlineCoreExpression(val name: String, val index: UInt): InlineInstanceCoreInlineExpression()
+class InstanceInlineCoreExpression(val name: String, val index: UInt): InlineInstanceCoreInlineExpression()
+
+data class InstantiateArg(val name: String, val instanceIndex: UInt)
+data class ComponentInstantiateArg(val name: String, val sortIndex: ComponentSortIndex)
+
+object ComponentCoreInstance {
+
+    fun CommonByteBuffer.componentCoreInstance(): InstanceCoreExpression {
+        val tagOffset = position()
+        return when (val tag = get()) {
+            0.toByte() -> {
+                ModuleInstanceCoreExpression(consumeUnsignedUInt(), consumeInstantiateArgs())
+            }
+
+            1.toByte() -> {
+                val args = mutableListOf<InlineInstanceCoreInlineExpression>()
+                consumeArray {
+                    val (name, sort) = instanceCoreInlineExport()
+                    when (sort.sort) {
+                        ComponentCoreSort.Func -> {
+                            args.add(FuncInlineCoreExpression(name, sort.index))
+                        }
+
+                        ComponentCoreSort.Table -> {
+                            args.add(TableInlineCoreExpression(name, sort.index))
+                        }
+
+                        ComponentCoreSort.Memory -> {
+                            args.add(MemoryInlineCoreExpression(name, sort.index))
+                        }
+
+                        ComponentCoreSort.Global -> {
+                            args.add(GlobalInlineCoreExpression(name, sort.index))
+                        }
+
+                        ComponentCoreSort.Type -> {
+                            args.add(TypeInlineCoreExpression(name, sort.index))
+                        }
+
+                        ComponentCoreSort.Module -> {
+                            args.add(ModuleInlineCoreExpression(name, sort.index))
+                        }
+
+                        ComponentCoreSort.Instance -> {
+                            args.add(InstanceInlineCoreExpression(name, sort.index))
+                        }
+                    }
+                }
+                InlineInstanceCoreExpression(args)
+            }
+
+            else -> {
+                // Unknown encoding: consume only the tag byte and let the provider
+                // surface it as a parse problem instead of failing the whole section.
+                UnknownInstanceCoreExpression(tag, tagOffset)
+            }
+        }
+    }
+
+    fun CommonByteBuffer.instanceCoreInlineExport(): InstanceCoreInlineExportDescriptor {
+        return InstanceCoreInlineExportDescriptor(consumeString(), componentCoreSortIndex())
+    }
+
+
+    fun CommonByteBuffer.consumeInstantiateArgs(): MutableList<InstantiateArg> {
+        val instantiateArgs = mutableListOf<InstantiateArg>()
+        consumeArray {
+            val name = consumeString()
+            get()
+            val instanceIndex = consumeUnsignedUInt()
+            instantiateArgs.add(InstantiateArg(name, instanceIndex))
+        }
+        return instantiateArgs
+    }
+
+    fun CommonByteBuffer.consumeComponentInstantiateArgs(): MutableList<ComponentInstantiateArg> {
+        val args = mutableListOf<ComponentInstantiateArg>()
+        consumeArray {
+            val name = consumeString()
+            val sortIndex = componentSortWithIndex()
+            args.add(ComponentInstantiateArg(name, sortIndex))
+        }
+        return args
+    }
+
+    fun CommonByteBuffer.componentCoreSort(): ComponentCoreSort {
+        val byte = get()
+        return when (byte) {
+            0x00.toByte() -> ComponentCoreSort.Func
+            0x01.toByte() -> ComponentCoreSort.Table
+            0x02.toByte() -> ComponentCoreSort.Memory
+            0x03.toByte() -> ComponentCoreSort.Global
+            0x10.toByte() -> ComponentCoreSort.Type
+            0x11.toByte() -> ComponentCoreSort.Module
+            0x12.toByte() -> ComponentCoreSort.Instance
+            else -> throw IllegalArgumentException("Invalid component core sort: ${byte.toHexString()}")
+        }
+    }
+
+    fun CommonByteBuffer.componentCoreSortIndex(): ComponentCoreSortIndex {
+        return ComponentCoreSortIndex(componentCoreSort(), consumeUnsignedUInt())
+    }
+
+    fun CommonByteBuffer.componentSort(): ComponentSort {
+        val byte = get()
+        return when (byte) {
+            0x00.toByte() -> ComponentSortWithCoreSort(componentCoreSort())
+            0x01.toByte() -> ComponentSort.Func
+            0x02.toByte() -> ComponentSort.Value
+            0x03.toByte() -> ComponentSort.Type
+            0x04.toByte() -> ComponentSort.Component
+            0x05.toByte() -> ComponentSort.Instance
+            else -> throw IllegalArgumentException("Invalid component sort: ${byte.toHexString()}")
+        }
+    }
+
+    fun CommonByteBuffer.instanceInlineExport(): InstanceInlineExportDescriptor {
+        return InstanceInlineExportDescriptor(consumeString(), componentSortWithIndex())
+    }
+
+
+    fun CommonByteBuffer.componentSortWithIndex(): ComponentSortIndex {
+        return ComponentSortIndex(componentSort(), consumeUnsignedUInt())
+    }
+}
+
+data class ComponentCoreSortIndex(val sort: ComponentCoreSort, val index: UInt)
+sealed class ComponentCoreSort {
+    object Func: ComponentCoreSort()
+    object Table: ComponentCoreSort()
+    object Memory: ComponentCoreSort()
+    object Global: ComponentCoreSort()
+    object Type: ComponentCoreSort()
+    object Module: ComponentCoreSort()
+    object Instance: ComponentCoreSort()
+}
+
+sealed class ComponentSort {
+    object Func: ComponentSort()
+    object Value: ComponentSort()
+    object Type: ComponentSort()
+    object Component: ComponentSort()
+    object Instance: ComponentSort()
+}
+class ComponentSortWithCoreSort(val cs: ComponentCoreSort): ComponentSort()
+data class ComponentSortIndex(val sort: ComponentSort, val index: UInt)

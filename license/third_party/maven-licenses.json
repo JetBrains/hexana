@@ -1,0 +1,89 @@
+[
+  {
+    "match": [
+      "org.graalvm.sdk:*",
+      "org.graalvm.polyglot:*",
+      "org.graalvm.truffle:*",
+      "org.graalvm.regex:*",
+      "org.graalvm.wasm:*",
+      "org.graalvm.shadowed:xz"
+    ],
+    "files": [
+      "graalvm/UPL-1.0.txt"
+    ],
+    "source": "https://github.com/oracle/graal/blob/vm-25.0.0/sdk/LICENSE.md (byte-identical to truffle/LICENSE.md, regex/LICENSE.md and wasm/LICENSE at vm-25.0.0)"
+  },
+  {
+    "match": [
+      "org.graalvm.js:*"
+    ],
+    "files": [
+      "graalvm/graaljs-LICENSE"
+    ],
+    "source": "https://github.com/oracle/graaljs/blob/vm-25.0.0/LICENSE"
+  },
+  {
+    "match": [
+      "org.graalvm.shadowed:icu4j"
+    ],
+    "files": [
+      "icu/LICENSE"
+    ],
+    "source": "https://github.com/unicode-org/icu/blob/release-77-1/LICENSE (UNVERIFIED: the ICU release shaded into org.graalvm.shadowed:icu4j:25.0.0 is not recorded in the artifact)"
+  },
+  {
+    "match": [
+      "org.ow2.asm:*"
+    ],
+    "files": [
+      "asm/LICENSE.txt"
+    ],
+    "source": "https://gitlab.ow2.org/asm/asm/-/blob/ASM_9_8/LICENSE.txt"
+  },
+  {
+    "match": [
+      "io.modelcontextprotocol:*"
+    ],
+    "files": [
+      "kotlin-sdk/LICENSE"
+    ],
+    "source": "https://github.com/modelcontextprotocol/kotlin-sdk/blob/0.11.0/LICENSE"
+  },
+  {
+    "match": [
+      "com.github.ajalt.colormath:*"
+    ],
+    "files": [
+      "colormath/LICENSE"
+    ],
+    "source": "https://github.com/ajalt/colormath/blob/3.6.0/LICENSE"
+  },
+  {
+    "match": [
+      "com.github.jnr:jffi"
+    ],
+    "files": [
+      "jffi/LICENSE",
+      "jffi/libffi-LICENSE"
+    ],
+    "source": "https://github.com/jnr/jffi/blob/jffi-1.3.15/LICENSE and https://github.com/jnr/jffi/blob/jffi-1.3.15/jni/libffi/LICENSE (libffi, linked into the native libraries)"
+  },
+  {
+    "match": [
+      "com.posthog:*"
+    ],
+    "files": [
+      "posthog/LICENSE.md"
+    ],
+    "source": "https://github.com/PostHog/posthog-android/blob/server-v2.22.1/LICENSE.md (byte-identical at core-v6.47.5)"
+  },
+  {
+    "match": [
+      "npm:@posthog/core"
+    ],
+    "files": [
+      "posthog/posthog-js-LICENSE"
+    ],
+    "source": "https://github.com/PostHog/posthog-js/blob/main/LICENSE (UNVERIFIED: the published @posthog/core 1.25.2 package ships no licence file and declares MIT; this is the root licence of its monorepo, which is Apache-2.0 with a Mixpanel notice, as is the LICENSE shipped in the posthog-js and posthog-node packages)"
+  }
+]

@@ -1,0 +1,940 @@
+{
+  "schema": 1,
+  "default_release": "0.22",
+  "asset_root": ".",
+  "capture_policy": {
+    "preferred_source": "ui-driver",
+    "fallback_source": "none",
+    "normal_tests": "exclude screenshots; use the screenshot tag or captureWhatsNewScreenshots task",
+    "rule": "Every big visible feature should have a UI-driver capture recipe before page generation. Do not use checked-in documentation images as fallback assets."
+  },
+  "clusters": {
+    "wasm-component-model": {
+      "release": "0.12",
+      "eyebrow": "WASM",
+      "title": "Compare and inspect Component Model binaries",
+      "summary": "Component Model binaries now get recursive comparison, virtualized WAT for embedded core modules, and complete nested size attribution.",
+      "recipe": "component-model-recursive-wat-and-size",
+      "keywords": [
+        "Component Model",
+        "component diff",
+        "submodule view",
+        "WAT (virtualized)",
+        "embedded core module",
+        "sub-component",
+        "recursively",
+        "nested component",
+        "nested sub-component",
+        "first nested component section",
+        "lazy children-generator"
+      ],
+      "doc_candidates": [
+        "doc/components/Binary.md"
+      ],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.12/wasm-component-model.png"
+      ]
+    },
+    "static-archives": {
+      "release": "0.12",
+      "eyebrow": "Archives",
+      "title": "Inspect static libraries and object members",
+      "summary": "Unix ar archives and COFF import libraries open as member lists, with object files extracted into the native disassembly views.",
+      "recipe": "native-archive-member-disassembly",
+      "keywords": [
+        "Static-library archives",
+        ".a",
+        ".lib",
+        "archive",
+        "object-file members",
+        "Relocatable objects",
+        "Capstone",
+        "llvm-objdump"
+      ],
+      "doc_candidates": [
+        "doc/components/Binary.md"
+      ],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.12/static-archives.png"
+      ]
+    },
+    "table-affordances": {
+      "release": "0.12",
+      "presentation": "text",
+      "eyebrow": "Tables",
+      "title": "Copy, inspect, and navigate imports and exports faster",
+      "summary": "Imports and Exports rows now expose full names, copy actions, WAT navigation, and usage discovery for function imports.",
+      "recipe": "imports-exports-row-actions",
+      "keywords": [
+        "Exports tab",
+        "Imports tab",
+        "Copy Name",
+        "Navigate to Function in WAT",
+        "Find Usages",
+        "Caller Paths",
+        "tooltip"
+      ],
+      "doc_candidates": [
+        "doc/images/idea/01-wasm-overview.png"
+      ],
+      "image_candidates": []
+    },
+    "format-workflow-polish": {
+      "release": "0.12",
+      "presentation": "text",
+      "eyebrow": "Workflow",
+      "title": "More binary formats and cleaner IDE entry points",
+      "summary": "Hexana adds DEX and ZIP64 coverage, groups IDE actions under a Hexana submenu, and improves Node.js debugging stability.",
+      "recipe": "format-coverage-and-action-grouping",
+      "keywords": [
+        "Android DEX",
+        "ZIP64",
+        "Hexana submenu",
+        "project-view actions",
+        "Open In",
+        "Open Archive",
+        "Hex view",
+        "Search Everywhere",
+        "keymap",
+        "NodeJS",
+        "stability"
+      ],
+      "doc_candidates": [
+        "doc/images/idea/06-class-file-view.png",
+        "doc/images/idea/07-jar-class-list.png"
+      ],
+      "image_candidates": []
+    },
+    "columnar-data": {
+      "release": "0.13",
+      "eyebrow": "Data",
+      "title": "Inspect Parquet and Arrow data in Hexana",
+      "summary": "Columnar files now open with schema, metadata, batch structure, decoded rows, and row-to-hex byte highlighting.",
+      "recipe": "parquet-data-table",
+      "keywords": [
+        "Apache Parquet",
+        "Apache Arrow",
+        "Arrow IPC",
+        "PAR1",
+        "ARROW1",
+        "Data tab",
+        "Schema",
+        "Row Groups",
+        "Record Batches",
+        "Messages",
+        "Metadata",
+        "decoded",
+        "hex view",
+        "INT96"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.13/parquet-data.png"
+      ]
+    },
+    "protobuf-inspection": {
+      "release": "0.13",
+      "eyebrow": "Protobuf",
+      "title": "Browse Protobuf schemas and raw wire messages",
+      "summary": "Descriptor sets open as structured tables, and any file can be decoded as a schema-less Protobuf wire message from the Hexana context menu.",
+      "recipe": "protobuf-descriptor-and-wire-message",
+      "keywords": [
+        "Protocol Buffers",
+        "Protobuf",
+        ".desc",
+        ".protoset",
+        "descriptor sets",
+        "FileDescriptorProto",
+        "Files",
+        "Messages",
+        "Fields",
+        "Enums",
+        "Services",
+        "Open As Protobuf Message",
+        "wire message",
+        "byte range"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.13/protobuf-descriptor.png"
+      ]
+    },
+    "structure-tool-window": {
+      "release": "0.13",
+      "eyebrow": "Navigation",
+      "title": "Navigate binaries from the IDE Structure tool window",
+      "summary": "Core WASM modules and ELF binaries now populate the IDE Structure tool window with byte-range trees, functions, symbols, and Run Export actions for runnable WASM exports.",
+      "recipe": "structure-tool-window-navigation",
+      "keywords": [
+        "Structure tool window",
+        "Structure",
+        "Core WASM modules",
+        "ELF binaries",
+        "sections",
+        "records",
+        "byte ranges",
+        "Functions folder",
+        "Run Export",
+        "function exports",
+        "symbols",
+        "Relocations",
+        "Dynamic",
+        "Strings"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.13/structure-tool-window.png"
+      ]
+    },
+    "scriptable-tabs": {
+      "release": "0.13",
+      "eyebrow": "Automation",
+      "title": "Add custom scriptable analysis tabs",
+      "summary": "Attach JavaScript tabs to an opened binary, print custom output, and render CSV or TSV results as searchable tables.",
+      "recipe": "scriptable-analysis-tab",
+      "keywords": [
+        "custom scriptable info tabs",
+        "JS script",
+        "print",
+        "binary",
+        "+",
+        "script tab",
+        "dialog",
+        "API reference",
+        "csv",
+        "tsv",
+        "tables"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.13/scriptable-tabs.png"
+      ]
+    },
+    "runtime-table-polish": {
+      "release": "0.13",
+      "presentation": "text",
+      "eyebrow": "Workflow",
+      "title": "Run with Wazero and search tables consistently",
+      "summary": "WASM run configurations add Wazero for module execution, while Hexana tables share one faster searchable control.",
+      "recipe": "wazero-and-table-search",
+      "keywords": [
+        "wazero",
+        "WASM run configurations",
+        "modules",
+        "table views",
+        "same table control",
+        "built-in search",
+        "performance",
+        "rendering"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
+    },
+    "native-binary-size-diff": {
+      "release": "0.14",
+      "eyebrow": "Native binaries",
+      "title": "Compare native binary size changes",
+      "summary": "Compare two native binaries directly in Hexana and see how every section’s size changed.",
+      "recipe": "native-binary-section-size-diff",
+      "keywords": [
+        "diff between two native binary files",
+        "size changes per section",
+        "native binary files"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.14/native-binary-diff.png"
+      ]
+    },
+    "large-wasm-analysis": {
+      "release": "0.14",
+      "eyebrow": "WASM",
+      "title": "Analyze large WASM modules without freezing the IDE",
+      "summary": "Functions and dominator analysis now load in the background, while compact call-graph data keeps very large modules within the IDE’s normal memory budget.",
+      "recipe": "large-wasm-background-analysis",
+      "keywords": [
+        "single synthetic",
+        "Functions tab",
+        "large module",
+        "memory64",
+        "Dominator",
+        "indirect calls"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.14/large-wasm-functions.png"
+      ]
+    },
+    "component-dependencies": {
+      "release": "0.14",
+      "eyebrow": "Component Model",
+      "title": "See how Component Model dependencies connect",
+      "summary": "Explore a visual graph of imports, embedded modules and components, instances, and exports wired through instantiation arguments.",
+      "recipe": "component-model-dependencies-graph",
+      "keywords": [
+        "Component Model binaries",
+        "visualizes",
+        "embedded core modules",
+        "nested components",
+        "instantiation arguments"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.14/component-dependencies.png"
+      ]
+    },
+    "workflow-reliability": {
+      "release": "0.14",
+      "presentation": "text",
+      "eyebrow": "Workflow",
+      "title": "Smoother binary-inspection workflows",
+      "summary": "Empty analysis tabs now finish cleanly, the vertical splitter is easier to grab, and WASM Diff respects two files selected in the project view.",
+      "recipe": "analysis-tab-and-diff-workflow-polish",
+      "keywords": [
+        "vertical splitter",
+        "WASM Diff action",
+        "endless loading spinner",
+        "placeholder"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
+    },
+    "semantic-highlighting": {
+      "release": "0.14",
+      "eyebrow": "Inspection",
+      "title": "Read binary structure at a glance",
+      "summary": "Hexana now highlights binary sections and lets you move between them in WASM and native files.",
+      "recipe": "semantic-section-highlighting",
+      "keywords": [
+        "Semantic highlighting of sections",
+        "navigation between sections",
+        "WASM and Native binary files"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.14/semantic-highlighting.png"
+      ]
+    },
+    "top-size-visualization": {
+      "release": "0.15",
+      "eyebrow": "Size analysis",
+      "title": "See where every byte goes",
+      "summary": "The Top tab pairs a sortable size breakdown with a treemap, making the largest sections and functions immediately visible across WASM and native binaries.",
+      "recipe": "top-size-table-and-treemap",
+      "keywords": [
+        "Top",
+        "size diagram",
+        "treemap",
+        "largest entities",
+        "native binaries"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.15/top-size-visualization.png"
+      ]
+    },
+    "inline-dispatch-candidates": {
+      "release": "0.15",
+      "eyebrow": "Dynamic dispatch",
+      "title": "Expand indirect-call candidates inline",
+      "summary": "WAT call_indirect rows now reveal their statically known dispatch candidates inline, with click-through navigation to each matching function.",
+      "recipe": "call-indirect-inline-candidates",
+      "keywords": [
+        "call_indirect",
+        "return_call_indirect",
+        "indirect calls",
+        "canonical signature",
+        "dispatch candidates",
+        "statically known dispatch candidates",
+        "structural signature",
+        "inline candidates",
+        "WAT (virtualized)"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.15/call-indirect-candidates.png"
+      ]
+    },
+    "exception-surface": {
+      "release": "0.15",
+      "eyebrow": "Exception handling",
+      "title": "Understand what can escape to the host",
+      "summary": "The Exceptions tab distinguishes precise statically propagated tags from dynamic host-import and throw_ref categories, without claiming exhaustive runtime prediction.",
+      "recipe": "exported-exception-surface",
+      "keywords": [
+        "Exceptions",
+        "Tags",
+        "try_table",
+        "throw",
+        "throw_ref",
+        "precise static tags",
+        "dynamic category",
+        "may throw"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.15/exceptions-surface.png"
+      ]
+    },
+    "source-navigation": {
+      "release": "0.15",
+      "presentation": "text",
+      "eyebrow": "Source navigation",
+      "title": "Go from WASM rows back to source",
+      "summary": "Go to Source connects Functions, Exports, and WAT instructions to DWARF or source-map locations, including sourceMappingURL discovery.",
+      "recipe": "go-to-source-and-source-map-discovery",
+      "keywords": [
+        "Go to Source",
+        "DWARF",
+        "source map",
+        "sourceMappingURL"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
+    },
+    "inspection-workflow-015": {
+      "release": "0.15",
+      "presentation": "text",
+      "eyebrow": "Workflow",
+      "title": "Move through binary structure with less friction",
+      "summary": "Clickable section labels, Save As for nested content, restored nested-table sorting, a repaired Dominators tree, and smoother tab switching keep inspection workflows reliable.",
+      "recipe": "section-navigation-save-as-and-reliability",
+      "keywords": [
+        "semantic section labels",
+        "Save as",
+        "nested wasm modules",
+        "jar entries",
+        "nested tables",
+        "Rows of nested tables",
+        "sorting rules",
+        "Dominators",
+        "Decompiled"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
+    },
+    "glue-component-virtualized-wat": {
+      "release": "0.16",
+      "eyebrow": "Component Model",
+      "title": "Read glue-only components in WAT (virtualized)",
+      "summary": "Component-level imports, exports, types, aliases, and instances now render as foldable WAT sections with byte-accurate links back to Hex.",
+      "recipe": "glue-component-virtualized-wat",
+      "keywords": [
+        "Glue-only components",
+        "WAT (virtualized)",
+        "component-level constructs",
+        "foldable per-section headers",
+        "not decoded"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.16/glue-component-virtualized-wat.png"
+      ]
+    },
+    "nested-component-editor": {
+      "release": "0.16",
+      "eyebrow": "Component Model",
+      "title": "Open nested components as editor views",
+      "summary": "Open embedded components and modules recursively from the Components and Modules tabs, with every nested view retaining its location in the original binary.",
+      "recipe": "nested-component-editor",
+      "keywords": [
+        "Nested components",
+        "Components tab",
+        "nested view",
+        "Opening is recursive",
+        "absolute offset",
+        "Nested in-memory views"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.16/nested-component-editor.png"
+      ]
+    },
+    "wasm-debugger-tab": {
+      "release": "0.17",
+      "eyebrow": "WASM debugger",
+      "title": "Step through paused WASM at instruction precision",
+      "summary": "The Wasm debugger tab shows the paused function, current instruction, and operand stack for Node.js, browser, and wasmtime sessions.",
+      "recipe": "paused-nodejs-wasm-debugger-tab",
+      "keywords": [
+        "Wasm tab in the debugger",
+        "same mnemonics",
+        "current instruction selected",
+        "live operand stack",
+        "wasm instruction",
+        "also appears when debugging under wasmtime"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.17/wasm-debugger-tab.png"
+      ]
+    },
+    "wasm-problems-tab": {
+      "release": "0.17",
+      "eyebrow": "WASM inspection",
+      "title": "Keep investigating modules with parse problems",
+      "summary": "The Problems tab preserves the readable part of a module and links each unparsed region back to WAT or its original bytes.",
+      "recipe": "wasm-unknown-opcode-problems-tab",
+      "keywords": [
+        "Problems tab",
+        "parser hits bytes it cannot decode",
+        "unparsed region",
+        "plain Wat tab",
+        "parse problems",
+        "component binaries"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.17/wasm-problems-tab.png"
+      ]
+    },
+    "pcap-packet-inspection": {
+      "release": "0.17",
+      "eyebrow": "Network captures",
+      "title": "Inspect PCAP and PCAPNG packets",
+      "summary": "Open packet captures in Hexana, browse their packets, and open HTTP response bodies in a separate tab.",
+      "recipe": "pcapng-packets-and-http-response-body",
+      "keywords": [
+        "pcap/pcapng",
+        "viewing packets",
+        "http response body"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.17/pcap-packets.png"
+      ]
+    },
+    "advanced-wasm-debugging": {
+      "release": "0.17",
+      "presentation": "text",
+      "eyebrow": "WASM debugger",
+      "title": "Debug source-level state with more context",
+      "summary": "Conditional breakpoints, reconstructed inlined frames, and DWARF-backed linear-memory variables make optimized and unoptimized WASM sessions easier to understand.",
+      "recipe": "wasm-debugger-conditions-inlined-frames-and-memory-variables",
+      "keywords": [
+        "Conditional breakpoints",
+        "Inlined call frames",
+        "Variables stored in linear memory",
+        "DWARF source variable names",
+        "synthetic frames suffixed",
+        "shadow stack"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
+    },
+    "tar-and-gzip": {
+      "release": "0.17",
+      "presentation": "text",
+      "eyebrow": "Archives",
+      "title": "Open TAR entries and gzip-compressed binaries directly",
+      "summary": "Browse TAR entries in Hexana and inspect supported files such as .wasm.gz without manually unpacking them first.",
+      "recipe": "tar-entries-and-gzip-supported-binaries",
+      "keywords": [
+        "tar entries",
+        "gzip",
+        ".wasm.gz"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
+    },
+    "wasmgc-custom-descriptors": {
+      "release": "0.17",
+      "presentation": "text",
+      "eyebrow": "WasmGC",
+      "title": "Read current WasmGC custom descriptors",
+      "summary": "Type sections using custom-descriptor encodings now retain their alignment, so modules from current Kotlin/Wasm and J2CL toolchains remain inspectable.",
+      "recipe": "wasmgc-custom-descriptors-type-section-alignment",
+      "keywords": [
+        "custom-descriptors proposal",
+        "exact reference types",
+        "describes clauses",
+        "Kotlin/Wasm",
+        "J2CL"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
+    },
+    "wasmtime-live-debugger": {
+      "release": "0.18",
+      "eyebrow": "WASM debugger",
+      "title": "Debug Wasmtime one WASM instruction at a time",
+      "summary": "Wasmtime 44+ sessions now use the guest gdbstub for exact instruction stepping, live operand values, guest frames, and concrete source variables.",
+      "recipe": "wasmtime-gdbstub-live-instruction-debugger",
+      "keywords": [
+        "Per-instruction stepping",
+        "operand stack shows live values under wasmtime",
+        "Exact current-instruction highlight",
+        "built-in gdbstub guest debugger",
+        "Evaluating an expression in a wasmtime debug session"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.18/wasmtime-live-debugger.png"
+      ]
+    },
+    "managed-wasi-sdk": {
+      "release": "0.18",
+      "eyebrow": "Debugger setup",
+      "title": "Install and select wasi-sdk from the IDE",
+      "summary": "Download managed wasi-sdk versions side by side, then explicitly use the selected SDK's LLDB for WebAssembly debugging.",
+      "recipe": "managed-wasi-sdk-settings-selector",
+      "keywords": [
+        "Managed wasi-sdk installation"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.18/managed-wasi-sdk.png"
+      ]
+    },
+    "wat-component-authoring": {
+      "release": "0.18",
+      "eyebrow": "Component Model",
+      "title": "Navigate Component Model WAT with confidence",
+      "summary": "Component Model declarations now parse and resolve for navigation, Find Usages works in embedded WAT, and annotation sections render as metadata.",
+      "recipe": "component-model-wat-find-usages",
+      "keywords": [
+        "Improved support for Component Model in WAT files",
+        "Find Usages for WAT declarations",
+        "Custom WAT annotation sections"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.18/wat-component-find-usages.png"
+      ]
+    },
+    "wamr-wasm-debugger": {
+      "release": "0.18",
+      "presentation": "text",
+      "eyebrow": "WASM debugger",
+      "title": "Bring the Wasm debugger tab to WAMR",
+      "summary": "WAMR sessions gain current-instruction highlighting, instruction stepping, and live values where the runtime exposes locals or globals.",
+      "recipe": "wamr-wasm-debugger-tab",
+      "keywords": [
+        "Wasm debugger tab now also appears when debugging under WAMR",
+        "WAMR's gdbstub reports wasm byte offsets directly",
+        "WAMR_BUILD_DEBUG_INTERP=1"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
+    },
+    "zephyr-cortex-m-firmware": {
+      "release": "0.19",
+      "eyebrow": "Zephyr & Cortex-M",
+      "title": "Inspect Zephyr firmware with confidence",
+      "summary": "Hexana now reads Zephyr, ZMK, and similar Cortex-M ELF firmware as Thumb-2, with correct function addresses and GCC source locations.",
+      "recipe": "zephyr-cortex-m-thumb-disassembly",
+      "keywords": [
+        "Cortex-M firmware ELFs",
+        "Debug Info tab reported"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.19/zephyr-cortex-m-firmware.png"
+      ]
+    },
+    "component-model-debugger": {
+      "release": "0.19",
+      "eyebrow": "Component Model debugging",
+      "title": "Follow Component Model modules in the debugger",
+      "summary": "The Wasm debugger now follows the embedded core module that stopped, keeping the instruction highlight, per-instruction stepping, and operand stack in sync.",
+      "recipe": "component-model-wasm-debugger",
+      "keywords": [
+        "Wasm debugger tab now works for component-model binaries",
+        "embedded core module",
+        "current-instruction highlight",
+        "per-instruction stepping",
+        "operand stack"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.19/component-wasm-debugger.gif"
+      ]
+    },
+    "firmware-emulation": {
+      "release": "0.19",
+      "presentation": "text",
+      "eyebrow": "Firmware emulation",
+      "title": "Run and debug firmware with target-aware emulation",
+      "summary": "Run or debug Zephyr-class firmware ELFs with QEMU or Renode, target-aware setup, and clear validation when a target combination cannot run.",
+      "recipe": "zephyr-firmware-qemu-renode",
+      "keywords": [
+        "Run and Debug for firmware ELFs",
+        "QEMU and Renode",
+        "Hexana Firmware run configuration"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
+    },
+    "elf-memory-budget": {
+      "release": "0.19",
+      "presentation": "text",
+      "eyebrow": "ELF memory",
+      "title": "See Flash and RAM budgets at a glance",
+      "summary": "The new Memory tab breaks down ELF Flash and RAM by region, explains runtime-copy data, and reads capacities from linker maps or Zephyr devicetrees.",
+      "recipe": "elf-memory-flash-ram-budget",
+      "keywords": [
+        "Memory tab for ELF binaries",
+        "Flash/RAM budget",
+        "Link capacity source"
+      ],
+      "doc_candidates": [],
+      "image_candidates": []
+    },
+    "binary-view-breakpoints": {
+      "release": "0.20",
+      "eyebrow": "Debugging",
+      "title": "Keep breakpoints with the binary",
+      "summary": "Set a breakpoint directly in virtualized WAT or native disassembly before a debug session starts, then carry it with the binary across file moves and IDE restarts.",
+      "recipe": "binary-view-breakpoints-wat-gutter",
+      "keywords": [
+        "Breakpoints in binary views",
+        "WAT (virtualized)",
+        "Disassembly view",
+        "Hexana Binary Breakpoints"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.20/binary-view-breakpoints.png"
+      ]
+    },
+    "debugger-console": {
+      "release": "0.20",
+      "eyebrow": "Debugging",
+      "title": "Send debugger commands without losing IDE control",
+      "summary": "Use an interactive LLDB or GDB console alongside a paused supported debug session, while Hexana keeps execution commands synchronized with the IDE.",
+      "recipe": "wasmtime-debugger-console-frame-info",
+      "keywords": [
+        "Debugger Console",
+        "LLDB commands",
+        "GDB commands",
+        "Execution-control commands"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.20/debugger-console.gif"
+      ]
+    },
+    "wasm-runtime-compatibility": {
+      "release": "0.20",
+      "eyebrow": "WebAssembly",
+      "title": "Check the runtimes your WASM targets",
+      "summary": "Declare the runtimes a project targets and inspect proposal-level compatibility directly from a WASM file.",
+      "recipe": "bulk-memory-chrome-60-compatibility",
+      "keywords": [
+        "Runtime compatibility for WebAssembly binaries",
+        "Runtime Compatibility",
+        "runtimes.json",
+        "Compatibility tab"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.20/wasm-runtime-compatibility.png"
+      ]
+    },
+    "dex-smali": {
+      "release": "0.20",
+      "eyebrow": "Android DEX",
+      "title": "Read Android DEX as Smali",
+      "summary": "Open Android DEX files in a baksmali-style view with resolved operands and byte-linked instruction rows.",
+      "recipe": "dex-smali-expanded-class",
+      "keywords": [
+        "Smali tab",
+        "Android .dex",
+        "baksmali-style Dalvik bytecode",
+        "decoded switch/fill-array payloads"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.20/dex-smali.png"
+      ]
+    },
+    "structural-regions": {
+      "release": "0.20",
+      "eyebrow": "Binary structure",
+      "title": "See structure across binary formats",
+      "summary": "Navigate named binary regions in the hex view and the Structure tool window for formats beyond WebAssembly and ELF.",
+      "recipe": "zip-structural-regions-and-structure-window",
+      "keywords": [
+        "Structural regions in the hex view",
+        "Region tinting",
+        "Structure tool window",
+        "ZIP/JAR and TAR entries"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.20/structural-regions-zip.png"
+      ]
+    },
+    "hex-diff-021": {
+      "release": "0.21",
+      "eyebrow": "Binary diff",
+      "title": "See binary changes byte by byte",
+      "summary": "Compare binaries in the IDE diff window with highlighted bytes, expandable unchanged regions, paired sections, and table-level changes.",
+      "recipe": "ide-hex-diff",
+      "keywords": [
+        "Hex diff in the IDE",
+        "One diff editor for every format",
+        "Compare WASM With"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.21/hex-diff.png"
+      ]
+    },
+    "native-functions-021": {
+      "release": "0.21",
+      "eyebrow": "Native binaries",
+      "title": "Compare native functions",
+      "summary": "See which functions changed between ELF, Mach-O, or COFF builds, then compare their disassembly side by side. PE images and archives keep section-size comparison.",
+      "recipe": "native-functions-diff",
+      "keywords": [
+        "Per-function native binary diff"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.21/native-function-diff.png"
+      ]
+    },
+    "wasmgc-graph-021": {
+      "release": "0.21",
+      "eyebrow": "WebAssembly",
+      "title": "Explore WasmGC type relationships",
+      "summary": "Explore subtype and field-reference relationships in an interactive type graph, and jump back to the corresponding WAT type.",
+      "recipe": "wasmgc-type-graph",
+      "keywords": [
+        "WasmGC type graph"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.21/wasmgc-type-graph.png"
+      ]
+    },
+    "script-suites-021": {
+      "release": "0.21",
+      "eyebrow": "Scripting",
+      "title": "Run checks and script suites",
+      "summary": "Define named checks and typed flags, run script suites in the IDE test console, and navigate findings in the Problems tab.",
+      "recipe": "scripting-v2",
+      "keywords": [
+        "Scripting v2"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [],
+      "presentation": "text"
+    },
+    "format-opening-021": {
+      "release": "0.21",
+      "eyebrow": "Formats",
+      "title": "Open binaries by content",
+      "summary": "Open Arrow IPC streams and recognized extensionless binaries directly in their format-specific views.",
+      "recipe": "content-based-opening",
+      "keywords": [
+        "Arrow IPC streams",
+        "Binaries whose name",
+        "Provider selection"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [],
+      "presentation": "text"
+    },
+    "polish-021": {
+      "release": "0.21",
+      "eyebrow": "Improvements",
+      "title": "More responsive, bounded inspection",
+      "summary": "Apply analytics consent changes immediately, process large native symbol tables faster, and refuse gzip payloads over 128 MiB inflated.",
+      "recipe": "inspection-polish",
+      "keywords": [
+        "Send anonymous usage analytics",
+        "tens of thousands of symbols",
+        "gzipped file"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [],
+      "presentation": "text"
+    },
+    "managed-code-022": {
+      "release": "0.22",
+      "eyebrow": ".NET",
+      "title": "Read managed code, from metadata to IL",
+      "summary": "Inspect .NET assembly identity, types and methods, expand resolved IL instructions, and trace code back to matching Portable PDB source lines. The Top tab attributes IL, metadata and ReadyToRun bytes.",
+      "recipe": "managed-code-022",
+      "keywords": [
+        ".NET assemblies.",
+        "IL Disassembly",
+        "Top tab for .NET",
+        "Source lines from PDBs"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.22/managed-il.png"
+      ]
+    },
+    "apk-classes-022": {
+      "release": "0.22",
+      "eyebrow": "Android",
+      "title": "Browse every class in an APK",
+      "summary": "Open one Classes tab across all DEX files, filter by DEX, and reveal a class in its original DEX editor.",
+      "recipe": "apk-classes-022",
+      "keywords": [
+        "Classes tab for .apk"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.22/apk-classes.png"
+      ]
+    },
+    "http-replay-022": {
+      "release": "0.22",
+      "eyebrow": "Network captures",
+      "title": "Turn captured requests into live requests",
+      "summary": "Edit a captured HTTP request and resend it from the Packets tab. Inspect the response in the same window, or export the request to the bundled HTTP Client when available.",
+      "recipe": "http-replay-022",
+      "keywords": [
+        "Replay HTTP requests from a PCAP"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [
+        "docs/whatsnew/captures/0.22/http-replay.png"
+      ]
+    },
+    "managed-resources-022": {
+      "release": "0.22",
+      "eyebrow": ".NET resources",
+      "title": "Decode managed resource sets",
+      "summary": "Inspect standalone .resources files and embedded resource sets, including decoded values and byte or stream content types.",
+      "recipe": "managed-resources-022",
+      "keywords": [
+        ".NET .resources files"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [],
+      "presentation": "text"
+    },
+    "pdb-symbols-022": {
+      "release": "0.22",
+      "eyebrow": "Debug symbols",
+      "title": "Inspect Windows and Portable PDBs",
+      "summary": "Browse symbol metadata, streams and source files. Matching symbols beside a PE image add source lines to disassembly and explain their match in Debug Context.",
+      "recipe": "pdb-symbols-022",
+      "keywords": [
+        "PDB debug symbols"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [],
+      "presentation": "text"
+    },
+    "apk-run-022": {
+      "release": "0.22",
+      "eyebrow": "Android emulator",
+      "title": "Run APKs with an existing Android SDK",
+      "summary": "Launch an on-disk APK on a running emulator or an existing AVD when the local Android SDK has the emulator package.",
+      "recipe": "apk-run-022",
+      "keywords": [
+        "Run button for on-disk .apk"
+      ],
+      "doc_candidates": [],
+      "image_candidates": [],
+      "presentation": "text"
+    }
+  }
+}

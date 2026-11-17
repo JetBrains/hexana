@@ -1,0 +1,27 @@
+Hexana native parser fixture manifest
+compiler: Debian clang version 14.0.6
+cxx compiler: Debian clang version 14.0.6
+
+elf/libsample.so
+elf/libsample.so.llvm-readobj.txt
+elf/sample.elf
+elf/sample.elf.llvm-readobj.txt
+elf/sample.o
+elf/sample.o.llvm-readobj.txt
+elf/sample_cpp.o
+elf/sample_cpp.o.llvm-readobj.txt
+macho/sample-arm64.o
+macho/sample-arm64.o.llvm-readobj.txt
+macho/sample-x86_64.o
+macho/sample-x86_64.o.llvm-readobj.txt
+macho/sample_cpp-x86_64.o
+macho/sample_cpp-x86_64.o.llvm-readobj.txt
+manifest.txt
+pe/sample.coff
+pe/sample.coff.llvm-readobj.txt
+pe/sample.exe
+pe/sample.exe.llvm-readobj.txt
+pe/sample.lib
+pe/sample.pdb
+pe/sample_cpp.coff
+pe/sample_cpp.coff.llvm-readobj.txt

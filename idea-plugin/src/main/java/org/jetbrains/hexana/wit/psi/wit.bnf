@@ -1,0 +1,355 @@
+{
+    parserClass = 'org.jetbrains.hexana.wit.psi.WitParser'
+    parserUtilClass = 'org.jetbrains.hexana.wit.psi.WitParserUtil'
+    psiPackage = 'org.jetbrains.hexana.wit.psi'
+    psiImplPackage = 'org.jetbrains.hexana.wit.psi.impl'
+
+    elementTypeHolderClass = 'org.jetbrains.hexana.wit.psi.WitElementTypes'
+    elementTypeClass = 'org.jetbrains.hexana.wit.psi.WitElementType'
+    psiClassPrefix = 'Wit'
+    psiVisitorName = 'WitElementVisitor'
+
+    psiImplUtilClass = 'org.jetbrains.hexana.wit.psi.impl.WitPsiImplUtil'
+    tokenTypeClass = 'org.jetbrains.hexana.wit.psi.WitToken'
+
+  //implements("value") = "org.jetbrains.hexana.wit.psi.WitElement"
+  extends = "org.jetbrains.hexana.wit.psi.WitPsiElement"
+
+  tokens = [
+    SLASH='/'
+    DOT='.'
+    DASH='-'
+    COMMA=','
+    COLON=':'
+    SEMI=';'
+    LESS_THAN='<'
+    GREATER_THAN='>'
+    OPEN_BRACE='{'
+    CLOSE_BRACE='}'
+    OPEN_PAREN='('
+    CLOSE_PAREN=')'
+    EQUALS='='
+    AT='@'
+    UNDERSCORE='_'
+    LINE_COMMENT='regexp://.*'
+    BLOCK_COMMENT='regexp:/\*([^*]|\*+[^*/])*(\*+/)?'
+    ARROW='->'
+    NUMBER='regexp:-?(0|[1-9](\d|_)*)'
+
+    // keywords
+    ASYNC = "async"
+    BLOB = "blob"
+    BORROW = "borrow"
+    CONSTRUCTOR = "constructor"
+    ENUM = "enum"
+    EXPORT = "export"
+    FLAGS = "flags"
+    FUNC = "func"
+    FUTURE = "future"
+    IMPORT = "import"
+    INCLUDE = "include"
+    INTERFACE = "interface"
+    LIST = "list"
+    OPTION = "option"
+    PACKAGE = "package"
+    RECORD = "record"
+    RESOURCE = "resource"
+    RESTRICTED = "restricted"
+    RESULT = "result"
+    STATIC = "static"
+    STREAM = "stream"
+    TUPLE = "tuple"
+    TYPE = "type"
+    USE = "use"
+    VARIANT = "variant"
+    WORLD = "world"
+    
+    IDENTIFIER="regexp:(%?)[[:jletterdigit:]_][[:jletterdigit:]_-]*"
+  ]
+
+  extends("resource-definition|variant-definition|record-definition|flags-definition|enum-definition|type-definition")=type-declaration
+  extends("unstable-gate|since-gate|deprecated-gate")=gate-item
+  extends("toplevel-use-declaration|interface-definition|world-definition")=package-item
+}
+
+wit ::= (package-definition)? (package-item | nested-package-definition)*
+
+semver ::= NUMBER !<<white_space>> DOT !<<white_space>> NUMBER
+     DOT !<<white_space>> NUMBER
+     ('-' (NUMBER | IDENTIFIER)+ (DOT (NUMBER | IDENTIFIER)+)*)?
+     ('+' (NUMBER | IDENTIFIER)+ (DOT (NUMBER | IDENTIFIER)+)*)?
+
+package-definition ::= package-decl ';' { pin = 2 }
+
+nested-package-definition ::= package-decl '{' package-item* '}' { pin = 2 }
+
+package-item ::= toplevel-use-declaration | interface-definition | world-definition  {
+    methods=[
+        getName
+        getNameIdentifier
+        setName
+        getTextOffset
+    ]
+    implements=["com.intellij.psi.NavigatablePsiElement"; "com.intellij.psi.PsiNamedElement";
+    "com.intellij.psi.PsiNameIdentifierOwner"]
+}
+
+private gate ::= gate-item+
+gate-item ::= unstable-gate
+            | since-gate
+            | deprecated-gate
+
+unstable-gate ::= '@unstable' '(' feature-field ')'
+since-gate ::= '@since' '(' version-field ')'
+deprecated-gate ::= '@deprecated' '(' version-field ')'
+
+feature-field ::= 'feature' '=' IDENTIFIER
+version-field ::= 'version' '=' semver
+
+package-name ::= (IDENTIFIER !<<white_space>> ':' !<<white_space>>)+ IDENTIFIER ( !<<white_space>> '/' !<<white_space>> IDENTIFIER )* (!<<white_space>> '@' !<<white_space>> semver)? {
+ pin=2
+}
+
+private package-decl ::= PACKAGE package-name
+
+toplevel-use-declaration ::= USE use-path ('as' IDENTIFIER)? ';'?
+
+use-path ::= ( IDENTIFIER !<<white_space>> ':' !<<white_space>> )+ IDENTIFIER ( !<<white_space>> '/' !<<white_space>> IDENTIFIER )+ (!<<white_space>> '@' !<<white_space>> semver)?
+ | IDENTIFIER  {
+  mixin = "org.jetbrains.hexana.wit.psi.WitUsePathMixin"
+  methods=[
+    getIdentifier
+  ]
+}
+
+world-definition ::= gate? WORLD IDENTIFIER '{' world-items* '}' {
+    pin=2
+}
+
+private world-items ::= gate? world-item-definition {
+    recoverWhile = world_recovery
+}
+
+private world-item-definition ::= export-definition
+                   | import-definition
+                   | use-declaration
+                   | type-declaration
+                   | include-declaration
+
+export-definition ::= EXPORT IDENTIFIER ':' extern-type
+              | EXPORT use-path ';'?
+import-definition ::= IMPORT IDENTIFIER ':' extern-type
+              | IMPORT use-path ';'?
+
+private extern-interface ::= INTERFACE '{' interface-items* '}' { pin=1 }
+extern-type ::= func-type ';'? | extern-interface
+
+include-declaration ::= INCLUDE use-path 'with' '{' include-names-list '}' ';'?
+               | INCLUDE use-path ';'?
+
+include-names-list ::= include-names-item (',' include-names-item)*
+
+include-names-item ::= IDENTIFIER 'as' IDENTIFIER {
+    mixin="org.jetbrains.hexana.wit.psi.WitIncludeNamesItemMixin"
+    methods=[
+        getName
+        getNameIdentifier
+        setName
+        getTextOffset
+    ]
+    implements=["com.intellij.psi.NavigatablePsiElement"; "com.intellij.psi.PsiNamedElement";
+    "com.intellij.psi.PsiNameIdentifierOwner"]
+}
+
+interface-definition ::= gate? INTERFACE IDENTIFIER '{' interface-items* '}' {
+    pin=2
+}
+
+private interface-items ::= gate? interface-item-definition {
+    recoverWhile = interface_recovery
+}
+
+private interface-item-definition ::= type-declaration
+                       | use-declaration
+                       | func-item
+
+type-declaration ::= resource-definition
+               | variant-definition
+               | record-definition
+               | flags-definition
+               | enum-definition
+               | type-definition {
+                    methods=[
+                        getName
+                        getNameIdentifier
+                        setName
+                        getTextOffset
+                    ]
+                    implements=["com.intellij.psi.NavigatablePsiElement"; "com.intellij.psi.PsiNamedElement";
+                    "com.intellij.psi.PsiNameIdentifierOwner"]
+               }
+
+func-item ::= IDENTIFIER ':' func-type ';'?  {
+   methods=[
+       getName
+       getNameIdentifier
+       setName
+       getTextOffset
+   ]
+   mixin="org.jetbrains.hexana.wit.psi.WitFuncItemMixin"
+   implements=["com.intellij.psi.NavigatablePsiElement"; "com.intellij.psi.PsiNamedElement";
+   "com.intellij.psi.PsiNameIdentifierOwner"]
+}
+
+func-type ::= ASYNC? FUNC param-list result-list?
+
+param-list ::= '(' named-type-list? ')'
+
+result-list ::= '->' type-usage
+
+named-type-list ::= named-type ( ',' named-type )* ','?
+
+named-type ::= IDENTIFIER ':' type-usage
+
+use-declaration ::= USE use-path ('.' '{' use-names-list '}')? ';'?
+
+use-names-list ::= use-names-item (',' use-names-item)* ','?
+
+use-names-item ::= IDENTIFIER 'as' IDENTIFIER | IDENTIFIER {
+    mixin="org.jetbrains.hexana.wit.psi.WitUseNamesItemMixin"
+    methods=[
+        getName
+        getNameIdentifier
+        setName
+        getTextOffset
+    ]
+    implements=["com.intellij.psi.NavigatablePsiElement"; "com.intellij.psi.PsiNamedElement";
+    "com.intellij.psi.PsiNameIdentifierOwner"]
+}
+
+type-definition ::= TYPE IDENTIFIER '=' type-usage ';'?
+
+record-definition ::= RECORD IDENTIFIER '{' record-fields? '}'
+
+private record-fields ::= record-field (',' record-field)* ','? {
+   recoverWhile = id_start_recovery
+}
+
+record-field ::= IDENTIFIER ':' type-usage {
+    methods=[
+        getName
+        getNameIdentifier
+        setName
+        getTextOffset
+    ]
+    mixin="org.jetbrains.hexana.wit.psi.WitRecordFieldMixin"
+    implements=["com.intellij.psi.NavigatablePsiElement"; "com.intellij.psi.PsiNamedElement";
+    "com.intellij.psi.PsiNameIdentifierOwner"]
+}
+
+flags-definition ::= FLAGS IDENTIFIER '{' flags-fields? '}'
+
+private flags-fields ::= IDENTIFIER (',' IDENTIFIER)* ','? {
+   recoverWhile = id_start_recovery
+}
+
+variant-definition ::= VARIANT IDENTIFIER '{' variant-cases? '}'
+
+private variant-cases ::= variant-case (',' variant-case)* ','? {
+   recoverWhile = id_start_recovery
+}
+
+variant-case ::= (IDENTIFIER '(' type-usage ')') | IDENTIFIER {
+    methods=[
+        getName
+        getNameIdentifier
+        setName
+        getTextOffset
+    ]
+    mixin="org.jetbrains.hexana.wit.psi.WitVariantCaseMixin"
+    implements=["com.intellij.psi.NavigatablePsiElement"; "com.intellij.psi.PsiNamedElement";
+    "com.intellij.psi.PsiNameIdentifierOwner"]
+}
+
+enum-definition ::= ENUM IDENTIFIER '{' enum-cases? '}'
+
+enum-case ::= IDENTIFIER {
+    methods=[
+        getName
+        getNameIdentifier
+        setName
+        getTextOffset
+    ]
+    mixin="org.jetbrains.hexana.wit.psi.WitEnumCaseMixin"
+    implements=["com.intellij.psi.NavigatablePsiElement"; "com.intellij.psi.PsiNamedElement";
+    "com.intellij.psi.PsiNameIdentifierOwner"]
+}
+private enum-cases ::= enum-case (',' enum-case)* ','? {
+    recoverWhile = id_start_recovery
+}
+
+resource-definition ::= RESOURCE IDENTIFIER '{' resource-items? '}'
+                | RESOURCE IDENTIFIER ';'?
+
+private resource-items ::= resource-method* {
+   recoverWhile = resource_recovery
+}
+
+static-func-item ::= IDENTIFIER ':' STATIC func-type ';'?  {
+   methods=[
+       getName
+       getNameIdentifier
+       setName
+       getTextOffset
+   ]
+   mixin="org.jetbrains.hexana.wit.psi.WitStaticFuncItemMixin"
+   implements=["com.intellij.psi.NavigatablePsiElement"; "com.intellij.psi.PsiNamedElement";
+   "com.intellij.psi.PsiNameIdentifierOwner"]
+}
+
+resource-method ::= gate? (func-item
+                  | static-func-item
+                  | CONSTRUCTOR param-list ';'?)
+
+type-usage ::= 'u8' | 'u16' | 'u32' | 'u64'
+     | 's8' | 's16' | 's32' | 's64'
+     | 'f32' | 'f64'
+     | 'char'
+     | 'bool'
+     | 'string'
+     | tuple-definition
+     | list-definition
+     | option-item
+     | result-item
+     | handle
+     | future-item
+     | stream-item
+     | IDENTIFIER
+
+tuple-definition ::= TUPLE '<' tuple-list '>'
+tuple-list ::= type-usage (',' type-usage)* ','?
+
+list-definition ::= LIST '<' type-usage '>'
+       | LIST '<' type-usage ',' uint '>'
+
+uint ::= NUMBER
+
+option-item ::= OPTION '<' type-usage '>'
+
+result-item ::= RESULT '<' type-usage ',' type-usage '>'
+         | RESULT '<' '_' ',' type-usage '>'
+         | RESULT '<' type-usage '>'
+         | RESULT
+
+future-item ::= FUTURE '<' type-usage '>' | FUTURE
+
+stream-item ::= STREAM '<' type-usage '>' | STREAM
+
+handle ::= IDENTIFIER | BORROW '<' IDENTIFIER '>' {
+    mixin = "org.jetbrains.hexana.wit.psi.WitHandleMixin"
+}
+
+private world_recovery ::= !( '}' | '@' | ';' | EXPORT | IMPORT | USE | TYPE | INCLUDE )
+private interface_recovery ::= !( '}' | '@' | ';' | ENUM | FLAGS | RECORD | RESOURCE | TYPE | VARIANT | USE | (IDENTIFIER ':') )
+private resource_recovery ::= !('}' | '@' | ';' | (IDENTIFIER ':') | CONSTRUCTOR)
+private id_start_recovery ::= !('}' | '@' | ';' | ',' | IDENTIFIER)

@@ -1,0 +1,56 @@
+# Hexana Codex Plugin
+
+This package is the Codex-facing wrapper for the standalone Hexana MCP runtime in `mcp/server`.
+
+## What is bundled
+
+- `.codex-plugin/plugin.json`: required Codex plugin manifest
+- `.mcp.json`: distributable MCP config that launches `./bin/hexana-mcp` with `cwd` set to the plugin root
+- `bin/hexana-mcp`: thin launcher that delegates to the bundled standalone server
+- `bin/hexana-mcp.cmd`: Windows launcher equivalent
+- `native/<platform>/hexana-mcp`: optional native executable in native-enabled packages
+- `server/`: bundled JVM standalone runtime used as fallback when no matching native executable is present
+- `LICENSE.txt`: JetBrains plugin license agreement
+- `THIRD-PARTY-NOTICES.md`: generated third-party dependency notices
+- `skills/wasm-inspector/`: bundled Codex skill plus `agents/openai.yaml` metadata
+
+## Repo-local install flow
+
+Use a local marketplace, as documented by Codex:
+
+```bash
+./gradlew :mcp:installRepoLocalCodexPlugin
+```
+
+That task:
+
+- installs the assembled plugin to the gitignored `build/repo-local-plugin/plugins/hexana/`
+- writes the `hexana-local` dev marketplace to `build/repo-local-plugin/.agents/plugins/marketplace.json`
+- rewrites the installed `.mcp.json` to the absolute `build/repo-local-plugin/plugins/hexana/bin/hexana-mcp` launcher path
+
+The tracked root `.agents/plugins/marketplace.json` and `plugins/hexana/` are the public marketplace layout and are not
+touched. After running the task, add the dev marketplace once, restart Codex, and install `Hexana` from the
+`Hexana Local` marketplace:
+
+```bash
+codex plugin marketplace add "$PWD/build/repo-local-plugin"
+```
+
+Native-enabled assembly for the current host platform is available with:
+
+```bash
+./gradlew :mcp:assembleNativeMcpPackaging
+```
+
+The launcher uses `HEXANA_SERVER_BIN` when explicitly set, otherwise prefers `native/<platform>/hexana-mcp` when it is
+present, then falls back to the bundled JVM runtime under `server/`.
+
+## Notes from the current Codex docs
+
+- Custom distribution is currently local or curated-marketplace based.
+- Official public Plugin Directory self-serve publishing is not open yet.
+- `agents/openai.yaml` applies to bundled skills, not to the plugin root.
+- The documented install flow is explicit for the Codex app and CLI plugin directory surfaces.
+
+This layout intentionally follows the same repo-local marketplace shape that `$plugin-creator` generates for local
+testing.

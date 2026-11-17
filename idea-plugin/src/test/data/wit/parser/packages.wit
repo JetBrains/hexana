@@ -1,0 +1,9 @@
+package wasi:clocks;
+
+package local:a {
+    interface foo {}
+}
+
+package local:b {
+    interface bar {}
+}

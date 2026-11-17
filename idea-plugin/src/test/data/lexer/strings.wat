@@ -1,0 +1,8 @@
+""
+"
+"ok"
+"escapes: \t\n\r\"\'\\"
+"invalid escapes also accepted: \v\a\x"
+"\ca\fe\ba\be"
+"\u{12345}\u{𝟶𝚡22𝟶𝟶𝟶𝟶}"
+"invalid, but accepted: \u{invalid}"

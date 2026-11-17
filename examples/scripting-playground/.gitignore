@@ -1,0 +1,11 @@
+# The repo-root .gitignore excludes **/build/ (Gradle output dirs).
+# This build/ holds checked-in fixture build scripts, so re-include it.
+!build/
+!build/**
+
+# Hexana baseline store (created by check scripts with --baselines-dir .hexana/baselines).
+.hexana/
+
+# Local npm installs for --lib-root demos. Do not commit.
+node_modules/
+**/node_modules/

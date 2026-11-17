@@ -1,0 +1,13 @@
+(module
+  (func (export "f") (param i32) (result i32)
+    (block $b0 (result i32)
+      (block $b1 (result i32)
+        (block $b2 (result i32)
+          (i32.const 99)
+          (local.get 0)
+          (br_table $b0 $b1 $b2)
+        )
+      )
+    )
+  )
+)

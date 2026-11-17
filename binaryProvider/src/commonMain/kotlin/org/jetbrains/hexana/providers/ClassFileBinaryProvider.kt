@@ -1,0 +1,189 @@
+package org.jetbrains.hexana.providers
+
+import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.javabytecode.AttributeRecord
+import org.jetbrains.hexana.javabytecode.JavaClassFile
+import org.jetbrains.hexana.javabytecode.JavaClassFileParser
+import org.jetbrains.hexana.javabytecode.JavaConstantPool
+import org.jetbrains.hexana.javabytecode.JavaConstantPoolEntry
+
+/**
+ * Binary provider for JVM `.class` files. Extends [GenericBinaryProvider] so the
+ * hex view works as before, and adds a [parsedClassFile] lazy property that parses
+ * the class-file structure once and caches the result for all panels.
+ */
+class ClassFileBinaryProvider(
+    sharedBytes: CommonByteBuffer,
+) : GenericBinaryProvider(sharedBytes) {
+
+    /**
+     * Lazily parsed class-file structure, or `null` when parsing fails.
+     */
+    val parsedClassFile: JavaClassFile? by lazy {
+        try {
+            JavaClassFileParser.parse(bytes.position(0))
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    override val strings: List<BinaryStringRecord> by lazy {
+        val cf = parsedClassFile ?: return@lazy emptyList()
+        cf.constantPool.asSequence().map { (index, entry) ->
+            BinaryStringRecord(
+                value = renderConstantPoolEntry(entry, cf.constantPool),
+                index = index,
+                tag = constantPoolEntryTag(entry),
+            )
+        }.toList()
+    }
+
+    /**
+     * The constant pool, then one range per field, per method and per class-level
+     * attribute, labelled with its own name.
+     *
+     * A member's extent is exact without re-reading the file: `field_info` and
+     * `method_info` are 8 bytes of metadata followed by their attributes, and each
+     * [AttributeRecord] knows where its header starts and how long its body is.
+     */
+    override val structureRanges: List<StructureRange> by lazy {
+        val cf = parsedClassFile ?: return@lazy emptyList()
+        val total = bytes.size
+        buildList {
+            structureRangeOrNull(
+                offset = CONSTANT_POOL_OFFSET,
+                size = cf.constantPoolEndOffset - CONSTANT_POOL_OFFSET,
+                label = "Constant pool",
+                fileSize = total,
+            )?.let { add(it) }
+            for (field in cf.fields) {
+                structureRangeOrNull(
+                    offset = field.byteOffset.toLong(),
+                    size = memberSize(field.byteOffset, field.attributes),
+                    label = cf.memberLabel(field.nameIndex, "field"),
+                    fileSize = total,
+                )?.let { add(it) }
+            }
+            for (method in cf.methods) {
+                structureRangeOrNull(
+                    offset = method.byteOffset.toLong(),
+                    size = memberSize(method.byteOffset, method.attributes),
+                    label = cf.memberLabel(method.nameIndex, "method"),
+                    fileSize = total,
+                    tabName = "Methods",
+                )?.let { add(it) }
+            }
+            for (attribute in cf.attributes) {
+                structureRangeOrNull(
+                    offset = attribute.byteOffset.toLong(),
+                    size = (ATTRIBUTE_HEADER_SIZE + attribute.info.size).toLong(),
+                    label = cf.memberLabel(attribute.nameIndex, "attribute"),
+                    fileSize = total,
+                )?.let { add(it) }
+            }
+        }
+    }
+
+    companion object {
+        /**
+         * Detects whether [buffer] starts with the JVM class file magic (`0xCAFEBABE`)
+         * and is not a Mach-O universal (fat) binary, which shares the same magic.
+         *
+         * Disambiguation: the 32-bit big-endian integer at offset 4 in a Mach-O fat
+         * binary is the architecture count (currently ≤ 18 labelled architectures).
+         * In a Java class file the same bytes hold the minor version (u16) and the
+         * start of the major version (u16 ≥ 43). Reading them as a single big-endian
+         * int yields a value well above any realistic Mach-O arch count. A threshold
+         * of 30 safely separates the two formats with room for future Mach-O additions.
+         */
+        fun isClassFile(buffer: CommonByteBuffer): Boolean {
+            if (buffer.size < 8) return false
+            val hasMagic = buffer[0] == 0xCA.toByte() &&
+                buffer[1] == 0xFE.toByte() &&
+                buffer[2] == 0xBA.toByte() &&
+                buffer[3] == 0xBE.toByte()
+            if (!hasMagic) return false
+            // Read bytes 4..7 as a big-endian 32-bit unsigned value.
+            return isDefinitelyClass { i -> buffer[i] }
+        }
+
+        // Checks if the given buffer is a Java class file using an extended heuristic guarding against Mach-O fat binaries.
+        fun isDefinitelyClass(byteByIndex: (Int) -> Byte): Boolean {
+            val word4 = ((byteByIndex(4).toInt() and 0xFF) shl 24) or
+                    ((byteByIndex(5).toInt() and 0xFF) shl 16) or
+                    ((byteByIndex(6).toInt() and 0xFF) shl 8) or
+                    (byteByIndex(7).toInt() and 0xFF)
+            // Mach-O fat binaries have a small arch count here (≤ ~18);
+            // Java class files have minor_version (u16) | major_version (u16 ≥ 43),
+            // so the combined 32-bit value is always > 30.
+            return word4 > 30
+        }
+    }
+}
+
+
+/** `magic` + `minor_version` + `major_version` + `constant_pool_count`. */
+private const val CONSTANT_POOL_OFFSET = 10L
+
+/** `attribute_name_index` (u2) + `attribute_length` (u4), ahead of the attribute body. */
+private const val ATTRIBUTE_HEADER_SIZE = 6
+
+/** `access_flags` + `name_index` + `descriptor_index` + `attributes_count`. */
+private const val MEMBER_METADATA_SIZE = 8L
+
+/**
+ * Byte length of a `field_info` / `method_info` starting at [byteOffset]: its fixed
+ * metadata plus everything its attributes span. Attributes are contiguous and in file
+ * order, so the last one's end is the member's end.
+ */
+private fun memberSize(byteOffset: Int, attributes: List<AttributeRecord>): Long {
+    val end = attributes.maxOfOrNull { it.byteOffset + ATTRIBUTE_HEADER_SIZE + it.info.size }
+        ?: return MEMBER_METADATA_SIZE
+    return (end - byteOffset).toLong()
+}
+
+/** Resolves a constant-pool name for a hex-view label, falling back to `<kind #n>`. */
+private fun JavaClassFile.memberLabel(nameIndex: Int, kind: String): String =
+    runCatching { constantPool.utf8(nameIndex) }.getOrNull() ?: "<$kind #$nameIndex>"
+
+private fun constantPoolEntryTag(entry: JavaConstantPoolEntry): String = when (entry) {
+    is JavaConstantPoolEntry.Utf8 -> "Utf8"
+    is JavaConstantPoolEntry.Integer -> "Integer"
+    is JavaConstantPoolEntry.Float -> "Float"
+    is JavaConstantPoolEntry.Long -> "Long"
+    is JavaConstantPoolEntry.Double -> "Double"
+    is JavaConstantPoolEntry.ClassRef -> "Class"
+    is JavaConstantPoolEntry.StringRef -> "String"
+    is JavaConstantPoolEntry.Fieldref -> "Fieldref"
+    is JavaConstantPoolEntry.Methodref -> "Methodref"
+    is JavaConstantPoolEntry.InterfaceMethodref -> "InterfaceMethodref"
+    is JavaConstantPoolEntry.NameAndType -> "NameAndType"
+    is JavaConstantPoolEntry.MethodHandle -> "MethodHandle"
+    is JavaConstantPoolEntry.MethodType -> "MethodType"
+    is JavaConstantPoolEntry.Dynamic -> "Dynamic"
+    is JavaConstantPoolEntry.InvokeDynamic -> "InvokeDynamic"
+    is JavaConstantPoolEntry.ModuleRef -> "Module"
+    is JavaConstantPoolEntry.PackageRef -> "Package"
+    JavaConstantPoolEntry.Unusable -> "(unusable)"
+}
+
+private fun renderConstantPoolEntry(entry: JavaConstantPoolEntry, cp: JavaConstantPool): String = when (entry) {
+    is JavaConstantPoolEntry.Utf8 -> "\"${entry.value}\""
+    is JavaConstantPoolEntry.Integer -> "${entry.value}"
+    is JavaConstantPoolEntry.Float -> "${entry.value}"
+    is JavaConstantPoolEntry.Long -> "${entry.value}"
+    is JavaConstantPoolEntry.Double -> "${entry.value}"
+    is JavaConstantPoolEntry.ClassRef -> "#${entry.nameIndex}  // ${runCatching { cp.utf8(entry.nameIndex) }.getOrDefault("?")}"
+    is JavaConstantPoolEntry.StringRef -> "#${entry.stringIndex}  // \"${runCatching { cp.utf8(entry.stringIndex) }.getOrDefault("?")}\""
+    is JavaConstantPoolEntry.Fieldref -> "#${entry.classIndex}.#${entry.nameAndTypeIndex}"
+    is JavaConstantPoolEntry.Methodref -> "#${entry.classIndex}.#${entry.nameAndTypeIndex}"
+    is JavaConstantPoolEntry.InterfaceMethodref -> "#${entry.classIndex}.#${entry.nameAndTypeIndex}"
+    is JavaConstantPoolEntry.NameAndType -> "#${entry.nameIndex}:#${entry.descriptorIndex}"
+    is JavaConstantPoolEntry.MethodHandle -> "kind=${entry.referenceKind} ref=#${entry.referenceIndex}"
+    is JavaConstantPoolEntry.MethodType -> "#${entry.descriptorIndex}"
+    is JavaConstantPoolEntry.Dynamic -> "bsm=${entry.bootstrapMethodAttrIndex} nat=#${entry.nameAndTypeIndex}"
+    is JavaConstantPoolEntry.InvokeDynamic -> "bsm=${entry.bootstrapMethodAttrIndex} nat=#${entry.nameAndTypeIndex}"
+    is JavaConstantPoolEntry.ModuleRef -> "#${entry.nameIndex}"
+    is JavaConstantPoolEntry.PackageRef -> "#${entry.nameIndex}"
+    JavaConstantPoolEntry.Unusable -> "(unusable)"
+}

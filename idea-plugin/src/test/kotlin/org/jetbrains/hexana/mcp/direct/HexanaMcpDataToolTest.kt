@@ -1,0 +1,175 @@
+package org.jetbrains.hexana.mcp.direct
+
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonPrimitive
+
+class HexanaMcpDataToolTest : HexanaMcpToolsetDirectTestBase() {
+    fun testListDataSegmentsTypedRangeRetainsIdeaBoundsDefaultsAndFilters() {
+        val path = createDataFixture("fixtures/direct/data/typed_data_segments.wasm").projectRelativePath
+        fun request(from: Int, to: Int? = null, extra: (kotlinx.serialization.json.JsonObjectBuilder.() -> Unit)? = null) =
+            buildJsonObject {
+                put("path", JsonPrimitive(path))
+                put("segmentRange", buildJsonObject {
+                    put("from", JsonPrimitive(from))
+                    if (to != null) put("to", JsonPrimitive(to))
+                })
+                extra?.invoke(this)
+            }
+
+        val defaults = callToolJsonObject("list_data_segments", request(0))
+        val explicit = callToolJsonObject("list_data_segments", request(0, 1) {
+            put("includeExports", JsonPrimitive(false))
+            put("includeGlobals", JsonPrimitive(true))
+            put("minByteLength", JsonNull)
+            put("bytesBase64", JsonPrimitive("ignored invalid bytes"))
+            put("bytes", buildJsonArray { add(JsonPrimitive(999)) })
+            put("ignored", JsonPrimitive(true))
+        })
+        assertEquals(defaults, explicit)
+        assertEquals(1, defaults.array("segments").size)
+        assertEquals(1, defaults.obj("summary").int("totalSegments"))
+        assertFalse(defaults.containsKey("linkingMetadata"))
+        assertTrue(defaults.array("globals").isNotEmpty())
+        val nonDefaultFilters = callToolJsonObject("list_data_segments", request(0, 1) {
+            put("includeExports", JsonPrimitive(true))
+            put("includeGlobals", JsonPrimitive(false))
+        })
+        assertTrue(nonDefaultFilters.array("exportedSymbols").isNotEmpty())
+        assertEquals(0, nonDefaultFilters.array("globals").size)
+        assertEquals(0, callToolJsonObject("list_data_segments", request(0, 0)).array("segments").size)
+        assertEquals(0, callToolJsonObject("list_data_segments", request(9, 10)).array("segments").size)
+        assertEquals(1, callToolJsonObject("list_data_segments", request(-1, 1)).array("segments").size)
+        assertEquals(0, callToolJsonObject("list_data_segments", request(0, 1) {
+            put("minByteLength", JsonPrimitive(100))
+        }).array("segments").size)
+        assertEquals(defaults, callToolJsonObject("list_data_segments", request(0) {
+            put("minByteLength", JsonPrimitive("invalid"))
+        }))
+
+        val reversed = callTool("list_data_segments", request(1, 0))
+        assertTrue(reversed.isError)
+        assertEquals("Invalid segmentRange `to` must be >= `from`", reversed.textPayloads.single())
+    }
+
+    fun testListDataSegmentsReturnsSegmentPreviewAndSummary() {
+        val fixture = createDataFixture("fixtures/direct/data/list_data_segments.wasm")
+
+        val result = callToolJsonObject(
+            "list_data_segments",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("segmentRange", buildJsonObject {
+                    put("from", JsonPrimitive(0))
+                    put("to", JsonPrimitive(1))
+                })
+                put("includeExports", JsonPrimitive(false))
+                put("includeGlobals", JsonPrimitive(true))
+            }
+        )
+
+        assertEquals(1, result.array("segments").size)
+        assertEquals("active", result.array("segments").obj(0).text("mode"))
+        assertEquals("Hello", result.array("segments").obj(0).text("utf8Preview"))
+        assertFalse(result.containsKey("linkingMetadata"))
+        assertTrue(result.array("memory").isNotEmpty())
+        assertEquals(1, result.obj("summary").int("totalSegments"))
+        assertEquals(1, result.obj("summary").int("activeSegments"))
+        assertEquals(0, result.obj("summary").int("passiveSegments"))
+    }
+
+    fun testListDataSegmentsProvidesStructuredContentForTypedResult() {
+        val fixture = createDataFixture("fixtures/direct/data/structured_list_data_segments.wasm")
+
+        val result = callTool(
+            "list_data_segments",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("segmentRange", buildJsonObject {
+                    put("from", JsonPrimitive(0))
+                    put("to", JsonPrimitive(1))
+                })
+                put("includeExports", JsonPrimitive(false))
+                put("includeGlobals", JsonPrimitive(true))
+            }
+        )
+
+        assertFalse(result.isError)
+        assertEquals(1, result.textPayloads.size)
+        val textJson = json.parseToJsonElement(result.textPayloads.single()) as JsonObject
+        val structuredContent = result.requireStructuredObject()
+        assertEquals(textJson, structuredContent)
+        assertEquals(1, structuredContent.array("segments").size)
+        assertEquals("Hello", structuredContent.array("segments").obj(0).text("utf8Preview"))
+        assertFalse(structuredContent.containsKey("linkingMetadata"))
+        assertEquals(1, structuredContent.obj("summary").int("totalSegments"))
+    }
+
+    fun testAuditDataPayloadPolicyReturnsReportReadyMatches() {
+        val fixture = createWasmFixture(
+            "fixtures/direct/data/payload_policy.wasm",
+            """
+            (module
+              (memory 1)
+              (data (i32.const 0) "safe payload")
+              (data (i32.const 2048) "https://api.shadow.internal/v2/keys"))
+            """.trimIndent()
+        )
+        val policy = createTextFixture(
+            "fixtures/direct/data/payload_policy.json",
+            """
+            {
+              "policy_id": "payload-policy-test",
+              "forbidden_payloads": [
+                {
+                  "id": "shadow-admin-endpoint",
+                  "match": "https://api.shadow.internal/v2/keys",
+                  "severity": "critical"
+                }
+              ]
+            }
+            """.trimIndent()
+        )
+
+        val result = callTool(
+            "audit_data_payload_policy",
+            buildJsonObject {
+                put("path", JsonPrimitive(fixture.projectRelativePath))
+                put("policyPath", JsonPrimitive(policy.projectRelativePath))
+            }
+        )
+
+        assertFalse(result.isError)
+        assertEquals(1, result.textPayloads.size)
+        val textJson = json.parseToJsonElement(result.textPayloads.single()) as JsonObject
+        val structuredContent = result.requireStructuredObject()
+        assertEquals(textJson, structuredContent)
+        assertEquals("payload-policy-test", structuredContent.text("policyId"))
+        assertEquals(2, structuredContent.int("scannedSegments"))
+        assertEquals(listOf(0), structuredContent.array("cleanSegments").map { it.jsonPrimitive.int })
+        val match = structuredContent.array("matches").obj(0)
+        assertEquals("shadow-admin-endpoint", match.text("policyEntryId"))
+        assertEquals(1, match.int("segmentIndex"))
+        assertTrue(match["rawBytesConfirmed"]!!.jsonPrimitive.boolean)
+        val report = structuredContent.obj("recommendedReport")
+        assertEquals("payload-policy-test", report.text("policy_id"))
+        assertEquals(2, report.int("scanned_segments"))
+        assertEquals(1, report.array("matches").obj(0).int("segment_index"))
+        assertEquals(listOf(1), report.obj("minimal_fix").array("remove_or_replace_segments").map { it.jsonPrimitive.int })
+    }
+
+    private fun createDataFixture(pathInProject: String) = createWasmFixture(
+        pathInProject,
+        """
+        (module
+          (memory (export "memory") 1)
+          (global (export "offset") i32 (i32.const 0))
+          (data (i32.const 0) "Hello"))
+        """.trimIndent()
+    )
+}

@@ -1,0 +1,72 @@
+{
+    "schemaVersion": 1,
+    "kind": "hexana-cli-native-release-artifacts",
+    "targets": [
+        {
+            "id": "macos-arm64",
+            "platform": "macos",
+            "architecture": "arm64",
+            "displayName": "macOS Apple silicon",
+            "identityFile": "macos-arm64-identity.json"
+        },
+        {
+            "id": "linux-x64",
+            "platform": "linux",
+            "architecture": "x64",
+            "displayName": "Linux x86-64",
+            "identityFile": "linux-x64-identity.json"
+        }
+    ],
+    "products": [
+        {
+            "id": "hexana-cli",
+            "executable": "hexana-cli",
+            "artifactKind": "standard-cli-native",
+            "launcher": "bin/hexana-cli"
+        },
+        {
+            "id": "hexana-cli-script",
+            "executable": "hexana-cli-script",
+            "artifactKind": "script-cli-native",
+            "launcher": "bin/hexana-cli-script"
+        },
+        {
+            "id": "hexana-wasm-tools",
+            "executable": "hexana-wasm-tools",
+            "artifactKind": "hexana-wasm-tools-native",
+            "launcher": "bin/hexana-wasm-tools"
+        }
+    ],
+    "artifacts": [
+        {
+            "target": "macos-arm64",
+            "product": "hexana-cli",
+            "archiveNameTemplate": "hexana-cli-native-macos-arm64-{version}.zip"
+        },
+        {
+            "target": "macos-arm64",
+            "product": "hexana-cli-script",
+            "archiveNameTemplate": "hexana-cli-script-native-macos-arm64-{version}.zip"
+        },
+        {
+            "target": "macos-arm64",
+            "product": "hexana-wasm-tools",
+            "archiveNameTemplate": "hexana-wasm-tools-native-macos-arm64-{version}.zip"
+        },
+        {
+            "target": "linux-x64",
+            "product": "hexana-cli",
+            "archiveNameTemplate": "hexana-cli-native-linux-x64-{version}.zip"
+        },
+        {
+            "target": "linux-x64",
+            "product": "hexana-cli-script",
+            "archiveNameTemplate": "hexana-cli-script-native-linux-x64-{version}.zip"
+        },
+        {
+            "target": "linux-x64",
+            "product": "hexana-wasm-tools",
+            "archiveNameTemplate": "hexana-wasm-tools-native-linux-x64-{version}.zip"
+        }
+    ]
+}

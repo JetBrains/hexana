@@ -1,0 +1,27 @@
+{
+  "sample": "no-memconfig-map",
+  "board": "nrf52840dk/nrf52840",
+  "linker": "ld",
+  "builtAt": "2026-08-23T00:00:00Z",
+  "sizeTool": "/home/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-size",
+  "size": {"text": 21168, "data": 212, "bss": 4366, "dec": 25746},
+  "romReport": null,
+  "ramReport": null,
+  "memoryConfiguration": null,
+  "dtsMemoryNodes": null,
+  "removedLines": {
+    "sourceMap": "build/apps_hello_world_nrf52840dk-Os/zephyr/zephyr.map",
+    "linesRemoved": "1817-1824 (inclusive, 8 lines)",
+    "exactContent": [
+      "Memory Configuration",
+      "",
+      "Name             Origin             Length             Attributes",
+      "FLASH            0x00000000         0x00100000         xr",
+      "RAM              0x20000000         0x00040000         xw",
+      "IDT_LIST         0xffff7fff         0x00008000         xw",
+      "*default*        0x00000000         0xffffffff",
+      ""
+    ]
+  },
+  "notes": "Negative sample: real hello_world nrf52840dk-Os ELF and map, but the 'Memory Configuration' block (lines 1817-1824 of the original map) has been deleted. The rest of the map is intact. Purpose: tests that the parser handles a syntactically valid map file that lacks the Memory Configuration header — it should fall back gracefully (e.g. no budget data or partial data from section addresses only)."
+}

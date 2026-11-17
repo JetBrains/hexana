@@ -1,0 +1,20 @@
+package local:demo;
+
+// definitions of a, b, c, foo, bar, baz are omitted
+
+world my-world-a {
+    import a;
+    import b;
+    export c;
+}
+
+world my-world-b {
+    import foo;
+    import bar;
+    export baz;
+}
+
+world union-my-world {
+    include my-world-a;
+    include my-world-b;
+}

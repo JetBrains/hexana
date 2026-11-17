@@ -1,0 +1,11 @@
+{
+  "sample": "hello_world-qemu_cortex_a53",
+  "board": "qemu_cortex_a53",
+  "expectedBackend": "Qemu",
+  "machineOrPlatform": "virt,secure=on,gic-version=3",
+  "qemuArgs": ["-machine", "virt,secure=on,gic-version=3", "-cpu", "cortex-a53", "-nographic"],
+  "bootBannerRegex": "\\*\\*\\* Booting Zephyr OS build [^*]*\\*\\*\\*",
+  "helloRegex": "Hello World! qemu_cortex_a53/qemu_cortex_a53",
+  "bannerValidated": true,
+  "negativeKind": null
+}

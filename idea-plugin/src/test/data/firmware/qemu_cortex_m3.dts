@@ -1,0 +1,217 @@
+/dts-v1/;
+
+/* node '/' defined in zephyr/dts/common/skeleton.dtsi:9 */
+/ {
+	#address-cells = < 0x1 >;           /* in zephyr/dts/common/skeleton.dtsi:10 */
+	#size-cells = < 0x1 >;              /* in zephyr/dts/common/skeleton.dtsi:11 */
+	model = "QEMU Cortex-M3";           /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:9 */
+	compatible = "ti,lm3s6965evb-qemu",
+	             "ti,lm3s6965";         /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:10 */
+
+	/* node '/chosen' defined in zephyr/dts/common/skeleton.dtsi:13 */
+	chosen {
+		zephyr,sram = &sram0;         /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:19 */
+		zephyr,flash = &flash0;       /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:20 */
+		zephyr,console = &uart0;      /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:21 */
+		zephyr,shell-uart = &uart0;   /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:22 */
+		zephyr,bt-hci = &bt_hci_uart; /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:23 */
+		zephyr,uart-pipe = &uart1;    /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:24 */
+		zephyr,bt-mon-uart = &uart2;  /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:25 */
+	};
+
+	/* node '/aliases' defined in zephyr/dts/common/skeleton.dtsi:15 */
+	aliases {
+		uart-0 = &uart0; /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:13 */
+		uart-1 = &uart1; /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:14 */
+		uart-2 = &uart2; /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:15 */
+	};
+
+	/* node '/soc' defined in zephyr/dts/arm/armv7-m.dtsi:6 */
+	soc {
+		#address-cells = < 0x1 >;     /* in zephyr/dts/arm/armv7-m.dtsi:7 */
+		#size-cells = < 0x1 >;        /* in zephyr/dts/arm/armv7-m.dtsi:8 */
+		compatible = "simple-bus";    /* in zephyr/dts/arm/armv7-m.dtsi:9 */
+		interrupt-parent = < &nvic >; /* in zephyr/dts/arm/armv7-m.dtsi:10 */
+		ranges;                       /* in zephyr/dts/arm/armv7-m.dtsi:11 */
+
+		/* node '/soc/interrupt-controller@e000e100' defined in zephyr/dts/arm/armv7-m.dtsi:13 */
+		nvic: interrupt-controller@e000e100 {
+			#address-cells = < 0x1 >;            /* in zephyr/dts/arm/armv7-m.dtsi:14 */
+			compatible = "arm,v7m-nvic";         /* in zephyr/dts/arm/armv7-m.dtsi:15 */
+			reg = < 0xe000e100 0xc00 >;          /* in zephyr/dts/arm/armv7-m.dtsi:16 */
+			interrupt-controller;                /* in zephyr/dts/arm/armv7-m.dtsi:17 */
+			#interrupt-cells = < 0x2 >;          /* in zephyr/dts/arm/armv7-m.dtsi:18 */
+			arm,num-irq-priority-bits = < 0x3 >; /* in zephyr/dts/arm/ti/lm3s6965.dtsi:139 */
+			phandle = < 0x1 >;                   /* in zephyr/dts/arm/armv7-m.dtsi:10 */
+		};
+
+		/* node '/soc/timer@e000e010' defined in zephyr/dts/arm/armv7-m.dtsi:21 */
+		systick: timer@e000e010 {
+			compatible = "arm,armv7m-systick"; /* in zephyr/dts/arm/armv7-m.dtsi:22 */
+			reg = < 0xe000e010 0x10 >;         /* in zephyr/dts/arm/armv7-m.dtsi:23 */
+		};
+
+		/* node '/soc/flash-controller@400fd000' defined in zephyr/dts/arm/ti/lm3s6965.dtsi:29 */
+		flash-controller@400fd000 {
+			compatible = "ti,stellaris-flash-controller"; /* in zephyr/dts/arm/ti/lm3s6965.dtsi:30 */
+			reg = < 0x400fd000 0x1000 >;                  /* in zephyr/dts/arm/ti/lm3s6965.dtsi:31 */
+			#address-cells = < 0x1 >;                     /* in zephyr/dts/arm/ti/lm3s6965.dtsi:32 */
+			#size-cells = < 0x1 >;                        /* in zephyr/dts/arm/ti/lm3s6965.dtsi:33 */
+
+			/* node '/soc/flash-controller@400fd000/flash@0' defined in zephyr/dts/arm/ti/lm3s6965.dtsi:35 */
+			flash0: flash@0 {
+				compatible = "soc-nv-flash"; /* in zephyr/dts/arm/ti/lm3s6965.dtsi:36 */
+				reg = < 0x0 0x40000 >;       /* in zephyr/dts/arm/ti/lm3s6965.dtsi:37 */
+			};
+		};
+
+		/* node '/soc/uart@4000c000' defined in zephyr/dts/arm/ti/lm3s6965.dtsi:41 */
+		uart0: uart@4000c000 {
+			compatible = "ti,stellaris-uart"; /* in zephyr/dts/arm/ti/lm3s6965.dtsi:42 */
+			reg = < 0x4000c000 0x4c >;        /* in zephyr/dts/arm/ti/lm3s6965.dtsi:43 */
+			clocks = < &sysclk >;             /* in zephyr/dts/arm/ti/lm3s6965.dtsi:44 */
+			interrupts = < 0x5 0x3 >;         /* in zephyr/dts/arm/ti/lm3s6965.dtsi:45 */
+			status = "okay";                  /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:30 */
+			current-speed = < 0x1c200 >;      /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:31 */
+		};
+
+		/* node '/soc/uart@4000d000' defined in zephyr/dts/arm/ti/lm3s6965.dtsi:49 */
+		uart1: uart@4000d000 {
+			compatible = "ti,stellaris-uart"; /* in zephyr/dts/arm/ti/lm3s6965.dtsi:50 */
+			reg = < 0x4000d000 0x4c >;        /* in zephyr/dts/arm/ti/lm3s6965.dtsi:51 */
+			clocks = < &sysclk >;             /* in zephyr/dts/arm/ti/lm3s6965.dtsi:52 */
+			interrupts = < 0x6 0x3 >;         /* in zephyr/dts/arm/ti/lm3s6965.dtsi:53 */
+			status = "okay";                  /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:35 */
+			current-speed = < 0x1c200 >;      /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:36 */
+		};
+
+		/* node '/soc/uart@4000e000' defined in zephyr/dts/arm/ti/lm3s6965.dtsi:57 */
+		uart2: uart@4000e000 {
+			compatible = "ti,stellaris-uart"; /* in zephyr/dts/arm/ti/lm3s6965.dtsi:58 */
+			reg = < 0x4000e000 0x4c >;        /* in zephyr/dts/arm/ti/lm3s6965.dtsi:59 */
+			clocks = < &sysclk >;             /* in zephyr/dts/arm/ti/lm3s6965.dtsi:60 */
+			interrupts = < 0x21 0x3 >;        /* in zephyr/dts/arm/ti/lm3s6965.dtsi:61 */
+			status = "okay";                  /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:40 */
+			current-speed = < 0x1c200 >;      /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:41 */
+
+			/* node '/soc/uart@4000e000/bt_hci_uart' defined in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:43 */
+			bt_hci_uart: bt_hci_uart {
+				compatible = "zephyr,bt-hci-uart"; /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:44 */
+				status = "okay";                   /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:45 */
+			};
+		};
+
+		/* node '/soc/ethernet@40048000' defined in zephyr/dts/arm/ti/lm3s6965.dtsi:65 */
+		eth: ethernet@40048000 {
+			compatible = "ti,stellaris-ethernet";      /* in zephyr/dts/arm/ti/lm3s6965.dtsi:66 */
+			reg = < 0x40048000 0x3c >;                 /* in zephyr/dts/arm/ti/lm3s6965.dtsi:67 */
+			interrupts = < 0x2a 0x0 >;                 /* in zephyr/dts/arm/ti/lm3s6965.dtsi:68 */
+			local-mac-address = [ 00 00 94 00 83 00 ]; /* in zephyr/dts/arm/ti/lm3s6965.dtsi:70 */
+			status = "okay";                           /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:50 */
+		};
+
+		/* node '/soc/gpio@40004000' defined in zephyr/dts/arm/ti/lm3s6965.dtsi:73 */
+		gpio0: gpio@40004000 {
+			compatible = "ti,stellaris-gpio"; /* in zephyr/dts/arm/ti/lm3s6965.dtsi:74 */
+			reg = < 0x40004000 0x1000 >;      /* in zephyr/dts/arm/ti/lm3s6965.dtsi:75 */
+			interrupts = < 0x0 0x3 >;         /* in zephyr/dts/arm/ti/lm3s6965.dtsi:76 */
+			gpio-controller;                  /* in zephyr/dts/arm/ti/lm3s6965.dtsi:77 */
+			#gpio-cells = < 0x2 >;            /* in zephyr/dts/arm/ti/lm3s6965.dtsi:78 */
+			ngpios = < 0x8 >;                 /* in zephyr/dts/arm/ti/lm3s6965.dtsi:79 */
+			status = "okay";                  /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:54 */
+		};
+
+		/* node '/soc/gpio@40005000' defined in zephyr/dts/arm/ti/lm3s6965.dtsi:82 */
+		gpio1: gpio@40005000 {
+			compatible = "ti,stellaris-gpio"; /* in zephyr/dts/arm/ti/lm3s6965.dtsi:83 */
+			reg = < 0x40005000 0x1000 >;      /* in zephyr/dts/arm/ti/lm3s6965.dtsi:84 */
+			interrupts = < 0x1 0x3 >;         /* in zephyr/dts/arm/ti/lm3s6965.dtsi:85 */
+			gpio-controller;                  /* in zephyr/dts/arm/ti/lm3s6965.dtsi:86 */
+			#gpio-cells = < 0x2 >;            /* in zephyr/dts/arm/ti/lm3s6965.dtsi:87 */
+			ngpios = < 0x8 >;                 /* in zephyr/dts/arm/ti/lm3s6965.dtsi:88 */
+			status = "okay";                  /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:58 */
+		};
+
+		/* node '/soc/gpio@40006000' defined in zephyr/dts/arm/ti/lm3s6965.dtsi:91 */
+		gpio2: gpio@40006000 {
+			compatible = "ti,stellaris-gpio"; /* in zephyr/dts/arm/ti/lm3s6965.dtsi:92 */
+			reg = < 0x40006000 0x1000 >;      /* in zephyr/dts/arm/ti/lm3s6965.dtsi:93 */
+			interrupts = < 0x2 0x3 >;         /* in zephyr/dts/arm/ti/lm3s6965.dtsi:94 */
+			gpio-controller;                  /* in zephyr/dts/arm/ti/lm3s6965.dtsi:95 */
+			#gpio-cells = < 0x2 >;            /* in zephyr/dts/arm/ti/lm3s6965.dtsi:96 */
+			ngpios = < 0x8 >;                 /* in zephyr/dts/arm/ti/lm3s6965.dtsi:97 */
+			status = "okay";                  /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:62 */
+		};
+
+		/* node '/soc/gpio@40007000' defined in zephyr/dts/arm/ti/lm3s6965.dtsi:100 */
+		gpio3: gpio@40007000 {
+			compatible = "ti,stellaris-gpio"; /* in zephyr/dts/arm/ti/lm3s6965.dtsi:101 */
+			reg = < 0x40007000 0x1000 >;      /* in zephyr/dts/arm/ti/lm3s6965.dtsi:102 */
+			interrupts = < 0x3 0x3 >;         /* in zephyr/dts/arm/ti/lm3s6965.dtsi:103 */
+			gpio-controller;                  /* in zephyr/dts/arm/ti/lm3s6965.dtsi:104 */
+			#gpio-cells = < 0x2 >;            /* in zephyr/dts/arm/ti/lm3s6965.dtsi:105 */
+			ngpios = < 0x8 >;                 /* in zephyr/dts/arm/ti/lm3s6965.dtsi:106 */
+			status = "okay";                  /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:66 */
+		};
+
+		/* node '/soc/gpio@40024000' defined in zephyr/dts/arm/ti/lm3s6965.dtsi:109 */
+		gpio4: gpio@40024000 {
+			compatible = "ti,stellaris-gpio"; /* in zephyr/dts/arm/ti/lm3s6965.dtsi:110 */
+			reg = < 0x40024000 0x1000 >;      /* in zephyr/dts/arm/ti/lm3s6965.dtsi:111 */
+			interrupts = < 0x4 0x3 >;         /* in zephyr/dts/arm/ti/lm3s6965.dtsi:112 */
+			gpio-controller;                  /* in zephyr/dts/arm/ti/lm3s6965.dtsi:113 */
+			#gpio-cells = < 0x2 >;            /* in zephyr/dts/arm/ti/lm3s6965.dtsi:114 */
+			ngpios = < 0x4 >;                 /* in zephyr/dts/arm/ti/lm3s6965.dtsi:115 */
+			status = "okay";                  /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:70 */
+		};
+
+		/* node '/soc/gpio@40025000' defined in zephyr/dts/arm/ti/lm3s6965.dtsi:118 */
+		gpio5: gpio@40025000 {
+			compatible = "ti,stellaris-gpio"; /* in zephyr/dts/arm/ti/lm3s6965.dtsi:119 */
+			reg = < 0x40025000 0x1000 >;      /* in zephyr/dts/arm/ti/lm3s6965.dtsi:120 */
+			interrupts = < 0x1e 0x3 >;        /* in zephyr/dts/arm/ti/lm3s6965.dtsi:121 */
+			gpio-controller;                  /* in zephyr/dts/arm/ti/lm3s6965.dtsi:122 */
+			#gpio-cells = < 0x2 >;            /* in zephyr/dts/arm/ti/lm3s6965.dtsi:123 */
+			ngpios = < 0x4 >;                 /* in zephyr/dts/arm/ti/lm3s6965.dtsi:124 */
+			status = "okay";                  /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:74 */
+		};
+
+		/* node '/soc/gpio@40026000' defined in zephyr/dts/arm/ti/lm3s6965.dtsi:127 */
+		gpio6: gpio@40026000 {
+			compatible = "ti,stellaris-gpio"; /* in zephyr/dts/arm/ti/lm3s6965.dtsi:128 */
+			reg = < 0x40026000 0x1000 >;      /* in zephyr/dts/arm/ti/lm3s6965.dtsi:129 */
+			interrupts = < 0x1f 0x3 >;        /* in zephyr/dts/arm/ti/lm3s6965.dtsi:130 */
+			gpio-controller;                  /* in zephyr/dts/arm/ti/lm3s6965.dtsi:131 */
+			#gpio-cells = < 0x2 >;            /* in zephyr/dts/arm/ti/lm3s6965.dtsi:132 */
+			ngpios = < 0x2 >;                 /* in zephyr/dts/arm/ti/lm3s6965.dtsi:133 */
+			status = "okay";                  /* in zephyr/boards/qemu/cortex_m3/qemu_cortex_m3.dts:78 */
+		};
+	};
+
+	/* node '/cpus' defined in zephyr/dts/arm/ti/lm3s6965.dtsi:6 */
+	cpus {
+		#address-cells = < 0x1 >; /* in zephyr/dts/arm/ti/lm3s6965.dtsi:7 */
+		#size-cells = < 0x0 >;    /* in zephyr/dts/arm/ti/lm3s6965.dtsi:8 */
+
+		/* node '/cpus/cpu@0' defined in zephyr/dts/arm/ti/lm3s6965.dtsi:10 */
+		cpu@0 {
+			device_type = "cpu";          /* in zephyr/dts/arm/ti/lm3s6965.dtsi:11 */
+			compatible = "arm,cortex-m3"; /* in zephyr/dts/arm/ti/lm3s6965.dtsi:12 */
+			reg = < 0x0 >;                /* in zephyr/dts/arm/ti/lm3s6965.dtsi:13 */
+		};
+	};
+
+	/* node '/memory@20000000' defined in zephyr/dts/arm/ti/lm3s6965.dtsi:17 */
+	sram0: memory@20000000 {
+		compatible = "mmio-sram";     /* in zephyr/dts/arm/ti/lm3s6965.dtsi:18 */
+		reg = < 0x20000000 0x10000 >; /* in zephyr/dts/arm/ti/lm3s6965.dtsi:19 */
+	};
+
+	/* node '/system-clock' defined in zephyr/dts/arm/ti/lm3s6965.dtsi:22 */
+	sysclk: system-clock {
+		compatible = "fixed-clock";     /* in zephyr/dts/arm/ti/lm3s6965.dtsi:23 */
+		clock-frequency = < 0xb71b00 >; /* in zephyr/dts/arm/ti/lm3s6965.dtsi:24 */
+		#clock-cells = < 0x0 >;         /* in zephyr/dts/arm/ti/lm3s6965.dtsi:25 */
+		phandle = < 0x2 >;              /* in zephyr/dts/arm/ti/lm3s6965.dtsi:44 */
+	};
+};

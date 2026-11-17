@@ -1,0 +1,24 @@
+FFFFFFFF 00 CB163CB17F0C8671431BFD4037433E83
+FFFFFFFE 00 1
+FFFFFFFD 00 1
+FFFFFFFC 00 3
+FFFFFFFB 00 1
+00001860 04 System.Int32 Hexana.R2rSample.Calculator::Add(System.Int32, System.Int32)
+00001870 33 System.Int32 Hexana.R2rSample.Calculator::Fib(System.Int32)
+000018B0 46 System.Int32 Hexana.R2rSample.Calculator::Parse(System.String)
+00001900 0A System.Int32 Hexana.R2rSample.Calculator::MaxOfInts(System.Int32, System.Int32)
+00001910 51 System.Collections.Generic.List`1[Hexana.R2rSample.Point] Hexana.R2rSample.Calculator::Points(System.Int32)
+00001970 07 Hexana.R2rSample.Point::.ctor(System.Int32, System.Int32)
+00001980 03 System.Int32 Hexana.R2rSample.Point::get_X()
+00001990 04 System.Int32 Hexana.R2rSample.Point::get_Y()
+000019A0 9E System.String Hexana.R2rSample.Point::ToString()
+00001A40 4E System.String Hexana.R2rSample.Boxes::Describe()
+00001A90 1A System.String Hexana.R2rSample.Point+Formatter::Format(Hexana.R2rSample.Point)
+00001AB0 01 Hexana.R2rSample.Point+Formatter::.ctor()
+00001AC0 04 Hexana.R2rSample.Box`1[System.Int32]::.ctor(System.Int32)
+00001AD0 24 System.String Hexana.R2rSample.Box`1[System.Int32]::ToString()
+00001B00 05 Hexana.R2rSample.Box`1[Hexana.R2rSample.Point]::.ctor(Hexana.R2rSample.Point)
+00001B10 24 System.String Hexana.R2rSample.Box`1[Hexana.R2rSample.Point]::ToString()
+00001B40 0C Hexana.R2rSample.Box`1[System.__Canon]::.ctor(System.__Canon)
+00001B50 55 System.String Hexana.R2rSample.Box`1[System.__Canon]::ToString()
+00001BB0 32 System.__Canon Hexana.R2rSample.Calculator::Max(System.__Canon, System.__Canon)

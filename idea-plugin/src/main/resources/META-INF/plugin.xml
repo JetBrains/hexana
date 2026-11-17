@@ -1,0 +1,493 @@
+<idea-plugin>
+    <!-- Unique identifier of the plugin. It should be FQN. It cannot be changed between the plugin versions. -->
+    <id>org.jetbrains.hexana</id>
+
+    <!-- Public plugin name should be written in Title Case.
+         Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-name -->
+    <name>Hexana — WebAssembly &amp; Binary Inspector</name>
+
+    <!-- A displayed Vendor name or Organization ID displayed on the Plugins Page. -->
+    <vendor url="https://jetbrains.github.io/hexana/">JetBrains</vendor>
+
+    <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
+         Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
+    <description><![CDATA[
+        <p>Hexana — an IntelliJ Platform plugin for WebAssembly and binary analysis — opens
+        compiled artifacts as structured, navigable documents inside JetBrains IDEs.</p>
+
+        <p><b>Binary formats</b></p>
+        <ul>
+          <li>Hex editor for any file, with search and go-to-offset</li>
+          <li>WASM (<code>.wasm</code>): section browser, imports/exports, function types, code bodies, GC types, WIT (Component Model) interfaces, DWARF 4/5 debug info; bytes the parser cannot decode are reported per region in a <b>Problems</b> tab instead of failing the view; WasmGC type sections carry inline kind/field annotations, a type-info popup (Alt+click), and an interactive <b>Type Graph</b> tab with subtype/field-reference edges, FUNC-leaf folding, rec-group frames, depth and hops controls, stable incremental expansion, and pan/zoom canvas</li>
+          <li>Embedded core modules and nested components of a Component Model binary open recursively in their own editor views</li>
+          <li>WASM size profiler: byte-accurate size attribution of sections and functions, expanding recursively through nested Component Model submodules</li>
+          <li>Binary diff (<b>Compare Binaries With…</b>) for any supported format — WASM: size impact, changed entities, per-signature dispatch-table changes, and on-demand WAT compare, for core modules and Component Model binaries; native: section size impact, and for ELF, Mach-O and COFF a per-function comparison with side-by-side disassembly</li>
+          <li>Go to Source from function rows and WAT instructions to the originating line, via DWARF or source maps; <code>call_indirect</code> rows list their statically known dispatch candidates</li>
+          <li>ELF (<code>.elf</code>, <code>.so</code>), Mach-O (<code>.dylib</code>, <code>.bundle</code>), PE (<code>.exe</code>, <code>.dll</code>, <code>.sys</code>) — magic-byte detection</li>
+          <li>Multi-architecture disassembly for x86, x86-64, ARM, AArch64, RISC-V 32/64 — bundled as a Rust/WASM module, no host toolchain required, virtualized for multi-MB binaries</li>
+          <li>Archive viewer for <code>.jar</code>, <code>.zip</code>, <code>.war</code>, <code>.apk</code>, <code>.tar</code>, plus static libraries: Unix <code>ar</code> (<code>.a</code>) and Windows COFF import libraries (<code>.lib</code>); gzip-compressed files of supported kinds (<code>.wasm.gz</code>) open directly</li>
+          <li>Network captures: pcap and pcapng packet viewer, with HTTP response bodies openable in their own tabs</li>
+          <li>Android DEX (<code>.dex</code>) with string-table extraction</li>
+          <li>Columnar data: Parquet (<code>.parquet</code>) and Arrow (<code>.arrow</code>) — schema, metadata, row groups / record batches, decoded column data</li>
+          <li>Protocol Buffers: <code>FileDescriptorSet</code> files (<code>.desc</code>, <code>.protoset</code>, <code>.pb</code>), plus a schema-less <b>Open As Protobuf Message</b> wire decoder for opaque payloads</li>
+          <li>JVM JIT viewer: a JVMTI agent attaches to any Java run configuration, captures compiled methods into a <code>.jit</code> file, and renders them with a symbol tree and per-method disassembly</li>
+        </ul>
+
+        <p><b>Language support</b></p>
+        <ul>
+          <li>WAT (WebAssembly Text Format): PSI-backed parser, syntax highlighting, brace matching, find-usages, documentation</li>
+          <li>WIT (Component Model interface language): inspections, formatting, completion, go-to-definition, indexing</li>
+          <li>Java: completion and navigation for GraalWasm and Chicory APIs</li>
+          <li>JavaScript / TypeScript: type inference for <code>WebAssembly.instantiate(...)</code> imports and exports, resolved from the referenced <code>.wasm</code> file</li>
+        </ul>
+
+        <p><b>Debugging</b></p>
+        <ul>
+          <li>Line breakpoints in WASM run configurations under Node.js and browsers, wasmtime 44+ (its built-in gdbstub), and WAMR (debug-interpreter builds)</li>
+          <li><b>Wasm</b> debugger tab: the paused function disassembled to WAT with the exact current instruction highlighted, per-instruction Step Over / Step Into, and the operand stack (live values where the runtime serves them, statically reconstructed origins otherwise)</li>
+          <li>Conditional breakpoints, inlined call frames, and variables stored in linear memory, all resolved through DWARF</li>
+          <li>Managed wasi-sdk installation: WASM debugging needs an LLDB with the wasm process plugin, and the WebAssembly settings page downloads and verifies one, shared across projects and JetBrains IDEs</li>
+        </ul>
+
+        <p><b>Scripting</b></p>
+        <ul>
+          <li>Script tabs run JavaScript against the open binary: <code>binary.functions()</code>, <code>.imports()</code>, <code>.exports()</code>, and format-agnostic members (<code>format</code>, <code>size</code>, <code>structure</code>, <code>strings</code>, <code>sizeAnalysis</code>); results render as tables or log output in a side panel. Sandboxed, with a timeout and bounded output.</li>
+          <li><code>hexana.defineCheck(id, fn)</code> declares named checks whose findings appear in the <b>Problems</b> tab and in SARIF 2.1.0 output; <code>hexana.defineFlags(schema)</code> adds typed per-run parameters</li>
+          <li><b>Hexana Suite</b> run configuration for <code>*.test.js</code> files: <code>describe</code>/<code>test</code>/<code>beforeEach</code>/<code>afterEach</code> with async support, artifact role binding, seeded deterministic crypto, and an ESM loader for bare-specifier imports from <code>node_modules</code>. Results stream into the SM test console with navigation to call sites, Rerun Failed, and Copy CLI Command.</li>
+          <li>Gutter run icons on <code>test()</code> and <code>describe()</code> calls; <b>Run Suites for This Binary</b> in the binary editor context menu matches suites to the open file by declared artifact role</li>
+          <li>The <code>run_script_suite</code> MCP tool and CLI command run suites headlessly with JUnit XML report output</li>
+        </ul>
+
+        <p>An MCP server exposes function lists, type signatures, data segments, and module structure to AI assistants
+        through the Model Context Protocol.</p>
+    ]]></description>
+
+    <resource-bundle>messages.HexanaBundle</resource-bundle>
+
+    <depends optional="true" config-file="org.jetbrains.hexana.javascript.xml">JavaScript</depends>
+    <depends optional="true" config-file="org.jetbrains.hexana.java.xml">com.intellij.modules.java</depends>
+    <depends optional="true" config-file="org.jetbrains.hexana.maven.xml">org.jetbrains.idea.maven</depends>
+    <depends optional="true" config-file="org.jetbrains.hexana.gradle.xml">com.intellij.gradle</depends>
+
+    <dependencies>
+        <plugin id="com.intellij.mcpServer"/>
+        <!-- NOTE: do not declare intellij.platform.smRunner / intellij.platform.testRunner here.
+             2025.2/2025.3 do not register those module names, and an unresolvable plugin-level
+             module dependency silently disables the WHOLE plugin there (TC build 1072434679).
+             The SM console lives in the org.jetbrains.hexana.suiteRunner content module
+             (see <content> below), which declares them and degrades gracefully. -->
+        <module name="intellij.libraries.skiko"/>
+        <module name="intellij.libraries.compose.foundation.desktop"/>
+
+        <module name="intellij.platform.compose"/>
+        <module name="intellij.platform.jewel.foundation"/>
+        <module name="intellij.platform.jewel.ui"/>
+        <module name="intellij.platform.jewel.ideLafBridge"/>
+    </dependencies>
+
+    <content>
+        <!-- Hexana Suite run configuration (SM test console), shipped as a content module
+             jar (lib/modules/). Loads on 2026.1+ where intellij.platform.smRunner /
+             intellij.platform.testRunner are registered module names; skipped on
+             2025.2/2025.3 (no suite run configuration there, everything else works). -->
+        <module name="org.jetbrains.hexana.suiteRunner"/>
+    </content>
+
+    <!-- Extension points defined by the plugin.
+         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
+    <extensionPoints>
+        <!-- Seam for "navigate from a WASM/JIT symbol to Java/Kotlin source or bytecode".
+             The implementation requires com.intellij.java PSI, so it is contributed only by the
+             Java-gated config (org.jetbrains.hexana.java.xml). Core no-ops when absent. -->
+        <extensionPoint name="symbolNavigator"
+                        interface="org.jetbrains.hexana.navigation.SymbolNavigator"
+                        dynamic="true"/>
+    </extensionPoints>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Disassembly view tunables. Toggle live via
+             Help → Find Action → Registry... → search "hexana.disassembly".
+             Backend + split changes take effect on the next panel open
+             (or via the panel's Retry button). -->
+        <registryKey key="hexana.disassembly.backend.redline"
+                     defaultValue="false"
+                     description="Use chicory-redline (Cranelift-compiled native code via FFI) for the Capstone WASM module instead of Chicory's bytecode AOT. Experimental."/>
+        <registryKey key="hexana.disassembly.perf.logging"
+                     defaultValue="false"
+                     description="Emit per-chunk [disasm-perf] timing to idea.log (decodeMs, renderMs, annotatedLen). Fires only when a function body is unfolded — the default-folded UX means no perf log until the user opens a function."/>
+        <registryKey key="hexana.feedback.in.ide.enabled"
+                     defaultValue="true"
+                     description="Show the in-IDE Hexana feedback action in the Hexana editor feedback popup. Disabled by default while the feedback submission flow is gated."/>
+
+        <postStartupActivity implementation="org.jetbrains.hexana.whatsnew.HexanaWhatsNewStartupActivity"
+                             order="last"/>
+
+        <!-- Warms the DWARF source-name cache used by WasmLineBreakpointType.canPutAt
+             (EDT-safe breakpoint placement needs the index snapshot preloaded). -->
+        <postStartupActivity implementation="org.jetbrains.hexana.run.WasmDwarfSourceNamesPreloader"/>
+
+        <!-- Status bar widget surfacing in-flight Hexana disassembly work.
+             Hidden when idle; shows "Disassembling: N" while decode +
+             render is happening. -->
+        <statusBarWidgetFactory id="Hexana.Disasm.Activity"
+                                implementation="org.jetbrains.hexana.ui.panel.DisasmActivityStatusBarWidgetFactory"/>
+
+        <applicationConfigurable parentId="tools"
+                                 id="hexana.settings"
+                                 bundle="messages.HexanaBundle"
+                                 key="hexana.settings.displayName"
+                                 provider="org.jetbrains.hexana.HexanaConfigurableProvider"/>
+
+        <applicationConfigurable parentId="build"
+                                 id="wasm.runtime.settings"
+                                 bundle="messages.HexanaBundle"
+                                 key="wasm.runtime.settings.displayName"
+                                 instance="org.jetbrains.hexana.run.WasmRuntimeConfigurable"/>
+
+        <!-- Project-level: the selection is written to .hexana/runtimes.json in the project so
+             the VS Code extension reads the same declaration. Not an applicationConfigurable
+             and not @State-backed, which would land in .idea/ and be IntelliJ-only. -->
+        <projectConfigurable parentId="wasm.runtime.settings"
+                             id="wasm.runtime.compatibility"
+                             bundle="messages.HexanaBundle"
+                             key="wasm.runtime.compatibility.displayName"
+                             instance="org.jetbrains.hexana.features.WasmRuntimeCompatibilityConfigurable"/>
+
+        <!-- Project-level for the same reason: the parsers chosen per file live in
+             .hexana/file_associations.json, which the VS Code extension shares. -->
+        <projectConfigurable parentId="hexana.settings"
+                             id="hexana.file.associations"
+                             bundle="messages.HexanaBundle"
+                             key="file.associations.displayName"
+                             instance="org.jetbrains.hexana.features.FileAssociationsConfigurable"/>
+
+        <applicationService serviceImplementation="org.jetbrains.hexana.run.WasmRuntimeSettings"/>
+
+        <!-- Remembers the SSL key log paired with each pcap capture.
+             @State + SimplePersistentStateComponent requires XML registration for state loading. -->
+        <applicationService serviceImplementation="org.jetbrains.hexana.ui.PcapSslKeyLogSettings"/>
+
+        <!-- Binary breakpoint registry: persists breakpoints across IDE restarts.
+             @State + SimplePersistentStateComponent requires XML registration for state loading. -->
+        <projectService serviceImplementation="org.jetbrains.hexana.breakpoints.BinaryBreakpointRegistry"/>
+        <!-- Coordinates breakpoint materialization across debug sessions.
+             Instantiated by debug process classes via project.getService(); XML registration required. -->
+        <projectService serviceImplementation="org.jetbrains.hexana.breakpoints.BreakpointMaterializationCoordinator"/>
+        <!-- XBreakpointMirror and BinaryExecutionNavigator are @Service light services without
+             @State. They are eagerly instantiated by BreakpointsEagerStartup below.
+             No <projectService> entry needed: @Service alone registers them on IJ 252+. -->
+        <postStartupActivity implementation="org.jetbrains.hexana.breakpoints.BreakpointsEagerStartup"/>
+
+        <fileType name="wasm"
+                  implementationClass="org.jetbrains.hexana.WasmFileType"
+                  fieldName="INSTANCE"
+                  extensions="wasm" />
+
+        <!-- No extensions: `.bin` is too generic to claim by name. The type is
+             assigned on demand by HexFileTypeOverrider (the "Open in Hex View"
+             action); files with recognisable content are typed by
+             NativeBinaryFileTypeDetector regardless of extension. -->
+        <fileType name="binary"
+                  implementationClass="org.jetbrains.hexana.BinaryFileType"
+                  fieldName="INSTANCE"/>
+
+        <fileType name="ELF"
+                  implementationClass="org.jetbrains.hexana.ElfFileType"
+                  fieldName="INSTANCE"
+                  extensions="elf;so"/>
+
+        <fileType name="Mach-O"
+                  implementationClass="org.jetbrains.hexana.MachOFileType"
+                  fieldName="INSTANCE"
+                  extensions="dylib;bundle"/>
+
+        <fileType name="PE"
+                  implementationClass="org.jetbrains.hexana.PeFileType"
+                  fieldName="INSTANCE"
+                  extensions="exe;dll;sys;drv"/>
+
+        <!-- No extensions: `.a`/`.lib` are recognised by the "!<arch>\n" content magic in
+             NativeBinaryFileTypeDetector. Binding the extension would beat the detector and
+             force this type onto non-archive `.lib` files (MSVC import libraries). -->
+        <fileType name="Archive"
+                  implementationClass="org.jetbrains.hexana.ArchiveFileType"
+                  fieldName="INSTANCE"/>
+
+        <fileType name="wat"
+                  implementationClass="org.jetbrains.hexana.wat.WatFileType"
+                  fieldName="INSTANCE"
+                  language="wat"
+                  extensions="wat" />
+
+        <fileType name="wit"
+                  implementationClass="org.jetbrains.hexana.wit.WitFileType"
+                  fieldName="INSTANCE"
+                  language="wit"
+                  extensions="wit" />
+
+        <fileType name="jit"
+                  implementationClass="org.jetbrains.hexana.JitFileType"
+                  fieldName="INSTANCE"
+                  extensions="jit"/>
+
+        <fileType name="dex"
+                  implementationClass="org.jetbrains.hexana.DexFileType"
+                  fieldName="INSTANCE"
+                  extensions="dex"/>
+
+        <fileType name="parquet"
+                  implementationClass="org.jetbrains.hexana.ParquetFileType"
+                  fieldName="INSTANCE"
+                  extensions="parquet"/>
+
+        <!-- `arrows` is the conventional extension for the Arrow IPC *stream*
+             format; the `arrow` file magic detector only matches IPC *files*. -->
+        <fileType name="arrow"
+                  implementationClass="org.jetbrains.hexana.ArrowFileType"
+                  fieldName="INSTANCE"
+                  extensions="arrow;arrows"/>
+
+        <fileType name="tar"
+                  implementationClass="org.jetbrains.hexana.TarFileType"
+                  fieldName="INSTANCE"
+                  extensions="tar;tgz"/>
+
+        <fileType name="gz"
+                  implementationClass="org.jetbrains.hexana.GzFileType"
+                  fieldName="INSTANCE"
+                  extensions="gz"/>
+
+        <fileType name="pcap"
+                  implementationClass="org.jetbrains.hexana.PcapFileType"
+                  fieldName="INSTANCE"
+                  extensions="pcap;pcapng;cap"/>
+
+        <!-- No extensions: `.pdb` is also the Protein Data Bank text format; typed by content instead. -->
+        <fileType name="PDB Debug Symbols"
+                  implementationClass="org.jetbrains.hexana.PdbFileType"
+                  fieldName="INSTANCE"/>
+
+        <fileType name="Protobuf Descriptor Set"
+                  implementationClass="org.jetbrains.hexana.ProtobufFileType"
+                  fieldName="INSTANCE"
+                  extensions="desc;protoset"/>
+
+        <fileType name="Protobuf Message"
+                  implementationClass="org.jetbrains.hexana.ProtobufMessageFileType"
+                  fieldName="INSTANCE"
+                  extensions="pb"/>
+
+        <fileEditorProvider implementation="org.jetbrains.hexana.HexanaFileEditorProvider"/>
+        <!-- Viewers for the platform diff window; offered in its viewer switcher, hex diff by default. -->
+        <diff.DiffTool implementation="org.jetbrains.hexana.diff.HexDiffTool"/>
+        <diff.DiffTool implementation="org.jetbrains.hexana.diff.HexanaStructuralDiffTool"/>
+        <structureViewBuilder factoryClass="org.jetbrains.hexana.ui.HexanaStructureViewBuilderProvider"/>
+        <fileEditorProvider implementation="org.jetbrains.hexana.feedback.HexanaFeedbackFileEditorProvider"/>
+        <fileEditorProvider implementation="org.jetbrains.hexana.whatsnew.HexanaWhatsNewFileEditorProvider"/>
+        <editorTabTitleProvider implementation="org.jetbrains.hexana.ArchiveMemberTabTitleProvider"/>
+        <editorNotificationProvider implementation="org.jetbrains.hexana.wat.MissingWasmToolsNotification"/>
+        <editorNotificationProvider implementation="org.jetbrains.hexana.ui.ElfMemoryBudgetNotification"/>
+        <fileTypeOverrider implementation="org.jetbrains.hexana.actions.HexFileTypeOverrider"/>
+        <fileTypeDetector implementation="org.jetbrains.hexana.NativeBinaryFileTypeDetector"/>
+        <fileTypeDetector implementation="org.jetbrains.hexana.ColumnarBinaryFileTypeDetector"/>
+        <statistics.counterUsagesCollector
+                implementationClass="org.jetbrains.hexana.statistics.HexanaCounterUsagesCollector"/>
+        <useScopeOptimizer implementation="org.jetbrains.hexana.wat.WatScopeOptimizer"/>
+        <lang.parserDefinition language="wat" implementationClass="org.jetbrains.hexana.wat.psi.WatParserDefinition" />
+        <lang.syntaxHighlighter language="wat" implementationClass="org.jetbrains.hexana.wat.WatSyntaxHighlighter"/>
+        <fileEditor.fileSizeChecker implementation="org.jetbrains.hexana.wat.WatFileSizeChecker"/>
+        <fileEditor.fileSizeChecker implementation="org.jetbrains.hexana.WasmFileSizeChecker"/>
+        <braceMatcher filetype="wat" implementationClass="org.jetbrains.hexana.wat.WatBraceMatcher"/>
+        <lang.fileViewProviderFactory language="wat" implementationClass="org.jetbrains.hexana.wat.psi.WatFileViewProviderFactory"/>
+        <problemHighlightFilter implementation="org.jetbrains.hexana.wat.WatProblemHighlightFilter"/>
+        <platform.backend.documentation.psiTargetProvider implementation="org.jetbrains.hexana.wat.WatDocumentationTargetProvider"/>
+        <findUsagesHandlerFactory implementation="org.jetbrains.hexana.wat.WatFindUsagesHandlerFactory"/>
+        <lang.findUsagesProvider language="wat" implementationClass="org.jetbrains.hexana.wat.WatFindUsagesProvider"/>
+        <usageTargetProvider order="first" implementation="org.jetbrains.hexana.wat.WatUsageTargetProvider"/>
+
+        <!-- actionConfigurationCustomizer implementation="org.jetbrains.hexana.mcp.McpServerCustomizer"/-->
+        <actionConfigurationCustomizer implementation="org.jetbrains.hexana.graalvm.GraalInstallationCustomizer"/>
+        <mcpServer.mcpToolsProvider implementation="org.jetbrains.hexana.mcp.HexanaToolset"/>
+        <notificationGroup id="hexana" displayType="BALLOON" bundle="messages.HexanaBundle" key="notifications.groupKey"/>
+
+        <lang.parserDefinition language="wit" implementationClass="org.jetbrains.hexana.wit.psi.WitParserDefinition" />
+        <lang.syntaxHighlighter language="wit" implementationClass="org.jetbrains.hexana.wit.WitSyntaxHighlighter"/>
+        <braceMatcher filetype="wit" implementationClass="org.jetbrains.hexana.wit.WitBraceMatcher"/>
+        <lang.commenter language="wit" implementationClass="org.jetbrains.hexana.wit.WitCommenter"/>
+        <lang.foldingBuilder language="wit" implementationClass="org.jetbrains.hexana.wit.WitFoldingBuilder"/>
+        <breadcrumbsInfoProvider implementation="org.jetbrains.hexana.wit.WitBreadcrumbsProvider"/>
+        <highlightVisitor implementation="org.jetbrains.hexana.wit.WitSemanticKeywordHighlighter" order="first"/>
+        <lang.elementManipulator forClass="org.jetbrains.hexana.wit.psi.WitHandle"
+                                 implementationClass="org.jetbrains.hexana.wit.psi.impl.WitHandleManipulator"/>
+        <lang.elementManipulator forClass="org.jetbrains.hexana.wit.psi.WitUsePath"
+                                 implementationClass="org.jetbrains.hexana.wit.psi.impl.WitUsePathManipulator"/>
+        <lang.elementManipulator forClass="org.jetbrains.hexana.wit.psi.WitUseNamesItem"
+                                 implementationClass="org.jetbrains.hexana.wit.psi.impl.WitUseNamesItemManipulator"/>
+        <lang.elementManipulator forClass="org.jetbrains.hexana.wit.psi.WitIncludeNamesItem"
+                                 implementationClass="org.jetbrains.hexana.wit.psi.impl.WitIncludeNamesItemManipulator"/>
+        <renameInputValidator implementation="org.jetbrains.hexana.wit.psi.WitRenameInputValidator" />
+        <fileBasedIndex implementation="org.jetbrains.hexana.wit.WitComponentIndex"/>
+        <fileBasedIndex implementation="org.jetbrains.hexana.WasmIndex"/>
+        <fileBasedIndex implementation="org.jetbrains.hexana.WasmExportIndex"/>
+        <fileBasedIndex implementation="org.jetbrains.hexana.DwarfIndex"/>
+        <gotoSymbolContributor implementation="org.jetbrains.hexana.navigation.HexanaGotoSymbolContributor"/>
+        <platform.backend.documentation.psiTargetProvider implementation="org.jetbrains.hexana.wit.WitDocumentationProvider"/>
+        <findUsagesHandlerFactory id="wit" implementation="org.jetbrains.hexana.wit.WitFindUsagesHandlerFactory"/>
+        <indexedRootsProvider implementation="org.jetbrains.hexana.wit.WitBuiltInDefinitionsContributor"/>
+        <codeInsight.lineMarkerProvider language="wit" implementationClass="org.jetbrains.hexana.wit.WitGoToRelatedSymbolsProvider"/>
+        <completion.contributor language="wit" implementationClass="org.jetbrains.hexana.wit.WitKeywordCompletionContributor" />
+        <completion.contributor language="wit" implementationClass="org.jetbrains.hexana.wit.WitGateCompletionContributor" />
+
+        <localInspection language="wit"
+                         groupBundle="messages.HexanaBundle"
+                         groupKey="wit.language.description"
+                         bundle="messages.HexanaBundle"
+                         key="wit.inspection.empty.definition.display.name"
+                         enabledByDefault="true"
+                         level="ERROR"
+                         implementationClass="org.jetbrains.hexana.wit.inspections.WitEmptyDefinitionInspection"/>
+
+        <localInspection language="wit"
+                         groupBundle="messages.HexanaBundle"
+                         groupKey="wit.language.description"
+                         bundle="messages.HexanaBundle"
+                         key="wit.inspection.world.duplicate.name.display.name"
+                         enabledByDefault="true"
+                         level="ERROR"
+                         implementationClass="org.jetbrains.hexana.wit.inspections.WitWorldNameUniquenessInspection"/>
+
+        <localInspection language="wit"
+                         groupBundle="messages.HexanaBundle"
+                         groupKey="wit.language.description"
+                         bundle="messages.HexanaBundle"
+                         key="wit.inspection.missing.semicolon.display.name"
+                         enabledByDefault="true"
+                         level="WARNING"
+                         implementationClass="org.jetbrains.hexana.wit.inspections.WitMissingSemicolonInspection"/>
+
+        <localInspection language="wit"
+                         groupBundle="messages.HexanaBundle"
+                         groupKey="wit.language.description"
+                         bundle="messages.HexanaBundle"
+                         key="wit.inspection.gate.display.name"
+                         enabledByDefault="true"
+                         level="ERROR"
+                         implementationClass="org.jetbrains.hexana.wit.inspections.WitGateInspection"/>
+
+        <localInspection language="wit"
+                         groupBundle="messages.HexanaBundle"
+                         groupKey="wit.language.description"
+                         bundle="messages.HexanaBundle"
+                         key="wit.inspection.use.declaration.missing.names.display.name"
+                         enabledByDefault="true"
+                         level="ERROR"
+                         implementationClass="org.jetbrains.hexana.wit.inspections.WitUseDeclarationInspection"/>
+
+        <langCodeStyleSettingsProvider implementation="org.jetbrains.hexana.wit.formatter.WitLanguageCodeStyleSettingsProvider"/>
+        <codeStyleSettingsProvider implementation="org.jetbrains.hexana.wit.formatter.WitCodeStyleSettingsProvider"/>
+        <lang.formatter language="wit" implementationClass="org.jetbrains.hexana.wit.formatter.WitFormattingBuilderModel"/>
+        <lang.lineWrapStrategy language="wit" implementationClass="org.jetbrains.hexana.wit.formatter.WitLineWrapPositionStrategy"/>
+
+        <!-- BEGIN firmware LANE-CORE -->
+        <!-- ElfSidecarDiscovery and FirmwareTargetService use @Service(Service.Level.PROJECT)
+             light-service annotations only. IntelliJ Platform 2024.1+ (build 241+) resolves
+             @Service-annotated project services automatically without plugin.xml entries,
+             matching the convention used by MemoryBudgetSettings on this branch. -->
+        <!-- END firmware LANE-CORE -->
+
+        <!-- BEGIN firmware LANE-ACQ -->
+        <applicationService serviceImplementation="org.jetbrains.hexana.firmware.HexanaFirmwareSettings"/>
+        <applicationConfigurable parentId="build" id="firmware.emulator.settings"
+            instance="org.jetbrains.hexana.firmware.FirmwareEmulatorConfigurable"
+            displayName="Firmware Emulator"/>
+        <!-- END firmware LANE-ACQ -->
+
+        <!-- BEGIN firmware LANE-RUN -->
+        <configurationType implementation="org.jetbrains.hexana.firmware.run.FirmwareRunConfigurationType"/>
+        <runConfigurationProducer implementation="org.jetbrains.hexana.firmware.run.FirmwareRunConfigurationProducer"/>
+        <!-- END firmware LANE-RUN -->
+
+        <!-- BEGIN firmware LANE-DEBUG -->
+        <programRunner implementation="org.jetbrains.hexana.firmware.debug.FirmwareDebugRunner"/>
+        <!-- END firmware LANE-DEBUG -->
+
+        <configurationType implementation="org.jetbrains.hexana.run.WasmRunConfigurationType"/>
+        <runConfigurationProducer implementation="org.jetbrains.hexana.run.WasmRunConfigurationProducer"/>
+
+        <!-- Hexana Script run configuration -->
+        <configurationType implementation="org.jetbrains.hexana.run.HexanaScriptRunConfigurationType"/>
+        <runConfigurationProducer implementation="org.jetbrains.hexana.run.HexanaScriptRunConfigurationProducer"/>
+        <programRunner implementation="org.jetbrains.hexana.run.WasmDebugRunner"/>
+        <programRunner implementation="org.jetbrains.hexana.run.CdpDebugRunner"/>
+        <xdebugger.breakpointType implementation="org.jetbrains.hexana.run.WasmLineBreakpointType"/>
+        <xdebugger.breakpointType implementation="org.jetbrains.hexana.breakpoints.HexanaBinaryBreakpointType"/>
+
+    </extensions>
+
+    <applicationListeners>
+        <!-- Delivers queued PostHog events before the IDE exits. PostHog's own
+             close() does not flush, and with flushAt=20 a normal session never
+             reaches the batch threshold, so without this the events from the
+             last <=30s of every session are dropped. Bounded to 2s. -->
+        <listener class="org.jetbrains.hexana.analytics.HexanaAnalyticsLifecycleListener"
+                  topic="com.intellij.ide.AppLifecycleListener"/>
+    </applicationListeners>
+
+    <actions>
+        <!--
+            All Hexana actions are gathered under a single "Hexana" submenu, defined inline so
+            each has exactly one registration site. Each action gates its own visibility — file
+            type for the file actions, an open Hexana editor (HexanaFileEditor.KEY) for the
+            editor actions — so only the applicable entries appear and the popup hides entirely
+            when none apply. Shortcuts are preserved via use-shortcut-of regardless of placement.
+
+            The group is added to TWO parents on purpose:
+              - ProjectViewPopupMenu: top-level "Hexana" submenu in IntelliJ IDEA.
+              - RevealGroup ("Open In"): the only path that works in RustRover / CLion, whose
+                RsProjectViewPopupMenu overrides ProjectViewPopupMenu with an explicit
+                reference list (no catch-all), so direct ProjectViewPopupMenu contributions are
+                dropped there. Those IDEs DO reference RevealGroup, so "Open In ▸ Hexana" shows.
+            Consequence: in IntelliJ IDEA the submenu appears in both places (top-level and
+            under "Open In"); that duplication is the accepted trade-off for RR/CLion coverage.
+        -->
+        <group id="hexana.contextMenuGroup" text="Hexana" popup="true">
+            <action id="hexana.openInHexView" class="org.jetbrains.hexana.actions.OpenInHexViewAction"/>
+            <action id="hexana.openArchiveInHexana"
+                    class="org.jetbrains.hexana.actions.OpenArchiveInHexanaAction"
+                    text="Open Archive"
+                    description="Open this archive in Hexana's Java library viewer"/>
+            <action id="hexana.compareFiles"
+                    class="org.jetbrains.hexana.actions.CompareFilesAction"
+                    text="Compare Binaries With…"
+                    description="Compare two WASM modules, components or native binaries"/>
+            <action id="hexana.openAsProtobufMessage"
+                    class="org.jetbrains.hexana.actions.OpenAsProtobufMessageAction"
+                    text="Open As Protobuf Message"
+                    description="Decode this file as a raw Protobuf wire-encoded message"/>
+            <!-- hexana.runSuitesForBinary is registered by the org.jetbrains.hexana.suiteRunner
+                 content module (absent on 2025.2/2025.3, see <content> below). -->
+            <separator/>
+            <action id="hexana.showElementInHexView" class="org.jetbrains.hexana.actions.ShowElementInHexViewAction"/>
+            <action id="hexana.goToOffset" class="org.jetbrains.hexana.actions.GoToOffsetAction"
+                    use-shortcut-of="GotoLine"/>
+            <action id="hexana.showStructurePopup" class="org.jetbrains.hexana.actions.ShowStructurePopupAction"
+                    use-shortcut-of="FileStructurePopup"/>
+            <add-to-group group-id="ProjectViewPopupMenu" anchor="last"/>
+            <add-to-group group-id="RevealGroup" anchor="last"/>
+        </group>
+        <!-- Former compare action ids, before one action served every format. Kept (in no menu,
+             hidden from Find Action) so shortcuts bound to them keep working. -->
+        <action id="hexana.compareWasm"
+                class="org.jetbrains.hexana.actions.LegacyCompareFilesAction"
+                text="Compare Binaries With… (former Compare WASM)"/>
+        <action id="hexana.compareBinary"
+                class="org.jetbrains.hexana.actions.LegacyCompareFilesAction"
+                text="Compare Binaries With… (former Compare Binary)"/>
+
+        <action id="hexana.showWhatsNew"
+                class="org.jetbrains.hexana.whatsnew.HexanaWhatsNewAction">
+            <add-to-group group-id="HelpMenu" anchor="last"/>
+        </action>
+    </actions>
+
+</idea-plugin>

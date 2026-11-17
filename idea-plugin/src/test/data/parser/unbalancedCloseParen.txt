@@ -1,0 +1,22 @@
+Wat File
+  WatTypeElement(TYPE)
+    PsiElement(()('(')
+    PsiElement(type)('type')
+    PsiElement())(')')
+  PsiErrorElement:Unexpected token
+    <empty list>
+  PsiElement())(')')
+  PsiErrorElement:Unexpected token
+    <empty list>
+  PsiElement())(')')
+  PsiWhiteSpace('\n')
+  WatFuncElement(FUNC)
+    PsiElement(()('(')
+    PsiElement(func)('func')
+    PsiElement())(')')
+  PsiErrorElement:Unexpected token
+    <empty list>
+  PsiElement())(')')
+  PsiErrorElement:Unexpected token
+    <empty list>
+  PsiElement())(')')

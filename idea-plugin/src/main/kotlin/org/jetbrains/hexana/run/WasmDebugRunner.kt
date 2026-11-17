@@ -1,0 +1,810 @@
+package org.jetbrains.hexana.run
+
+import com.intellij.execution.ExecutionException
+import com.intellij.execution.configurations.GeneralCommandLine
+import com.intellij.execution.configurations.PathEnvironmentVariableUtil
+import com.intellij.execution.configurations.RunProfile
+import com.intellij.execution.configurations.RunProfileState
+import com.intellij.execution.configurations.RunnerSettings
+import com.intellij.execution.executors.DefaultDebugExecutor
+import com.intellij.execution.filters.TextConsoleBuilderFactory
+import com.intellij.execution.process.OSProcessHandler
+import com.intellij.execution.process.ProcessAdapter
+import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessTerminatedListener
+import com.intellij.execution.runners.ExecutionEnvironment
+import com.intellij.execution.runners.GenericProgramRunner
+import com.intellij.execution.ui.RunContentDescriptor
+import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Key
+import com.intellij.openapi.util.SystemInfo
+import com.intellij.openapi.util.ThrowableComputable
+import com.intellij.util.io.BaseOutputReader
+import com.intellij.xdebugger.XDebugProcess
+import com.intellij.xdebugger.XDebugProcessStarter
+import com.intellij.xdebugger.XDebugSession
+import org.jetbrains.hexana.shared.WasmRunInput
+import org.jetbrains.hexana.shared.buildWasmtimeGdbArgs
+import org.jetbrains.hexana.shared.looksLikeWamrDebugNotSupported
+import org.jetbrains.hexana.toCommonByteBuffer
+import org.jetbrains.hexana.wasisdk.WasiSdkOffer
+import java.io.File
+import java.net.ServerSocket
+import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+
+/**
+ * A [GenericProgramRunner] that handles the **Debug** executor for
+ * [WasmRunConfiguration] when the selected engine is **Wasmtime** or
+ * **WAMR**.
+ *
+ * ### Wasmtime
+ * Launches `wasmtime run -g <host>:<port> module.wasm` which starts the
+ * built-in gdbstub guest debugger (wasmtime 44+), then launches LLDB
+ * separately and connects via
+ * `process connect --plugin wasm connect://<host>:<port>`.
+ * LLDB reads DWARF directly from the wasm module; stepping is per wasm
+ * instruction and PCs encode the wasm byte offset in their low 32 bits.
+ * The legacy native flow (lldb wrapping wasmtime with the GDB JIT loader)
+ * is kept in [doExecuteWasmtime] but no longer routed to.
+ *
+ * ### WAMR
+ * Launches `iwasm -g=<host>:<port> module.wasm` which starts a GDB
+ * remote debug stub, then launches LLDB separately and connects to
+ * the stub via `process connect --plugin wasm connect://<host>:<port>`.
+ */
+class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
+
+    override fun getRunnerId(): String = RUNNER_ID
+
+    override fun canRun(executorId: String, profile: RunProfile): Boolean {
+        if (executorId != DefaultDebugExecutor.EXECUTOR_ID) return false
+        val config = profile as? WasmRunConfiguration ?: return false
+        return config.engine == WasmEngine.WASMTIME || config.engine == WasmEngine.WAMR
+    }
+
+    override fun doExecute(state: RunProfileState, environment: ExecutionEnvironment): RunContentDescriptor? {
+        val configuration = environment.runProfile as? WasmRunConfiguration
+            ?: throw ExecutionException("Expected WasmRunConfiguration")
+
+        return when (configuration.engine) {
+            WasmEngine.WASMTIME -> doExecuteWasmtimeGdb(configuration, environment)
+            WasmEngine.WAMR -> doExecuteWamr(configuration, environment)
+            else -> throw ExecutionException("Debug is not supported for ${configuration.engine.displayName}")
+        }
+    }
+
+    private fun doExecuteWasmtime(
+        configuration: WasmRunConfiguration,
+        environment: ExecutionEnvironment,
+    ): RunContentDescriptor? {
+        // Pre-compute DWARF resolver in a modal progress task so that
+        // file I/O does not block the EDT. The modal dialog pumps UI
+        // events, keeping the IDE responsive.
+        val dwarfResolver = ProgressManager.getInstance()
+            .runProcessWithProgressSynchronously(
+                ThrowableComputable { createDwarfResolver(configuration) },
+                "Preparing Wasmtime debug session\u2026",
+                true,
+                environment.project,
+            )
+
+        val starter = object : XDebugProcessStarter() {
+            override fun start(session: XDebugSession): XDebugProcess {
+                val buildResult = WasmtimeDebugCommandLineState.buildWasmtimeArguments(configuration, environment.project)
+                val wasmtimePath = configuration.wasmtimePath.ifBlank {
+                    WasmRuntimeSettings.getInstance().effectiveWasmtimePath()
+                }
+
+                val lldbExe = resolveLldbPath(configuration)
+                notifyIfLldbMissing(environment.project, lldbExe)
+                val commandLine = GeneralCommandLine().apply {
+                    exePath = lldbExe
+                    addParameters(
+                        buildWasmtimeLldbParameters(
+                            wasmtimePath = wasmtimePath,
+                            wasmtimeArguments = buildResult.arguments,
+                        ),
+                    )
+
+                    val workDir = configuration.workingDirectory.ifBlank { null }
+                    if (workDir != null) {
+                        withWorkDirectory(workDir)
+                    }
+                    withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
+                }
+
+                LOG.info("Starting LLDB: ${commandLine.commandLineString}")
+
+                val processHandler = OSProcessHandler(commandLine)
+
+                // Create the LLDB communicator and attach it as a process listener
+                // *before* starting the process handler, so no output is missed.
+                val lldb = LldbCommunicator(processHandler)
+                lldb.attachToProcessHandler()
+
+                ProcessTerminatedListener.attach(processHandler)
+                processHandler.startNotify()
+
+                val console = TextConsoleBuilderFactory.getInstance()
+                    .createBuilder(environment.project)
+                    .console
+                    .also { it.attachToProcess(processHandler) }
+
+                // Disable ASLR so that LLDB does not attempt to
+                // disable address-space layout randomisation for the
+                // inferior — wasmtime manages its own memory layout
+                // and the ASLR setting can cause launch failures on
+                // some platforms.
+                lldb.sendCommand("settings set target.disable-aslr false")
+
+                // Enable JIT loader so LLDB can see JIT-compiled symbols.
+                // Wasmtime uses the GDB JIT interface to register
+                // JIT-compiled code on all platforms (macOS, Linux,
+                // Windows), so this setting is needed everywhere.
+                lldb.sendCommand("settings set plugin.jit-loader.gdb.enable on")
+
+                // Note: we do NOT call lldb.runProcess() here.
+                // The platform will first call registerBreakpoint() for every
+                // existing breakpoint and then call sessionInitialized().
+                // We start the inferior in sessionInitialized() so that all
+                // breakpoints are already set in LLDB when wasmtime launches.
+
+                return WasmDebugProcess(
+                    session,
+                    console,
+                    processHandler,
+                    lldb,
+                    compositionUsed = buildResult.compositionUsed,
+                    dwarfInjected = buildResult.dwarfInjected,
+                    engine = WasmEngine.WASMTIME,
+                    executedWasmPath = buildResult.executedWasmPath,
+                ).also {
+                    it.dwarfVariableResolver = dwarfResolver
+                }
+            }
+        }
+
+        return startDebugSessionForRunner(environment, starter)
+    }
+
+    /**
+     * Result holder for the blocking preparatory work that must
+     * complete before the WAMR debug session UI is created.
+     */
+    private class WamrPrepResult(
+        val iwasmHandler: OSProcessHandler,
+        val dwarfResolver: WasmDwarfVariableResolver?,
+        val debugHost: String,
+        val debugPort: Int,
+    )
+
+    /**
+     * Process handler for long-lived, mostly silent debug processes
+     * (the wasmtime gdbstub waiting for a debugger, the interactive
+     * LLDB). Uses the blocking reader the platform recommends to avoid
+     * "Process hasn't generated any output for a long time" warnings
+     * and the busy-poll CPU cost behind them.
+     */
+    private class MostlySilentOSProcessHandler(
+        commandLine: GeneralCommandLine,
+    ) : OSProcessHandler(commandLine) {
+        override fun readerOptions(): BaseOutputReader.Options =
+            BaseOutputReader.Options.forMostlySilentProcess()
+    }
+
+    /**
+     * Result holder for the blocking preparatory work for a Wasmtime
+     * gdbstub debug session.
+     */
+    private class WasmtimeGdbPrepResult(
+        val wasmtimeHandler: OSProcessHandler,
+        val dwarfResolver: WasmDwarfVariableResolver?,
+        val debugHost: String,
+        val debugPort: Int,
+        val executedWasmPath: String?,
+    )
+
+    /**
+     * Launches a Wasmtime gdbstub debug session.
+     *
+     * 1. Probes whether the configured wasmtime supports `-g` (gdbstub).
+     * 2. Starts wasmtime with `-g <host>:<port>` in a modal progress task.
+     * 3. Waits for "Debugger listening on" in wasmtime output.
+     * 4. Starts a plain LLDB and connects via `process connect --plugin wasm`.
+     */
+    private fun doExecuteWasmtimeGdb(
+        configuration: WasmRunConfiguration,
+        environment: ExecutionEnvironment,
+    ): RunContentDescriptor? {
+        offerWasiSdkIfAbsent(environment.project, configuration)
+        val prep = ProgressManager.getInstance()
+            .runProcessWithProgressSynchronously(
+                ThrowableComputable { prepareWasmtimeGdbSession(configuration, environment.project) },
+                "Starting Wasmtime debug server…",
+                true,
+                environment.project,
+            )
+
+        val starter = object : XDebugProcessStarter() {
+            override fun start(session: XDebugSession): XDebugProcess {
+                val lldbExe = resolveLldbPath(configuration)
+                notifyIfLldbMissing(environment.project, lldbExe)
+                val lldbCommandLine = GeneralCommandLine().apply {
+                    exePath = lldbExe
+                    withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
+                }
+
+                LOG.info("Starting LLDB for Wasmtime gdbstub connection: $lldbExe")
+
+                val lldbHandler = MostlySilentOSProcessHandler(lldbCommandLine)
+                val lldb = LldbCommunicator(lldbHandler)
+                lldb.attachToProcessHandler()
+
+                ProcessTerminatedListener.attach(lldbHandler)
+                lldbHandler.startNotify()
+
+                // Disable ASLR so LLDB does not try to disable address-space
+                // layout randomisation for the inferior.
+                lldb.sendCommand("settings set target.disable-aslr false")
+
+                val console = TextConsoleBuilderFactory.getInstance()
+                    .createBuilder(environment.project)
+                    .console
+                    .also { it.attachToProcess(lldbHandler) }
+
+                // Under gdbstub the guest's stdio stays on the wasmtime process
+                // (unlike the old direct-LLDB flow where wasmtime was the LLDB
+                // inferior); mirror it into the session stream so the Debug
+                // console still shows the program output.
+                prep.wasmtimeHandler.addProcessListener(object : ProcessAdapter() {
+                    override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
+                        lldbHandler.notifyTextAvailable(event.text ?: return, outputType)
+                    }
+                })
+
+                return WasmtimeGdbDebugProcess(
+                    session,
+                    console,
+                    lldbHandler,
+                    prep.wasmtimeHandler,
+                    lldb,
+                    debugHost = prep.debugHost,
+                    debugPort = prep.debugPort,
+                    executedWasmPath = prep.executedWasmPath,
+                    captureGdbstubAddress = configuration.gdbstubCaptureAddress,
+                ).also {
+                    it.dwarfVariableResolver = prep.dwarfResolver
+                }
+            }
+        }
+
+        return startDebugSessionForRunner(environment, starter)
+    }
+
+    /**
+     * Performs all blocking preparatory work for a Wasmtime gdbstub debug
+     * session: probes gdbstub capability, picks a free port, launches
+     * wasmtime with `-g <host>:<port>`, and waits for the readiness line.
+     * Intended to run inside a modal progress task.
+     */
+    private fun prepareWasmtimeGdbSession(
+        configuration: WasmRunConfiguration,
+        project: Project,
+    ): WasmtimeGdbPrepResult {
+        val wasmtimePath = configuration.wasmtimePath.ifBlank {
+            WasmRuntimeSettings.getInstance().effectiveWasmtimePath()
+        }
+
+        // Probe whether this wasmtime version supports the gdbstub flag.
+        probeWasmtimeGdbSupport(wasmtimePath)
+
+        // Pick a free ephemeral port the same way WAMR does.
+        val debugHost = WamrDebugCommandLineState.DEFAULT_DEBUG_HOST
+        val debugPort = allocateFreePort()
+
+        val buildResult = WasmtimeDebugCommandLineState.buildWasmtimeArguments(configuration, project)
+
+        val wasmtimeArgs = buildWasmtimeGdbArgs(
+            input = WasmRunInput(
+                wasmFilePath = configuration.wasmFilePath,
+                wasmBuffer = buildResult.executedWasmPath?.let { java.io.File(it).toCommonByteBuffer() }
+                    ?: java.io.File(configuration.wasmFilePath).toCommonByteBuffer(),
+                programArguments = configuration.programArguments,
+                workingDirectory = configuration.workingDirectory,
+                runtimeOptions = configuration.wasmtimeOptions,
+                effectiveWasmPath = buildResult.executedWasmPath,
+            ),
+            port = debugPort,
+            host = debugHost,
+        )
+
+        val wasmtimeCommandLine = GeneralCommandLine().apply {
+            exePath = wasmtimePath
+            addParameters(wasmtimeArgs.arguments)
+            val workDir = wasmtimeArgs.workingDirectory ?: configuration.workingDirectory.ifBlank { null }
+            if (workDir != null) withWorkDirectory(workDir)
+            withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
+        }
+
+        LOG.info("Starting Wasmtime gdbstub: ${wasmtimeCommandLine.commandLineString}")
+
+        val wasmtimeHandler = MostlySilentOSProcessHandler(wasmtimeCommandLine)
+        ProcessTerminatedListener.attach(wasmtimeHandler)
+
+        // Wait for wasmtime to print "Debugger listening on 127.0.0.1:<port>".
+        val readyLatch = CountDownLatch(1)
+        val wasmtimeOutput = Collections.synchronizedList(mutableListOf<String>())
+        wasmtimeHandler.addProcessListener(object : ProcessAdapter() {
+            override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
+                val text = event.text ?: return
+                wasmtimeOutput.add(text)
+                if (text.contains(WasmtimeGdbDebugProcess.READY_MARKER)) {
+                    readyLatch.countDown()
+                }
+            }
+
+            override fun processTerminated(event: ProcessEvent) {
+                readyLatch.countDown()
+            }
+        })
+        wasmtimeHandler.startNotify()
+
+        val ready = readyLatch.await(WASMTIME_GDB_READY_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        if (!ready) {
+            LOG.warn(
+                "Timed out waiting for Wasmtime gdbstub readiness " +
+                    "(${WASMTIME_GDB_READY_TIMEOUT_MS}ms). Proceeding anyway."
+            )
+        }
+        if (wasmtimeHandler.isProcessTerminated) {
+            val output = wasmtimeOutput.joinToString("").trim()
+            val exitCode = wasmtimeHandler.exitCode
+            throw ExecutionException(
+                "Wasmtime terminated before the debug server started (exit code $exitCode)." +
+                    if (output.isNotEmpty()) "\n\nwasmtime output:\n$output" else ""
+            )
+        }
+
+        val dwarfResolver = createDwarfResolver(configuration)
+
+        return WasmtimeGdbPrepResult(
+            wasmtimeHandler = wasmtimeHandler,
+            dwarfResolver = dwarfResolver,
+            debugHost = debugHost,
+            debugPort = debugPort,
+            executedWasmPath = buildResult.executedWasmPath,
+        )
+    }
+
+    private fun doExecuteWamr(
+        configuration: WasmRunConfiguration,
+        environment: ExecutionEnvironment,
+    ): RunContentDescriptor? {
+        offerWasiSdkIfAbsent(environment.project, configuration)
+        // All blocking preparatory work (iwasm launch, server
+        // readiness wait, DWARF parsing) runs inside a modal
+        // progress task. The modal dialog pumps UI events so the
+        // IDE stays responsive while we wait.
+        val prep = ProgressManager.getInstance()
+            .runProcessWithProgressSynchronously(
+                ThrowableComputable { prepareWamrSession(configuration) },
+                "Starting WAMR debug server\u2026",
+                true,
+                environment.project,
+            )
+
+        val starter = object : XDebugProcessStarter() {
+            override fun start(session: XDebugSession): XDebugProcess {
+                // Step 2: Start LLDB (no inferior — we'll connect remotely)
+                val lldbExe = resolveLldbPath(configuration)
+                notifyIfLldbMissing(environment.project, lldbExe)
+                val lldbCommandLine = GeneralCommandLine().apply {
+                    exePath = lldbExe
+                    withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
+                }
+
+                LOG.info("Starting LLDB for WAMR remote connection")
+
+                val lldbHandler = OSProcessHandler(lldbCommandLine)
+
+                val lldb = LldbCommunicator(lldbHandler)
+                lldb.attachToProcessHandler()
+
+                ProcessTerminatedListener.attach(lldbHandler)
+                lldbHandler.startNotify()
+
+                // Disable ASLR so that LLDB does not attempt to
+                // disable address-space layout randomisation for the
+                // inferior.
+                lldb.sendCommand("settings set target.disable-aslr false")
+
+                val console = TextConsoleBuilderFactory.getInstance()
+                    .createBuilder(environment.project)
+                    .console
+                    .also { it.attachToProcess(lldbHandler) }
+
+                return WamrDebugProcess(
+                    session,
+                    console,
+                    lldbHandler,
+                    prep.iwasmHandler,
+                    lldb,
+                    debugHost = prep.debugHost,
+                    debugPort = prep.debugPort,
+                    executedWasmPath = configuration.wasmFilePath.takeIf { it.isNotBlank() },
+                    engine = WasmEngine.WAMR,
+                ).also {
+                    it.dwarfVariableResolver = prep.dwarfResolver
+                }
+            }
+        }
+
+        return startDebugSessionForRunner(environment, starter)
+    }
+
+    /**
+     * Performs all blocking preparatory work for a WAMR debug
+     * session: launches iwasm, waits for the debug server to
+     * become ready, and pre-parses DWARF metadata. This method
+     * is intended to run inside a modal progress task so the
+     * EDT stays responsive.
+     */
+    private fun prepareWamrSession(
+        configuration: WasmRunConfiguration,
+    ): WamrPrepResult {
+        val debugHost = WamrDebugCommandLineState.DEFAULT_DEBUG_HOST
+        val debugPort = allocateFreePort()
+        val buildResult = WamrDebugCommandLineState.buildWamrArguments(configuration, debugHost, debugPort)
+        val iwasmPath = configuration.wamrPath.ifBlank {
+            WasmRuntimeSettings.getInstance().effectiveWamrPath()
+        }
+
+        // Step 1: Start iwasm with debug server
+        val iwasmCommandLine = GeneralCommandLine().apply {
+            exePath = iwasmPath
+            addParameters(buildResult.arguments)
+
+            // When stub modules were generated, use the stub
+            // directory as the working directory so WAMR can
+            // find the <module_name>.wasm files.
+            val workDir = buildResult.stubDir?.absolutePath
+                ?: configuration.workingDirectory.ifBlank { null }
+            if (workDir != null) {
+                withWorkDirectory(workDir)
+            }
+            withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
+        }
+
+        LOG.info("Starting WAMR debug server: ${iwasmCommandLine.commandLineString}")
+
+        val iwasmHandler = OSProcessHandler(iwasmCommandLine)
+        ProcessTerminatedListener.attach(iwasmHandler)
+
+        // Wait for the WAMR debug server to start listening
+        // before launching LLDB. iwasm prints a line like
+        //   "Debug server listening on 127.0.0.1:1234"
+        // when the GDB remote stub is ready for connections.
+        // We also collect all output so that if iwasm exits
+        // early we can include the actual error in the message.
+        val serverReadyLatch = CountDownLatch(1)
+        val iwasmOutput = Collections.synchronizedList(mutableListOf<String>())
+        iwasmHandler.addProcessListener(object : ProcessAdapter() {
+            override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
+                val text = event.text ?: return
+                iwasmOutput.add(text)
+                if (text.contains("Debug server listening on") ||
+                    text.contains("debug server listening on")) {
+                    serverReadyLatch.countDown()
+                }
+            }
+
+            override fun processTerminated(event: ProcessEvent) {
+                // Unblock the latch if iwasm exits before we see
+                // the listening message (e.g. bad arguments).
+                serverReadyLatch.countDown()
+            }
+        })
+        iwasmHandler.startNotify()
+
+        val serverReady = serverReadyLatch.await(
+            WAMR_DEBUG_SERVER_READY_TIMEOUT_MS, TimeUnit.MILLISECONDS
+        )
+        if (!serverReady) {
+            LOG.warn(
+                "Timed out waiting for WAMR debug server to start " +
+                    "listening (${WAMR_DEBUG_SERVER_READY_TIMEOUT_MS}ms). " +
+                    "Proceeding with LLDB connection anyway."
+            )
+        }
+        if (iwasmHandler.isProcessTerminated) {
+            val output = iwasmOutput.joinToString("").trim()
+            val exitCode = iwasmHandler.exitCode
+            val details = buildString {
+                append("WAMR (iwasm) process terminated before debug ")
+                append("server started (exit code $exitCode).")
+                if (looksLikeWamrDebugNotSupported(output)) {
+                    append("\n\nThe installed iwasm does not support ")
+                    append("the \"-g\" debug option. This means it ")
+                    append("was built without debug interpreter ")
+                    append("support.")
+                    append("\n\nRebuild iwasm with:")
+                    append("\n  cmake .. -DWAMR_BUILD_DEBUG_INTERP=1")
+                    append("\n  make")
+                    append("\n\nSee: https://bytecodealliance.github.io")
+                    append("/wamr.dev/blog/wamr-source-debugging-basic/")
+                } else {
+                    if (output.isNotEmpty()) {
+                        append("\n\niwasm output:\n")
+                        append(output)
+                    }
+                    append("\n\nCommand: ${iwasmCommandLine.commandLineString}")
+                    append("\n\nPossible causes:")
+                    append("\n  - iwasm was not built with debug ")
+                    append("support (-DWAMR_BUILD_DEBUG_INTERP=1)")
+                    append("\n  - The Wasm module path is incorrect ")
+                    append("or the module has missing imports")
+                    append("\n  - The debug port is already in use")
+                }
+            }
+            LOG.warn(details)
+            throw ExecutionException(details)
+        }
+
+        val dwarfResolver = createDwarfResolver(configuration)
+
+        return WamrPrepResult(
+            iwasmHandler = iwasmHandler,
+            dwarfResolver = dwarfResolver,
+            debugHost = buildResult.debugHost,
+            debugPort = buildResult.debugPort,
+        )
+    }
+
+    private fun createDwarfResolver(configuration: WasmRunConfiguration): WasmDwarfVariableResolver? {
+        return try {
+            val wasmFile = File(configuration.wasmFilePath)
+            if (wasmFile.exists()) {
+                WasmDwarfVariableResolver.create(wasmFile.readBytes())
+            } else null
+        } catch (e: Exception) {
+            LOG.debug("Failed to create DWARF variable resolver: ${e.message}")
+            null
+        }
+    }
+
+    companion object {
+        private val LOG = Logger.getInstance(WasmDebugRunner::class.java)
+        const val RUNNER_ID = "WasmDebugRunner"
+
+        /**
+         * Maximum time to wait for the WAMR debug server to print its
+         * "Debug server listening on ..." message. If the timeout
+         * expires, the connection attempt proceeds anyway (the connect
+         * retry loop in [WamrDebugProcess] will handle the failure).
+         */
+        private const val WAMR_DEBUG_SERVER_READY_TIMEOUT_MS = 10_000L
+
+        /**
+         * Maximum time to wait for Wasmtime to print "Debugger listening on"
+         * when started with the gdbstub flag. If the timeout expires the
+         * connection attempt proceeds anyway.
+         */
+        private const val WASMTIME_GDB_READY_TIMEOUT_MS = 15_000L
+
+        /**
+         * Text fragment wasmtime includes in the `--help` output for the
+         * gdbstub flag. Used by [probeWasmtimeGdbSupport] to detect support.
+         */
+        internal const val WASMTIME_GDB_HELP_MARKER = "--gdbstub"
+
+        /** Default LLDB executable name, resolved via PATH. */
+        internal val DEFAULT_LLDB_PATH = if (SystemInfo.isWindows) "lldb.exe" else "lldb"
+
+        private const val DISABLE_EXTERNAL_SYMBOL_LOOKUP_COMMAND =
+            "settings set symbols.enable-external-lookup false"
+
+        internal fun buildWasmtimeLldbParameters(
+            wasmtimePath: String,
+            wasmtimeArguments: List<String>,
+            disableExternalSymbolLookup: Boolean = shouldDisableExternalSymbolLookup(),
+        ): List<String> = buildList {
+            if (disableExternalSymbolLookup) {
+                // This must run before LLDB creates the Wasmtime target. Some Linux
+                // and Windows LLDB distributions can block indefinitely in external symbol
+                // locators during target creation. Wasmtime's JIT symbols are loaded
+                // later through the GDB JIT interface and are unaffected.
+                add("-O")
+                add(DISABLE_EXTERNAL_SYMBOL_LOOKUP_COMMAND)
+            }
+            add("--")
+            add(wasmtimePath)
+            addAll(wasmtimeArguments)
+        }
+
+        internal fun shouldDisableExternalSymbolLookup(
+            isLinux: Boolean = SystemInfo.isLinux,
+            isWindows: Boolean = SystemInfo.isWindows,
+        ): Boolean = isLinux || isWindows
+
+        /**
+         * Resolves the default LLDB executable path by checking
+         * well-known installation locations before falling back
+         * to a bare command name for PATH lookup.
+         *
+         * Resolution order:
+         * 1. Homebrew standalone LLDB, then legacy LLVM installations on macOS
+         * 2. Versioned LLVM packages on Linux
+         * 3. Bare `lldb` / `lldb.exe` for PATH lookup
+         */
+        fun resolveDefaultLldbPath(): String {
+            if (!SystemInfo.isWindows) {
+                val candidates = mutableListOf<String>()
+                if (SystemInfo.isMac) {
+                    return resolveMacOsLldbPath { File(it).exists() }
+                } else {
+                    // Linux: discover versioned LLVM packages by listing
+                    // directories rather than hardcoding version numbers.
+                    val versionedBins = discoverVersionedFiles(File("/usr/bin"), "lldb-")
+                    for (path in versionedBins) {
+                        candidates.add(path)
+                    }
+                    val llvmDirs = discoverVersionedFiles(File("/usr/lib"), "llvm-")
+                    for (path in llvmDirs) {
+                        candidates.add(path + "/bin/lldb")
+                    }
+                    // Unversioned fallbacks
+                    candidates.add("/usr/bin/lldb")
+                    candidates.add("/usr/lib/llvm/bin/lldb")
+                }
+                for (candidate in candidates) {
+                    if (File(candidate).exists()) return candidate
+                }
+            }
+            return DEFAULT_LLDB_PATH
+        }
+
+        internal fun resolveMacOsLldbPath(exists: (String) -> Boolean): String =
+            listOf(
+                "/opt/homebrew/opt/lldb/bin/lldb",
+                "/usr/local/opt/lldb/bin/lldb",
+                "/opt/homebrew/opt/llvm/bin/lldb",
+                "/usr/local/opt/llvm/bin/lldb",
+                "/usr/bin/lldb",
+            ).firstOrNull(exists) ?: "lldb"
+
+        /**
+         * Lists entries in [directory] whose names start with [prefix],
+         * extracts the numeric version suffix, and returns their full
+         * paths sorted by version descending (newest first).
+         */
+        private fun discoverVersionedFiles(directory: File, prefix: String): List<String> {
+            val entries = directory.listFiles() ?: return emptyList()
+            return entries
+                .filter { it.name.startsWith(prefix) }
+                .mapNotNull { file ->
+                    val suffix = file.name.removePrefix(prefix)
+                    val version = suffix.toIntOrNull() ?: return@mapNotNull null
+                    version to file.absolutePath
+                }
+                .sortedByDescending { it.first }
+                .map { it.second }
+        }
+
+        /**
+         * Resolves the LLDB executable path from the run configuration.
+         *
+         * WAMR debugging requires LLDB 22+ which includes the Wasm
+         * process plugin. On macOS the system LLDB (Apple's build)
+         * does not include this plugin, so users must install a
+         * standalone LLVM/LLDB build (e.g. via Homebrew) and point
+         * the configuration to it.
+         */
+        fun resolveLldbPath(configuration: WasmRunConfiguration): String {
+            val configured = configuration.lldbPath.trim()
+            if (configured.isNotBlank()) return configured
+            return WasmRuntimeSettings.getInstance().effectiveLldbPath()
+        }
+
+        /**
+         * Shows the wasi-sdk download offer when the resolved LLDB command
+         * cannot start: an explicit path that does not exist, or a bare
+         * command name absent from PATH. Informational only; the session
+         * start proceeds and fails with the usual platform error.
+         */
+        private fun notifyIfLldbMissing(project: Project, lldbExe: String) {
+            if (isLldbCommandMissing(lldbExe)) {
+                WasiSdkOffer.showLldbMissingNotification(project)
+            }
+        }
+
+        private fun isLldbCommandMissing(lldbExe: String): Boolean =
+            if (lldbExe.contains('/') || lldbExe.contains('\\')) {
+                !File(lldbExe).exists()
+            } else {
+                PathEnvironmentVariableUtil.findInPath(lldbExe) == null
+            }
+
+        /** Set once the wasi-sdk install offer was shown; resets with the IDE. */
+        @Volatile
+        private var wasiSdkOfferShown = false
+
+        /**
+         * Offers the wasi-sdk download once per IDE session when a wasm debug
+         * session starts with no managed wasi-sdk installed and no explicit
+         * LLDB path configured (per run configuration or in settings). Skipped
+         * when LLDB cannot be found at all, because [notifyIfLldbMissing]
+         * already shows the actionable warning for that case. Checks run on a
+         * pooled thread; the debug session is never blocked.
+         */
+        internal fun offerWasiSdkIfAbsent(project: Project, configuration: WasmRunConfiguration) {
+            if (wasiSdkOfferShown) return
+            if (configuration.lldbPath.isNotBlank()) return
+            com.intellij.openapi.application.ApplicationManager.getApplication().executeOnPooledThread {
+                if (wasiSdkOfferShown) return@executeOnPooledThread
+                val settings = WasmRuntimeSettings.getInstance()
+                if (!settings.state.lldbPath.isNullOrBlank()) return@executeOnPooledThread
+                if (isLldbCommandMissing(resolveDefaultLldbPath())) return@executeOnPooledThread
+                if (org.jetbrains.hexana.wasisdk.WasiSdkStorage.getInstance().installedVersions().isNotEmpty()) {
+                    return@executeOnPooledThread
+                }
+                wasiSdkOfferShown = true
+                WasiSdkOffer.showWasiSdkAbsentNotification(project)
+            }
+        }
+
+        /**
+         * Probes whether the wasmtime at [wasmtimePath] supports the
+         * gdbstub flag by running `wasmtime run --help` on a background
+         * thread and checking for [WASMTIME_GDB_HELP_MARKER] in the output.
+         *
+         * Throws [ExecutionException] with a clear message when the flag is
+         * absent so the session fails early rather than hanging with no useful
+         * feedback.
+         */
+        internal fun probeWasmtimeGdbSupport(wasmtimePath: String) {
+            val helpOutput = try {
+                val cmd = GeneralCommandLine(wasmtimePath, "run", "--help")
+                val process = cmd.createProcess()
+                val stdout = process.inputStream.bufferedReader().readText()
+                val stderr = process.errorStream.bufferedReader().readText()
+                process.waitFor()
+                stdout + stderr
+            } catch (e: Exception) {
+                LOG.warn("Could not probe wasmtime gdbstub support: ${e.message}")
+                // Probe failed (e.g. wasmtime not on PATH). Proceed; the actual
+                // launch will fail with a more informative OS error.
+                return
+            }
+
+            if (!helpOutput.contains(WASMTIME_GDB_HELP_MARKER)) {
+                // Try to extract the version from `wasmtime --version` for a
+                // clearer error message.
+                val version = try {
+                    val cmd = GeneralCommandLine(wasmtimePath, "--version")
+                    val process = cmd.createProcess()
+                    process.inputStream.bufferedReader().readText().trim().also { process.waitFor() }
+                } catch (_: Exception) { null }
+
+                val msg = if (version.isNullOrBlank()) {
+                    "wasmtime does not support guest debugging (-g / --gdbstub). " +
+                        "Update to a recent wasmtime (44+)."
+                } else {
+                    "$version does not support guest debugging (-g / --gdbstub). " +
+                        "Update to a recent wasmtime (44+)."
+                }
+                throw ExecutionException(msg)
+            }
+        }
+
+        /**
+         * Allocates a free ephemeral TCP port by briefly binding [ServerSocket]
+         * to port 0 and reading back the OS-assigned port number.
+         */
+        internal fun allocateFreePort(): Int =
+            ServerSocket(0).use { it.localPort }
+    }
+}

@@ -1,0 +1,1 @@
+(tag $tag$0 (type $0) (param i32))

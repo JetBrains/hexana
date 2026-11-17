@@ -1,0 +1,36 @@
+package foo:bar;
+
+use foo:bar/baz as <error descr="Missing semicolon">qux</error>
+use foo:bar/baz as qux;
+
+world foo {
+    import foo:bar/baz<error descr="Missing semicolon"> </error>
+    import foo:bar/baz;
+    
+    export foo:bar/baz<error descr="Missing semicolon"> </error>
+    export foo:bar/baz;
+
+    import f: func(<error descr="Missing semicolon">)</error>
+    import f: func();
+}
+
+interface bar {
+    use foo:bar/baz.{a, b}<error descr="Missing semicolon"> </error>
+    use foo:bar/baz.{a, b};
+    type t = <error descr="Missing semicolon">u32</error>
+    type t = u32;
+
+    resource <error descr="Missing semicolon">r</error>
+    resource r;
+    
+    resource r2 {
+        constructor(<error descr="Missing semicolon">)</error>
+        constructor();
+        
+        method: func(<error descr="Missing semicolon">)</error>
+        method: func();
+        
+        static-method: static func(<error descr="Missing semicolon">)</error>
+        static-method: static func();
+    }
+}

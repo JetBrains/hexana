@@ -1,0 +1,34 @@
+package local:demo;
+
+use wasi:http/handler@1.0.0;
+use wasi:http/types@1.0.0 as http-types1;
+use wasi:http/types@2.0.0 as http-types2;
+use wasi:http/types as http-types;
+
+interface types {
+    enum errno { a }
+
+    type size = u32;
+}
+
+interface shared {
+    record metadata {
+      a: u32
+    }
+}
+
+interface my-host-functions {
+    use types.{errno as my-errno, size};
+    use wasi:http/types.{request, response};
+    use wasi:http/types@1.0.0.{request, response};
+}
+
+world my-world {
+    import wasi:http/handler@1.0.0;
+    export wasi:http/handler@1.0.0;
+
+    import host: interface {
+      use shared.{metadata};
+      get: func() -> metadata;
+    }
+}

@@ -1,0 +1,3 @@
+{"source_filename": "tests/regression/table_ref_not_unique.wast",
+ "commands": [
+  {"type": "assert_invalid", "line": 24, "filename": "table_ref_not_unique.0.wasm", "text": "table reference not unique", "module_type": "binary"}]}

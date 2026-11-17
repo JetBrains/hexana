@@ -1,0 +1,101 @@
+{
+  "clusters": [
+    {
+      "asset": "screenshots/native-binary-size-diff.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Action to show a diff between two native binary files with size changes per section"
+        }
+      ],
+      "eyebrow": "Native binaries",
+      "id": "native-binary-size-diff",
+      "recipe": "native-binary-section-size-diff",
+      "summary": "Compare two native binaries directly in Hexana and see how every section\u2019s size changed.",
+      "title": "Compare native binary size changes"
+    },
+    {
+      "asset": "screenshots/large-wasm-analysis.png",
+      "entries": [
+        {
+          "section": "Changed",
+          "text": "The call graph models indirect calls through a single synthetic `<indirect calls>` node: each function containing a `call_indirect` gets one edge to it, and it fans out to the function table. In the **Dominators** view, functions reachable only through indirect calls now group under that node instead of scattering across the tree. On indirect-call-heavy C++/Emscripten modules this also replaces a callers-times-table product of edges (hundreds of millions on real modules) with a linear count, which is what made such modules impossible to analyze before (see Fixed)."
+        },
+        {
+          "section": "Fixed",
+          "text": "Opening the **Functions** tab of a large module no longer freezes the whole IDE. Its module-wide inputs (function signatures, and the call-graph plus dominator analysis behind the unreachable-function badges) were computed at first cell render on the UI thread; they now run during background tab loading while the tab shows its placeholder, so the editor stays responsive and the tab appears fully rendered."
+        },
+        {
+          "section": "Fixed",
+          "text": "Large modules, including 64-bit memory (memory64 / wasm64) builds, no longer exhaust the IDE heap when analyzed. Dominator results are stored in one compact int buffer instead of boxed hash maps, the dominance frontier (a near-quadratic structure nothing in the product consumed) is no longer computed, and indirect-call edges are linear instead of multiplicative (see Changed). A 50 MB memory64 module with 42k functions, OpenUSD's Emscripten-built `usdviewweb.wasm`, previously drove the IDE past 10 GB of heap into OutOfMemoryError; it now opens, renders the Functions tab, and completes garbage/dominator analysis within a default 2 GB heap, with UI stalls kept near one second (guarded by an EDT-responsiveness driver test that ships with a bundled memory64 fixture)."
+        }
+      ],
+      "eyebrow": "WASM",
+      "id": "large-wasm-analysis",
+      "recipe": "large-wasm-background-analysis",
+      "summary": "Functions and dominator analysis now load in the background, while compact call-graph data keeps very large modules within the IDE\u2019s normal memory budget.",
+      "title": "Analyze large WASM modules without freezing the IDE"
+    },
+    {
+      "asset": "screenshots/component-dependencies.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Component Model binaries now have a **Dependencies** tab that visualizes how imports, embedded core modules and nested components, instances, and exports are connected through instantiation arguments."
+        }
+      ],
+      "eyebrow": "Component Model",
+      "id": "component-dependencies",
+      "recipe": "component-model-dependencies-graph",
+      "summary": "Explore a visual graph of imports, embedded modules and components, instances, and exports wired through instantiation arguments.",
+      "title": "See how Component Model dependencies connect"
+    },
+    {
+      "asset": null,
+      "entries": [
+        {
+          "section": "Fixed",
+          "text": "Fixed a UX problem with vertical splitter \u2013 now it's draggable when the pointer is over its upper half too"
+        },
+        {
+          "section": "Fixed",
+          "text": "WASM Diff action now properly works when two files are selected in the project view (previously it was always asking for the second file)"
+        },
+        {
+          "section": "Fixed",
+          "text": "Tabs whose content resolves to nothing no longer show an endless loading spinner. A tab header is shown optimistically while its content loads in the background; when the analysis finds no data (for example Garbage on a module with no findings, or Monos without monomorphized groups) the placeholder is now removed, and a Garbage analysis with a single non-empty subtab (shown as a promoted \"Garbage: ...\" tab) now replaces its placeholder instead of leaving it spinning next to the content."
+        }
+      ],
+      "eyebrow": "Workflow",
+      "id": "workflow-reliability",
+      "recipe": "analysis-tab-and-diff-workflow-polish",
+      "summary": "Empty analysis tabs now finish cleanly, the vertical splitter is easier to grab, and WASM Diff respects two files selected in the project view.",
+      "title": "Smoother binary-inspection workflows"
+    },
+    {
+      "asset": "screenshots/semantic-highlighting.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Semantic highlighting of sections and navigation between sections for WASM and Native binary files"
+        }
+      ],
+      "eyebrow": "Inspection",
+      "id": "semantic-highlighting",
+      "recipe": "semantic-section-highlighting",
+      "summary": "Hexana now highlights binary sections and lets you move between them in WASM and native files.",
+      "title": "Read binary structure at a glance"
+    }
+  ],
+  "date": null,
+  "schema": 1,
+  "sources": {
+    "assets": "docs/whatsnew/assets.yml",
+    "assets_sha256": "806879eff8cdb12c77ce1a29ee92beb58126fecfb071b03d052731f45a7e2f00",
+    "changelog": "idea-plugin/CHANGELOG.md",
+    "changelog_sha256": "19f46c4b46e6cae8970874abfcc4a322f508472ac108586a193a135ec2a7b477",
+    "design": "docs/whatsnew/DESIGN.md",
+    "design_sha256": "9d78242126b778ea9b2e726407499489193e7c5a71661d09e2dda0f9c8238af4"
+  },
+  "version": "0.14"
+}

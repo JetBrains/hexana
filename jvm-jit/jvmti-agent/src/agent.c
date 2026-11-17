@@ -1,0 +1,1315 @@
+// MSVC marks the POSIX-style names we rely on (open, write, strdup, sprintf)
+// as deprecated and gates their availability behind a "no warnings" macro.
+// Define these before including any system header so the alias macros apply.
+#ifdef _WIN32
+#define _CRT_NONSTDC_NO_DEPRECATE
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
+#ifdef _WIN32
+// Win32 stdlib: <io.h> provides _open/_write/_read/_close/_lseeki64 and
+// macros aliasing the unprefixed POSIX names to them; <windows.h> provides
+// CRITICAL_SECTION for the event mutex. No pthread / <sys/queue.h> exists,
+// so the LIST_* macros below are vendored from BSD <sys/queue.h>.
+// <psapi.h> provides EnumProcessModules / GetModuleInformation for library
+// enumeration when dump_libraries is active.
+#include <io.h>
+#include <windows.h>
+#include <psapi.h>
+
+// `lseek` on Windows is 32-bit and would truncate JIT dumps larger than
+// 2 GiB; alias to the 64-bit variant.
+#define lseek _lseeki64
+// File-mode bits use _S_IREAD / _S_IWRITE on Windows.
+#define DUMP_FILE_MODE (_S_IREAD | _S_IWRITE)
+// O_BINARY disables the CRT's CR/LF translation on text-mode files; POSIX
+// has no such concept (always binary).
+#define DUMP_BINARY_FLAG _O_BINARY
+
+typedef CRITICAL_SECTION event_mutex_t;
+#define EVENT_MUTEX_INIT()   InitializeCriticalSection(&event_mutex)
+#define EVENT_MUTEX_LOCK()   EnterCriticalSection(&event_mutex)
+#define EVENT_MUTEX_UNLOCK() LeaveCriticalSection(&event_mutex)
+
+// Minimal BSD-style singly-linked list macros — sufficient subset of
+// FreeBSD's <sys/queue.h> to keep call sites unchanged on Windows.
+#define LIST_HEAD(name, type) \
+    struct name { struct type *lh_first; }
+#define LIST_ENTRY(type) \
+    struct { struct type *le_next; struct type **le_prev; }
+#define LIST_INIT(head) do { (head)->lh_first = NULL; } while (0)
+#define LIST_INSERT_HEAD(head, elm, field) do { \
+    if (((elm)->field.le_next = (head)->lh_first) != NULL) \
+        (head)->lh_first->field.le_prev = &(elm)->field.le_next; \
+    (head)->lh_first = (elm); \
+    (elm)->field.le_prev = &(head)->lh_first; \
+} while (0)
+#define LIST_FOREACH(var, head, field) \
+    for ((var) = (head)->lh_first; (var); (var) = (var)->field.le_next)
+#define LIST_FIRST(head)        ((head)->lh_first)
+#define LIST_NEXT(elm, field)   ((elm)->field.le_next)
+
+#else // !_WIN32
+#include <sys/queue.h>
+#include <unistd.h>
+#include <pthread.h>
+// <link.h> provides dl_iterate_phdr for library enumeration on Linux /
+// FreeBSD when dump_libraries is active.
+#if defined(__linux__) || defined(__FreeBSD__)
+#include <link.h>
+#endif
+// <mach-o/dyld.h> and <mach-o/loader.h> provide the dyld iteration APIs on
+// macOS (_dyld_image_count, _dyld_get_image_name, etc.).
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#include <mach-o/loader.h>
+#endif
+
+#define DUMP_FILE_MODE       0600
+#define DUMP_BINARY_FLAG     0
+
+typedef pthread_mutex_t event_mutex_t;
+#define EVENT_MUTEX_INIT()   pthread_mutex_init(&event_mutex, NULL)
+#define EVENT_MUTEX_LOCK()   pthread_mutex_lock(&event_mutex)
+#define EVENT_MUTEX_UNLOCK() pthread_mutex_unlock(&event_mutex)
+
+#endif // _WIN32
+
+// Packed-struct attribute portability. GCC / clang accept the
+// `__attribute__((packed))` trailing attribute on a struct declaration;
+// MSVC ignores it and instead requires `#pragma pack(push, 1)` / `pop`
+// wrapping the declaration. PACKED_BEGIN / PACKED_END expand to the pragma
+// on MSVC and to nothing elsewhere; PACKED_ATTR carries the attribute on
+// compilers that recognise it.
+#ifdef _MSC_VER
+#define PACKED_BEGIN __pragma(pack(push, 1))
+#define PACKED_END   __pragma(pack(pop))
+#define PACKED_ATTR
+#else
+#define PACKED_BEGIN
+#define PACKED_END
+#define PACKED_ATTR  __attribute__((packed))
+#endif
+
+#include "jvmti.h"
+#include "jvmticmlr.h"
+
+// Log levels — set from the agentpath option string at Agent_OnLoad time
+// (`-agentpath:<lib>=<dump_path>,log=<off|info|debug>`).
+//   LOG_OFF   — silent except for fatal initialization failures.
+//   LOG_INFO  — banner at OnLoad, summary at OnUnload, plus JVMTI errors.
+//   LOG_DEBUG — additionally one line per CompiledMethodLoad event.
+#define LOG_OFF   0
+#define LOG_INFO  1
+#define LOG_DEBUG 2
+static int log_level = LOG_OFF;
+
+// Agent options parsed from the agentpath argument string.
+typedef struct {
+    // When non-zero, method_unload writes a post-patch snapshot of the
+    // method's native bytes to the dump and stashes the file offset in
+    // sym_entry_t.unload_snapshot_fd_offset. HotSpot guarantees the memory
+    // is still readable inside the CompiledMethodUnload callback (the spec
+    // says the event fires before the region is reused for a new method).
+    int snapshot_on_unload;
+    // When non-zero, Agent_OnUnload records every native library loaded into
+    // the JVM process (path, base address, size) into a new section of the
+    // dump. Captured once at shutdown; JVMs rarely unload native libraries
+    // mid-run so a single late capture covers the full lifetime. Only one
+    // write() per library, done single-threaded under event_mutex, so the
+    // cost is negligible even for large library sets (~200 entries typical).
+    int dump_libraries;
+    // When non-zero, Agent_OnUnload captures a fixed set of JVM system
+    // properties (java.version, os.name, etc.) via JVMTI GetSystemProperty
+    // and writes them as an info_entry_t table between the library table and
+    // the sym chain. Properties unavailable on the current runtime are
+    // silently skipped. Adds ~12 GetSystemProperty calls and a few hundred
+    // bytes to the dump. Only written when the flag is set; absent by default
+    // (system_info_table_offset == 0 in the header).
+    int system_info;
+} agent_opts_t;
+static agent_opts_t opts;
+
+// JVMTI dispatches COMPILED_METHOD_LOAD on the JIT compiler threads, which
+// run in parallel for C1/C2. This mutex serialises every callback that
+// touches the agent's global state — the `offset` cursor, the string and
+// sym linked lists, and the dump_fd write ordering. Without it the lists
+// race and free() ends up tripping over corrupted heap metadata
+// (manifests as SIGABRT inside libc). EVENT_MUTEX_INIT() runs in
+// Agent_OnLoad — required for the Win32 CRITICAL_SECTION variant, no-op
+// equivalent for POSIX (still safe to call).
+static event_mutex_t event_mutex;
+
+static int dump_fd;
+static void *memory;
+
+PACKED_BEGIN
+typedef struct PACKED_ATTR {
+    char magic[3];
+    uint8_t version;
+    uint64_t offset;
+    uint64_t syms_offset;
+    uint64_t string_offset;
+    size_t size;
+    // v4 additions: native library table written once at Agent_OnUnload when
+    // dump_libraries is active. library_table_offset is the absolute byte
+    // offset in the dump where the table starts; library_count is the number
+    // of lib_entry_t records. Both are zero when dump_libraries is off or on
+    // a pre-v4 agent build.
+    uint64_t library_table_offset;
+    uint32_t library_count;
+    // v5 additions: system-info table written once at Agent_OnUnload when
+    // system_info is active. system_info_table_offset is the absolute byte
+    // offset in the dump where the table starts; system_info_count is the
+    // number of info_entry_t records. Both are zero when system_info is off
+    // or on a pre-v5 agent build.
+    uint64_t system_info_table_offset;
+    uint32_t system_info_count;
+} header_t;
+PACKED_END
+
+// One record in the library table. Packed, 20 bytes.
+// path_string_id is an offset into the string table (same interner used by
+// sym_entry_t); base_addr and size describe the library's loaded range.
+PACKED_BEGIN
+typedef struct PACKED_ATTR {
+    uint32_t path_string_id;
+    uint64_t base_addr;
+    uint64_t size;
+} lib_entry_t;
+PACKED_END
+
+// One record in the system-info table. Packed, 8 bytes.
+// key_string_id and value_string_id are offsets into the string table (same
+// interner used by sym_entry_t and lib_entry_t). Written in the fixed
+// agent-defined order (java.version first, os.version last).
+PACKED_BEGIN
+typedef struct PACKED_ATTR {
+    uint32_t key_string_id;
+    uint32_t value_string_id;
+} info_entry_t;
+PACKED_END
+
+typedef struct string {
+    char *name;
+    uint32_t length;
+    uint32_t offset;
+    LIST_ENTRY(string) strings;
+} string_t;
+LIST_HEAD(head_strings, string);
+static struct head_strings head_strings;
+
+#define SYMS_MAGIC0 0xdeadbeef00000001
+#define SYMS_MAGIC1 0xdeadbeef00000002
+PACKED_BEGIN
+typedef struct PACKED_ATTR {
+    uint64_t magic;
+    uint64_t offset;
+    uint64_t size;
+    uint64_t fd_offset;
+    uint64_t next;
+    uint32_t string_offset;
+    uint32_t file_name_offset;
+    uint32_t line_number_table_offset;
+    uint32_t address_location_map_offset;
+    uint32_t inline_offset;
+    uint32_t line_number_entry_count;
+    uint32_t map_length;
+    uint32_t inline_count;
+    uint8_t version;
+    uint64_t magic0;
+    // v2 additions (header.version >= 2). Together they pin the JVM
+    // bytecode bytes captured via GetBytecodes for this compiled method;
+    // bytecode_offset is relative to the start of the sym_entry_t record,
+    // bytecode_length is the count of bytes.
+    uint32_t bytecode_offset;
+    uint32_t bytecode_length;
+    // v3 additions (header.version >= 3). Absolute file offset into the
+    // dump of a post-patch snapshot of the method's native bytes, written
+    // synchronously inside CompiledMethodUnload (when snapshot_on_unload
+    // is set). Zero means "no snapshot captured" — either the flag was off
+    // or the method was never unloaded before JVM exit.
+    uint64_t unload_snapshot_fd_offset;
+    uint32_t unload_snapshot_size;
+} sym_entry_t;
+PACKED_END
+
+typedef struct {
+    string_t *method_name;
+    string_t *source_path;
+    uint32_t bci;
+} frame_t;
+
+
+PACKED_BEGIN
+typedef struct PACKED_ATTR {
+    uint64_t address;
+    uint32_t frame_count;
+} address_info_t;
+PACKED_END
+
+typedef struct {
+    address_info_t info;
+    frame_t *frames;
+} stack_info_t;
+
+typedef struct inline_record {
+    uint32_t entries_count;
+    stack_info_t *info;
+} inline_record_t;
+
+typedef struct sym {
+    sym_entry_t entry;
+    jvmtiLineNumberEntry *line_number_entry_table;
+    jvmtiAddrLocationMap *address_location_map;
+    string_t *string;
+    string_t *file_name_string;
+    inline_record_t *inline_records;
+    // JVM bytecode bytes captured via JVMTI GetBytecodes() at method_load
+    // time. Owned by this struct; freed in Agent_OnUnload after being
+    // written to the dump.
+    unsigned char *bytecode_bytes;
+    jint bytecode_size;
+    LIST_ENTRY(sym) syms;
+} syms_t;
+LIST_HEAD(head_syms, sym);
+static struct head_syms head_syms;
+
+// ---------------------------------------------------------------------------
+// code_addr → syms_t* hash map for O(1) CompiledMethodUnload lookup.
+//
+// Open-addressing with linear probing; capacity is always a power of two so
+// the modulo reduces to a bitwise AND. Load factor is kept below 0.75:
+// the table starts at ADDR_MAP_INIT_CAP slots and doubles when the
+// occupancy reaches (capacity * 3 / 4). The table is never shrunk.
+//
+// Keys are the `code_addr` pointer value (cast to uintptr_t); values are
+// non-owning pointers into the head_syms list. The map is always accessed
+// under event_mutex.
+// ---------------------------------------------------------------------------
+#define ADDR_MAP_INIT_CAP 256
+
+typedef struct {
+    uintptr_t key;   // code_addr; 0 means "empty slot"
+    syms_t   *value;
+} addr_map_entry_t;
+
+static addr_map_entry_t *addr_map_table = NULL;
+static size_t            addr_map_cap   = 0;
+static size_t            addr_map_count = 0;
+
+// Insert without checking the load factor — only called from addr_map_put
+// after the table has been grown if needed.
+static void addr_map_raw_insert(addr_map_entry_t *tbl, size_t cap,
+                                uintptr_t key, syms_t *value) {
+    size_t idx = (size_t)(key ^ (key >> 16)) & (cap - 1);
+    while (tbl[idx].key != 0) {
+        idx = (idx + 1) & (cap - 1);
+    }
+    tbl[idx].key   = key;
+    tbl[idx].value = value;
+}
+
+static void addr_map_put(uintptr_t key, syms_t *value) {
+    // Lazy initialisation on first insert.
+    if (addr_map_table == NULL) {
+        addr_map_table = calloc(ADDR_MAP_INIT_CAP, sizeof(addr_map_entry_t));
+        addr_map_cap   = ADDR_MAP_INIT_CAP;
+        addr_map_count = 0;
+    }
+    // Grow if load factor >= 0.75.
+    if (addr_map_count >= (addr_map_cap * 3 / 4)) {
+        size_t new_cap = addr_map_cap * 2;
+        addr_map_entry_t *new_tbl = calloc(new_cap, sizeof(addr_map_entry_t));
+        for (size_t i = 0; i < addr_map_cap; ++i) {
+            if (addr_map_table[i].key != 0) {
+                addr_map_raw_insert(new_tbl, new_cap,
+                                    addr_map_table[i].key,
+                                    addr_map_table[i].value);
+            }
+        }
+        free(addr_map_table);
+        addr_map_table = new_tbl;
+        addr_map_cap   = new_cap;
+    }
+    addr_map_raw_insert(addr_map_table, addr_map_cap, key, value);
+    addr_map_count++;
+}
+
+static syms_t *addr_map_get(uintptr_t key) {
+    if (addr_map_table == NULL || addr_map_cap == 0) return NULL;
+    size_t idx = (size_t)(key ^ (key >> 16)) & (addr_map_cap - 1);
+    while (addr_map_table[idx].key != 0) {
+        if (addr_map_table[idx].key == key)
+            return addr_map_table[idx].value;
+        idx = (idx + 1) & (addr_map_cap - 1);
+    }
+    return NULL;
+}
+
+static header_t header;
+static uint64_t offset = 0;
+
+// ---------------------------------------------------------------------------
+// Cross-platform library enumeration for the dump_libraries option.
+//
+// enumerate_libraries() calls `callback(path, base_addr, size, ctx)` once per
+// loaded native library. The callback receives:
+//   path      — absolute filesystem path (may be empty/null for anonymous
+//               mappings, e.g. JIT stubs on Linux)
+//   base_addr — runtime load address (ASLR-adjusted on macOS)
+//   size      — total mapped size (sum of PT_LOAD segments on Linux/FreeBSD;
+//               LC_SEGMENT(|_64) total on macOS; SizeOfImage on Windows)
+//   ctx       — opaque pointer forwarded from the enumerate_libraries() call
+//
+// The callback signature is designed so it works identically across all three
+// platform backends despite the very different OS APIs.
+// ---------------------------------------------------------------------------
+
+typedef void (*lib_callback_t)(const char *path, uint64_t base_addr,
+                               uint64_t size, void *ctx);
+
+#if defined(_WIN32)
+
+// Windows: EnumProcessModules + GetModuleFileNameExA + GetModuleInformation.
+// Psapi.lib is linked via CMakeLists.txt; the MinGW toolchain accepts -lpsapi.
+static void enumerate_libraries(lib_callback_t callback, void *ctx) {
+    HANDLE proc = GetCurrentProcess();
+    HMODULE mods[4096];
+    DWORD bytes_needed = 0;
+    if (!EnumProcessModules(proc, mods, sizeof(mods), &bytes_needed)) {
+        return;
+    }
+    DWORD count = bytes_needed / (DWORD)sizeof(HMODULE);
+    for (DWORD i = 0; i < count; ++i) {
+        char path[MAX_PATH];
+        path[0] = '\0';
+        GetModuleFileNameExA(proc, mods[i], path, (DWORD)sizeof(path));
+        MODULEINFO mi;
+        memset(&mi, 0, sizeof(mi));
+        if (GetModuleInformation(proc, mods[i], &mi, sizeof(mi))) {
+            callback(path, (uint64_t)(uintptr_t)mi.lpBaseOfDll,
+                     (uint64_t)mi.SizeOfImage, ctx);
+        }
+    }
+}
+
+#elif defined(__APPLE__)
+
+// macOS: _dyld_image_count / _dyld_get_image_* APIs from <mach-o/dyld.h>.
+// Walk LC_SEGMENT_64 (or LC_SEGMENT on ILP32) load commands to compute the
+// total mapped size as max(vmaddr + vmsize) across all segments.
+static void enumerate_libraries(lib_callback_t callback, void *ctx) {
+    uint32_t n = _dyld_image_count();
+    for (uint32_t i = 0; i < n; ++i) {
+        const char *name = _dyld_get_image_name(i);
+        const struct mach_header *hdr = _dyld_get_image_header(i);
+        intptr_t slide = _dyld_get_image_vmaddr_slide(i);
+        if (hdr == NULL) continue;
+
+        uint64_t max_end = 0;
+        uint64_t base = 0;
+        int first_seg = 1;
+
+#if defined(__LP64__)
+        // 64-bit Mach-O
+        if (hdr->magic == MH_MAGIC_64) {
+            const struct mach_header_64 *hdr64 = (const struct mach_header_64 *)hdr;
+            const uint8_t *p = (const uint8_t *)(hdr64 + 1);
+            for (uint32_t cmd_i = 0; cmd_i < hdr64->ncmds; ++cmd_i) {
+                const struct load_command *lc = (const struct load_command *)p;
+                if (lc->cmd == LC_SEGMENT_64) {
+                    const struct segment_command_64 *seg =
+                        (const struct segment_command_64 *)p;
+                    uint64_t seg_base = seg->vmaddr + (uint64_t)slide;
+                    uint64_t seg_end  = seg_base + seg->vmsize;
+                    if (first_seg || seg_base < base) base = seg_base;
+                    if (seg_end > max_end) max_end = seg_end;
+                    first_seg = 0;
+                }
+                p += lc->cmdsize;
+            }
+        }
+#else
+        // 32-bit Mach-O (rare; kept for completeness)
+        if (hdr->magic == MH_MAGIC) {
+            const uint8_t *p = (const uint8_t *)(hdr + 1);
+            for (uint32_t cmd_i = 0; cmd_i < hdr->ncmds; ++cmd_i) {
+                const struct load_command *lc = (const struct load_command *)p;
+                if (lc->cmd == LC_SEGMENT) {
+                    const struct segment_command *seg =
+                        (const struct segment_command *)p;
+                    uint64_t seg_base = (uint64_t)seg->vmaddr + (uint64_t)slide;
+                    uint64_t seg_end  = seg_base + (uint64_t)seg->vmsize;
+                    if (first_seg || seg_base < base) base = seg_base;
+                    if (seg_end > max_end) max_end = seg_end;
+                    first_seg = 0;
+                }
+                p += lc->cmdsize;
+            }
+        }
+#endif
+        uint64_t size = (max_end > base) ? (max_end - base) : 0;
+        callback(name ? name : "", base, size, ctx);
+    }
+}
+
+#elif defined(__linux__) || defined(__FreeBSD__)
+
+// Linux / FreeBSD: dl_iterate_phdr from <link.h>. For each shared object
+// (and the main executable, whose dlpi_name is ""), compute the loaded size
+// as max(p_vaddr + p_memsz) across PT_LOAD segments.
+typedef struct {
+    lib_callback_t callback;
+    void          *ctx;
+} dl_iter_ctx_t;
+
+static int dl_iter_cb(struct dl_phdr_info *info, size_t sz, void *data) {
+    (void)sz;
+    dl_iter_ctx_t *dc = (dl_iter_ctx_t *)data;
+    uint64_t base = (uint64_t)info->dlpi_addr;
+    uint64_t max_end = 0;
+    for (int i = 0; i < info->dlpi_phnum; ++i) {
+        if (info->dlpi_phdr[i].p_type == PT_LOAD) {
+            uint64_t end = (uint64_t)info->dlpi_phdr[i].p_vaddr
+                         + (uint64_t)info->dlpi_phdr[i].p_memsz;
+            if (end > max_end) max_end = end;
+        }
+    }
+    uint64_t size = max_end; // vaddr-relative; base is already added by the OS
+    dc->callback(info->dlpi_name ? info->dlpi_name : "", base, size, dc->ctx);
+    return 0; // non-zero stops iteration
+}
+
+static void enumerate_libraries(lib_callback_t callback, void *ctx) {
+    dl_iter_ctx_t dc;
+    dc.callback = callback;
+    dc.ctx = ctx;
+    dl_iterate_phdr(dl_iter_cb, &dc);
+}
+
+#else
+// Unsupported platform: enumerate_libraries is a no-op so the compilation
+// succeeds but no library records are written.
+static void enumerate_libraries(lib_callback_t callback, void *ctx) {
+    (void)callback; (void)ctx;
+}
+#endif
+
+static void check_jvmti_errors(jvmtiEnv *jvmti, jvmtiError errnum, const char *str) {
+   if (errnum != JVMTI_ERROR_NONE) {
+       char *errnum_str;
+        errnum_str = NULL;
+        (void) (*jvmti)->GetErrorName(jvmti, errnum, &errnum_str);
+        // Errors are gated by log_level too — at LOG_OFF the agent is fully
+        // silent so it doesn't leak diagnostic noise into the host app's
+        // stdout (e.g. a CLI tool's JSON output).
+        if (log_level >= LOG_INFO) {
+            fprintf(stderr, "[hexana-jitview] JVMTI error [%d] %s - %s\n",
+                errnum,
+                errnum_str == NULL ? "Unknown" : errnum_str,
+                str == NULL ? "" : str);
+        }
+    }
+}
+
+// Parse the agentpath options string. Format (all parts optional):
+//
+//   [<path>][,key=value][,bare-flag][,key=value]...
+//
+// The first comma-separated token is taken as the dump-file path when it
+// does NOT contain '='; otherwise everything is treated as key=value or a
+// bare flag. Known keys: `path` (dump file), `log` (off|info|debug).
+// Known bare flags: `snapshot_on_unload`, `dump_libraries`, `system_info`.
+// Unknown tokens are silently ignored so future agent versions can add
+// options without breaking older IDE plugins.
+//
+// `path_out` is filled with a pointer into a heap-allocated buffer that the
+// caller must free(). `log_out` is set when the option string mentions one.
+// `opts_out` is updated for any recognised boolean flags.
+static void parse_options(const char *options, char **path_out, int *log_out,
+                          agent_opts_t *opts_out) {
+    *path_out = NULL;
+    // `log_out` is left untouched when no `log=` is present — caller seeds
+    // it with the default (LOG_OFF) so an empty option string keeps it.
+    if (options == NULL || options[0] == '\0') {
+        return;
+    }
+    char *buf = strdup(options);
+    int first = 1;
+    for (char *tok = strtok(buf, ","); tok != NULL; tok = strtok(NULL, ",")) {
+        char *eq = strchr(tok, '=');
+        if (eq == NULL) {
+            // Bare token: treat as the dump path on the first token, or as a
+            // bare flag on subsequent tokens.
+            if (first && *path_out == NULL) {
+                *path_out = strdup(tok);
+            } else if (strcmp(tok, "snapshot_on_unload") == 0) {
+                opts_out->snapshot_on_unload = 1;
+            } else if (strcmp(tok, "dump_libraries") == 0) {
+                opts_out->dump_libraries = 1;
+            } else if (strcmp(tok, "system_info") == 0) {
+                opts_out->system_info = 1;
+            }
+            // Other bare tokens: silently ignored.
+        } else {
+            *eq = '\0';
+            const char *key = tok;
+            const char *val = eq + 1;
+            if (strcmp(key, "path") == 0) {
+                free(*path_out);
+                *path_out = strdup(val);
+            } else if (strcmp(key, "log") == 0) {
+                if (strcmp(val, "off") == 0) {
+                    *log_out = LOG_OFF;
+                } else if (strcmp(val, "info") == 0) {
+                    *log_out = LOG_INFO;
+                } else if (strcmp(val, "debug") == 0) {
+                    *log_out = LOG_DEBUG;
+                }
+                // Unknown level — leave previous (default) value.
+            }
+            // Other keys: silently ignored for forward compatibility.
+        }
+        first = 0;
+    }
+    free(buf);
+}
+
+static int find_or_create_string(char *, string_t**);
+static void JNICALL vm_init(jvmtiEnv *, JNIEnv* , jthread);
+static void JNICALL method_load(jvmtiEnv *,jmethodID,jint,const void*,jint,const jvmtiAddrLocationMap*,const void* );
+static void JNICALL method_unload(jvmtiEnv *,jmethodID ,const void*);
+static void JNICALL dynamic_code_generated(jvmtiEnv *, const char*, const void*, jint);
+static int method_string_representation(jvmtiEnv *, jmethodID, string_t**, uint8_t*, string_t**);
+
+JNIEXPORT jint JNICALL
+Agent_OnLoad(JavaVM *jvm, char *options, void *reserved) {
+
+    // Initialise the event mutex up-front so the first CompiledMethodLoad
+    // callback (which can fire while Agent_OnLoad is still returning, via
+    // GenerateEvents replay below) finds a live lock. On Win32 this is
+    // mandatory — InitializeCriticalSection has no static-init equivalent;
+    // on POSIX it's redundant with PTHREAD_MUTEX_INITIALIZER but harmless.
+    EVENT_MUTEX_INIT();
+
+    jvmtiEnv *jvmti;
+    jint result = (*jvm)->GetEnv(jvm, (void **)&jvmti, JVMTI_VERSION_1_2);
+    if (result != JNI_OK) {
+        return result;
+    }
+
+    jvmtiCapabilities capa;
+    jvmtiError error = (*jvmti)->GetPotentialCapabilities(jvmti, &capa);
+    check_jvmti_errors(jvmti, error, "Unable to get capabilities");
+    if (error == JVMTI_ERROR_NONE) {
+        capa.can_generate_compiled_method_load_events = 1;
+        // Required for GetBytecodes() in method_load — we ship the captured
+        // JVM bytecode bytes alongside the native code so the Hexana editor
+        // can render a bytecode view without re-reading .class files.
+        capa.can_get_bytecodes = 1;
+        error = (*jvmti)->AddCapabilities(jvmti, &capa);
+        check_jvmti_errors(jvmti, error, "Unable to set capapbilities");
+    }
+
+    error = (*jvmti)->SetEventNotificationMode(jvmti,
+                                               JVMTI_ENABLE,
+                                               JVMTI_EVENT_COMPILED_METHOD_LOAD,
+                                               (jthread) NULL);
+    check_jvmti_errors(jvmti, error, "Unable to set the event notification mode");
+    error = (*jvmti)->SetEventNotificationMode(jvmti,
+                                                   JVMTI_ENABLE,
+                                                   JVMTI_EVENT_COMPILED_METHOD_UNLOAD,
+                                                   (jthread) NULL);
+    check_jvmti_errors(jvmti, error, "Unable to set the event notification mode");
+    error = (*jvmti)->SetEventNotificationMode(jvmti,
+                                                   JVMTI_ENABLE,
+                                                   JVMTI_EVENT_DYNAMIC_CODE_GENERATED,
+                                                   (jthread) NULL);
+    check_jvmti_errors(jvmti, error, "Unable to set the event notification mode");
+    error = (*jvmti)->SetEventNotificationMode(jvmti,
+                                               JVMTI_ENABLE,
+                                               JVMTI_EVENT_VM_INIT,
+                                               (jthread) NULL);
+    check_jvmti_errors(jvmti, error, "Unable to set the event notification mode");
+
+    jvmtiEventCallbacks callback;
+    memset(&callback, 0, sizeof(callback));
+    callback.CompiledMethodLoad = method_load;
+    callback.CompiledMethodUnload = method_unload;
+    //callback.DynamicCodeGenerated = dynamic_code_generated;
+    callback.VMInit = vm_init;
+    error = (*jvmti)->SetEventCallbacks(jvmti, &callback, sizeof(callback));
+    check_jvmti_errors(jvmti, error, "Unable to set callbacks");
+    // -agentpath:<lib>=<dump_path>[,log=<off|info|debug>][,snapshot_on_unload][,dump_libraries][,system_info]
+    // The `options` argument is whatever follows the first `=` in the
+    // -agentpath spec. When empty / NULL we fall back to the historical
+    // filename so existing scripts keep working.
+    char *parsed_path = NULL;
+    int parsed_log = LOG_OFF;
+    memset(&opts, 0, sizeof(opts));
+    parse_options(options, &parsed_path, &parsed_log, &opts);
+    log_level = parsed_log;
+    const char *dump_path = parsed_path != NULL ? parsed_path : "default.jit";
+    dump_fd = open(dump_path, O_CREAT|O_RDWR|O_TRUNC|DUMP_BINARY_FLAG, DUMP_FILE_MODE);
+    if (dump_fd == -1) {
+        free(parsed_path);
+        return JNI_ERR;
+    }
+    if (log_level >= LOG_INFO) {
+        fprintf(stderr, "[hexana-jitview] loaded; dump=%s, log=%s\n",
+            dump_path,
+            log_level == LOG_DEBUG ? "debug" : "info");
+    }
+    free(parsed_path);
+    LIST_INIT(&head_syms);
+    LIST_INIT(&head_strings);
+    //header = (header_t *)memory;
+    header.magic[0] = 'M';
+    header.magic[1] = 'I';
+    header.magic[2] = 'N';
+    // Format version 5: header_t additionally carries system_info_table_offset
+    // and system_info_count pointing at a table of JVM system properties
+    // captured once at Agent_OnUnload (when system_info is active). Both
+    // fields are zero when the flag is off. Supersedes v4 which added
+    // library_table_offset / library_count.
+    header.version = 5;
+    header.offset = sizeof(header_t);
+    offset = write(dump_fd, &header, sizeof(header));
+    return JNI_OK;
+}
+
+// Context passed to enumerate_libraries when dump_libraries is active.
+// Accumulates per-library info so it can be written to the dump after the
+// string table is finalised (lib_entry_t.path_string_id requires resolved
+// string-table offsets, which are only available after the string-table write
+// loop runs).
+typedef struct lib_record {
+    string_t *path_string;  // pointer into head_strings; offset filled later
+    uint64_t  base_addr;
+    uint64_t  size;
+} lib_record_t;
+
+static void lib_enum_callback(const char *path, uint64_t base_addr,
+                              uint64_t size, void *ctx) {
+    // `ctx` is a pointer to a { lib_record_t*, uint32_t*, uint32_t* } bundle.
+    void **bundle = (void **)ctx;
+    lib_record_t **records_ptr = (lib_record_t **)bundle[0];
+    uint32_t *count_ptr  = (uint32_t *)bundle[1];
+    uint32_t *cap_ptr    = (uint32_t *)bundle[2];
+
+    if (*count_ptr >= *cap_ptr) {
+        uint32_t new_cap = (*cap_ptr == 0) ? 64 : (*cap_ptr * 2);
+        *records_ptr = realloc(*records_ptr, new_cap * sizeof(lib_record_t));
+        *cap_ptr = new_cap;
+    }
+    lib_record_t *rec = &(*records_ptr)[*count_ptr];
+    // Register the path in the string table — find_or_create_string requires
+    // a mutable buffer; path is const so copy via strdup.
+    char *path_copy = strdup(path ? path : "");
+    find_or_create_string(path_copy, &rec->path_string);
+    free(path_copy);
+    rec->base_addr = base_addr;
+    rec->size = size;
+    (*count_ptr)++;
+}
+
+JNIEXPORT void JNICALL
+Agent_OnUnload(JavaVM *vm) {
+    // Obtain a jvmtiEnv* for GetSystemProperty calls (system_info path).
+    // This must be done before EVENT_MUTEX_LOCK so that any JVMTI error here
+    // doesn't leave the mutex permanently locked. A NULL env means system-info
+    // capture will be skipped even if the flag was set.
+    jvmtiEnv *vm_jvmti = NULL;
+    if (opts.system_info) {
+        (*vm)->GetEnv(vm, (void **)&vm_jvmti, JVMTI_VERSION_1_2);
+        // vm_jvmti may be NULL if the JVMTI version is unavailable; the
+        // collection loop below gates on vm_jvmti != NULL.
+    }
+
+    // Take the same event lock that method_load uses: a callback can still
+    // be in flight on a JIT thread when the VM begins shutdown, and reading
+    // the lists here while another thread mutates them is undefined.
+    EVENT_MUTEX_LOCK();
+
+    // --- Library enumeration (phase 1: collect, pre-string-table write) ---
+    // Enumerate native libraries first so their paths are registered in the
+    // string interner before the string-table write loop runs. The actual
+    // lib_entry_t records are written after the string table, once all
+    // string offsets are resolved.
+    lib_record_t *lib_records = NULL;
+    uint32_t lib_count = 0;
+    uint32_t lib_cap = 0;
+    if (opts.dump_libraries) {
+        void *bundle[3] = { &lib_records, &lib_count, &lib_cap };
+        enumerate_libraries(lib_enum_callback, bundle);
+    }
+
+    // --- System-info collection (phase 1b: collect, pre-string-table write) ---
+    // The fixed list of JVMTI system-property keys to capture. Any key that
+    // returns an error (e.g. JVMTI_ERROR_NOT_AVAILABLE on stripped runtimes)
+    // is silently skipped — its string_t* entry stays NULL and is omitted from
+    // the written table. Keys are interned into the string table here so their
+    // offsets are resolved by the time we write info_entry_t records.
+    static const char * const SYS_PROP_KEYS[] = {
+        "java.version",
+        "java.vm.name",
+        "java.vm.vendor",
+        "java.vm.version",
+        "java.runtime.version",
+        "java.home",
+        "java.class.version",
+        "os.name",
+        "os.arch",
+        "os.version",
+        "sun.arch.data.model",
+    };
+    static const int SYS_PROP_COUNT = (int)(sizeof(SYS_PROP_KEYS) / sizeof(SYS_PROP_KEYS[0]));
+
+    // Parallel arrays: key_strings[i] / value_strings[i] are interned
+    // string_t* pointers. value_strings[i] is NULL when the property was
+    // unavailable (GetSystemProperty returned a non-NONE error) — those
+    // entries are excluded from the final written count.
+    string_t *sys_key_strings[11];
+    string_t *sys_value_strings[11];
+    uint32_t sys_written_count = 0;
+    if (opts.system_info && vm_jvmti != NULL) {
+        for (int i = 0; i < SYS_PROP_COUNT; ++i) {
+            sys_key_strings[i] = NULL;
+            sys_value_strings[i] = NULL;
+            char *value = NULL;
+            jvmtiError si_err = (*vm_jvmti)->GetSystemProperty(
+                vm_jvmti, SYS_PROP_KEYS[i], &value);
+            if (si_err != JVMTI_ERROR_NONE || value == NULL) {
+                // Property not available on this runtime — skip silently.
+                if (value) (*vm_jvmti)->Deallocate(vm_jvmti, (unsigned char *)value);
+                continue;
+            }
+            // Intern both the key (a compile-time constant) and the value
+            // (allocated by JVMTI) into the shared string table.
+            char *key_copy = strdup(SYS_PROP_KEYS[i]);
+            find_or_create_string(key_copy, &sys_key_strings[i]);
+            free(key_copy);
+            char *value_copy = strdup(value);
+            (*vm_jvmti)->Deallocate(vm_jvmti, (unsigned char *)value);
+            find_or_create_string(value_copy, &sys_value_strings[i]);
+            free(value_copy);
+            sys_written_count++;
+        }
+    }
+
+    header_t header;
+    lseek(dump_fd, 0, SEEK_SET);
+    read(dump_fd, &header, sizeof(header_t));
+    lseek(dump_fd, offset, SEEK_SET);
+    header.string_offset = offset;
+    {
+        char null_string = '\0';
+        offset += write(dump_fd, &null_string, sizeof(char));
+        string_t *s;
+        uint32_t string_offset = sizeof(char);
+        LIST_FOREACH(s, &head_strings, strings) {
+            s->offset = offset - header.string_offset;
+            offset += write(dump_fd, s->name, s->length);
+            offset += write(dump_fd, &null_string, sizeof(char));
+        }
+    }
+
+    // --- Library table (phase 2: write, post-string-table) ---
+    // String offsets are now resolved; emit lib_entry_t records. The table
+    // lives between the string section and the sym chain so that a reader can
+    // seek directly to header.library_table_offset without parsing syms.
+    header.library_table_offset = 0;
+    header.library_count = 0;
+    if (opts.dump_libraries && lib_count > 0) {
+        header.library_table_offset = offset;
+        header.library_count = lib_count;
+        for (uint32_t i = 0; i < lib_count; ++i) {
+            lib_entry_t entry;
+            entry.path_string_id = lib_records[i].path_string->offset;
+            entry.base_addr      = lib_records[i].base_addr;
+            entry.size           = lib_records[i].size;
+            offset += write(dump_fd, &entry, sizeof(lib_entry_t));
+        }
+        if (log_level >= LOG_INFO) {
+            fprintf(stderr, "[hexana-jitview] wrote %u library records\n",
+                lib_count);
+        }
+    }
+    if (lib_records) {
+        free(lib_records);
+        lib_records = NULL;
+    }
+
+    // --- System-info table (phase 2b: write, post-string-table) ---
+    // String offsets are now resolved; emit info_entry_t records for every
+    // key/value pair that was successfully retrieved. Entries where
+    // sys_value_strings[i] is NULL (property unavailable) are skipped.
+    header.system_info_table_offset = 0;
+    header.system_info_count = 0;
+    if (opts.system_info && sys_written_count > 0) {
+        header.system_info_table_offset = offset;
+        for (int i = 0; i < SYS_PROP_COUNT; ++i) {
+            if (sys_key_strings[i] == NULL || sys_value_strings[i] == NULL) {
+                continue;
+            }
+            info_entry_t entry;
+            entry.key_string_id   = sys_key_strings[i]->offset;
+            entry.value_string_id = sys_value_strings[i]->offset;
+            offset += write(dump_fd, &entry, sizeof(info_entry_t));
+            header.system_info_count++;
+        }
+        if (log_level >= LOG_INFO) {
+            fprintf(stderr, "[hexana-jitview] wrote %u system-info records\n",
+                header.system_info_count);
+        }
+    }
+
+    header.syms_offset = offset;
+    uint32_t sym_count = 0;
+    {
+        syms_t *s;
+        LIST_FOREACH(s, &head_syms, syms) {
+            sym_count++;
+            s->entry.string_offset = s->string->offset;
+            s->entry.file_name_offset = s->file_name_string->offset;
+            uint64_t sym_offset = offset;
+            offset += write(dump_fd, &s->entry, sizeof(sym_entry_t));
+            uint64_t table_offset = offset;
+            for(jint i = 0; i < s->entry.line_number_entry_count; ++i) {
+                offset += write(dump_fd, &s->line_number_entry_table[i], sizeof(jvmtiLineNumberEntry));
+            }
+            s->entry.line_number_table_offset = (uint32_t)(table_offset - sym_offset);
+            uint64_t map_offset = offset;
+            for(jint i = 0; i < s->entry.map_length; ++i) {
+                offset += write(dump_fd, &s->address_location_map[i], sizeof(jvmtiAddrLocationMap));
+            }
+            uint64_t inline_record_offset = offset;
+            if (s->inline_records) {
+                for (int i = 0; i < s->entry.inline_count; ++i) {
+                    inline_record_t *record = &s->inline_records[i];
+                    offset += write(dump_fd, &record->entries_count, sizeof(uint32_t));
+                    for (int j = 0; j < record->entries_count; ++j) {
+                        stack_info_t *info = &record->info[j];
+                        offset += write(dump_fd, &info->info, sizeof(address_info_t));
+                        for (int k = 0; k < info->info.frame_count; ++k) {
+                            frame_t *frame = &info->frames[k];
+                            // method_name / source_path may be NULL when
+                            // resolution failed at method_load time —
+                            // emit offset 0 (the empty-string sentinel).
+                            uint32_t zero = 0;
+                            uint32_t mn_off = frame->method_name ? frame->method_name->offset : zero;
+                            uint32_t sp_off = frame->source_path ? frame->source_path->offset : zero;
+                            offset += write(dump_fd, &mn_off, sizeof(uint32_t));
+                            offset += write(dump_fd, &sp_off, sizeof(uint32_t));
+                            offset += write(dump_fd, &frame->bci, sizeof(uint32_t));
+                        }
+                    }
+                }
+            }
+            s->entry.inline_offset = (uint32_t)(inline_record_offset - sym_offset);
+            s->entry.address_location_map_offset = (uint32_t)(map_offset - sym_offset);
+            // v2: bytecode bytes captured at method_load() get appended here,
+            // after the inline records and before `next` is finalised so the
+            // record-walker accounts for them.
+            uint64_t bytecode_offset_in_file = offset;
+            if (s->bytecode_size > 0 && s->bytecode_bytes != NULL) {
+                offset += write(dump_fd, s->bytecode_bytes, s->bytecode_size);
+            }
+            s->entry.bytecode_offset = (uint32_t)(bytecode_offset_in_file - sym_offset);
+            s->entry.bytecode_length = (uint32_t)s->bytecode_size;
+            s->entry.next = offset - sym_offset;
+            lseek(dump_fd, sym_offset, SEEK_SET);
+            write(dump_fd, &s->entry, sizeof(sym_entry_t));
+            lseek(dump_fd, offset, SEEK_SET);
+        }
+        s = LIST_FIRST(&head_syms);
+        while(s !=NULL ) {
+            syms_t *sn = LIST_NEXT(s, syms);
+            if (s->inline_records) {
+               for (int i = 0; i < s->entry.inline_count; ++i) {
+                   inline_record_t *record = &s->inline_records[i];
+                   for (int j = 0; j < record->entries_count; ++j) {
+                       stack_info_t *info = &record->info[j];
+                       free(info->frames);
+                   }
+                   free(record->info);
+               }
+               free(s->inline_records);
+            }
+            if (s->bytecode_bytes) {
+                free(s->bytecode_bytes);
+            }
+            free(s);
+            s = sn;
+        }
+    }
+    {
+        string_t *s = LIST_FIRST(&head_strings);
+        while(s !=NULL ) {
+            string_t *sn = LIST_NEXT(s, strings);
+            free(s->name);
+            free(s);
+            s = sn;
+        }
+    }
+    if (addr_map_table != NULL) {
+        free(addr_map_table);
+        addr_map_table = NULL;
+    }
+    lseek(dump_fd, 0, SEEK_SET);
+    write(dump_fd, &header, sizeof(header_t));
+    close(dump_fd);
+    if (log_level >= LOG_INFO) {
+        fprintf(stderr, "[hexana-jitview] wrote %u compiled-method records (%llu bytes)\n",
+            sym_count,
+            (unsigned long long)offset);
+    }
+    EVENT_MUTEX_UNLOCK();
+}
+
+static void JNICALL
+method_load(jvmtiEnv *jvmti_env,
+            jmethodID method,
+            jint code_size,
+            const void* code_addr,
+            jint map_length,
+            const jvmtiAddrLocationMap* map,
+            const void* compile_info) {
+    string_t* needle = NULL;
+    string_t* path_string = NULL;
+    uint8_t version = 0;
+
+    EVENT_MUTEX_LOCK();
+
+    // Late events that land outside the LIVE phase (rare; observed at VM
+    // shutdown) make JVMTI calls return WRONG_PHASE — skip them rather
+    // than serialise a half-populated symbol.
+    if (method_string_representation(jvmti_env, method, &needle, &version, &path_string) != 0) {
+        EVENT_MUTEX_UNLOCK();
+        return;
+    }
+
+    uint64_t old_offset = offset;
+    offset += write(dump_fd, code_addr, code_size);
+    syms_t *s = malloc(sizeof(syms_t));
+    memset(s, 0, sizeof(syms_t));
+    s->entry.magic = SYMS_MAGIC0;
+    s->entry.magic0 = SYMS_MAGIC1;
+    s->entry.offset = (uint64_t)code_addr;
+    s->entry.size = code_size;
+    s->entry.fd_offset = old_offset;
+    s->entry.version = version;
+
+    s->string = needle;
+    s->file_name_string = path_string;
+
+    LIST_INSERT_HEAD(&head_syms, s, syms);
+    // Register in the address map so method_unload can find this sym in O(1).
+    if (opts.snapshot_on_unload) {
+        addr_map_put((uintptr_t)code_addr, s);
+    }
+    uint32_t inline_count = 0;
+    jvmtiCompiledMethodLoadRecordHeader* pcs = (jvmtiCompiledMethodLoadRecordHeader *)compile_info;
+    while(pcs != NULL) {
+        switch(pcs->kind) {
+            case JVMTI_CMLR_INLINE_INFO:
+                inline_count++;
+            break;
+            case JVMTI_CMLR_DUMMY:
+            default:
+            break;
+        }
+        pcs = pcs->next;
+    }
+    inline_record_t *records = malloc(inline_count * sizeof(inline_record_t));
+    pcs = (jvmtiCompiledMethodLoadRecordHeader *)compile_info;
+    inline_count = 0;
+    while(pcs != NULL) {
+        switch(pcs->kind) {
+            case JVMTI_CMLR_INLINE_INFO: {
+                jvmtiCompiledMethodLoadInlineRecord *rc = (jvmtiCompiledMethodLoadInlineRecord*)pcs;
+                if (rc != NULL && rc->pcinfo != NULL) {
+
+                    inline_record_t *record = &records[inline_count];
+                    record->entries_count = rc->numpcs;
+
+                    record->info = malloc(sizeof(stack_info_t) * rc->numpcs);
+
+                    for (int i = 0; i < rc->numpcs; ++i) {
+                        PCStackInfo stack_info  = rc->pcinfo[i];
+                        stack_info_t *info = &record->info[i];
+                        info->info.address = (uint64_t)stack_info.pc;
+                        info->info.frame_count = stack_info.numstackframes;
+                        frame_t *frames = malloc(stack_info.numstackframes * sizeof(frame_t));
+                        for (int j = 0; j < stack_info.numstackframes; ++j) {
+                            frames[j].method_name = NULL;
+                            frames[j].source_path = NULL;
+                            // If resolution fails (rare; late-phase events)
+                            // method_name / source_path stay NULL. The
+                            // Agent_OnUnload writer treats NULL as
+                            // "anonymous" so it doesn't deref a bad pointer.
+                            method_string_representation(jvmti_env,
+                                                         stack_info.methods[j],
+                                                         &frames[j].method_name,
+                                                         NULL,
+                                                         &frames[j].source_path);
+                            frames[j].bci = stack_info.bcis[j];
+                        }
+                        info->frames = frames;
+                    }
+                    inline_count++;
+                }
+            }
+            break;
+            case JVMTI_CMLR_DUMMY:
+            default:
+            break;
+        }
+        pcs = pcs->next;
+    }
+    s->entry.inline_count = inline_count;
+    s->inline_records = records;
+
+    jvmtiError error;
+    if (map) {
+        jvmtiAddrLocationMap *map_copy = malloc(map_length * sizeof(jvmtiAddrLocationMap));
+        memcpy(map_copy, map, map_length * sizeof(jvmtiAddrLocationMap));
+        s->address_location_map = map_copy;
+        s->entry.map_length = map_length;
+
+        // JVMTI leaves entry_number_count / table UNDEFINED on error
+        // (spec is explicit). Native/synthetic/MethodHandle/intrinsic
+        // methods routinely return JVMTI_ERROR_ABSENT_INFORMATION here,
+        // so we must initialize and gate the memcpy or we read stack
+        // garbage and SEGV inside _platform_memmove.
+        jint entry_number_count = 0;
+        jvmtiLineNumberEntry *table = NULL;
+        error = (*jvmti_env)->GetLineNumberTable(jvmti_env, method, &entry_number_count, &table);
+        if (error == JVMTI_ERROR_NONE && table != NULL && entry_number_count > 0) {
+            jvmtiLineNumberEntry *table_copy = malloc(entry_number_count * sizeof(jvmtiLineNumberEntry));
+            memcpy(table_copy, table, entry_number_count * sizeof(jvmtiLineNumberEntry));
+            s->line_number_entry_table = table_copy;
+            s->entry.line_number_entry_count = entry_number_count;
+        } else {
+            s->line_number_entry_table = NULL;
+            s->entry.line_number_entry_count = 0;
+        }
+        if (table)
+            (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)table);
+
+    }
+
+    // Capture the method's JVM bytecode bytes — written to the dump later
+    // in Agent_OnUnload. Native methods have no bytecode; GetBytecodes
+    // returns JVMTI_ERROR_NATIVE_METHOD and we record a zero-length blob.
+    s->bytecode_bytes = NULL;
+    s->bytecode_size = 0;
+    {
+        jint bc_count = 0;
+        unsigned char *bc_bytes = NULL;
+        jvmtiError bc_err = (*jvmti_env)->GetBytecodes(jvmti_env, method, &bc_count, &bc_bytes);
+        if (bc_err == JVMTI_ERROR_NONE && bc_bytes != NULL && bc_count > 0) {
+            s->bytecode_bytes = malloc((size_t)bc_count);
+            memcpy(s->bytecode_bytes, bc_bytes, (size_t)bc_count);
+            s->bytecode_size = bc_count;
+        }
+        if (bc_bytes) {
+            (*jvmti_env)->Deallocate(jvmti_env, bc_bytes);
+        }
+    }
+    if (log_level >= LOG_DEBUG) {
+        fprintf(stderr, "[hexana-jitview] %p:%d @%llx %s:%d\n",
+            code_addr,
+            code_size,
+            old_offset,
+            needle->name,
+            version);
+    }
+    EVENT_MUTEX_UNLOCK();
+}
+
+static void JNICALL
+dynamic_code_generated(jvmtiEnv *jvmti_env,
+            const char* name,
+            const void* address,
+            jint length) {
+}
+
+
+static void JNICALL
+method_unload(jvmtiEnv *jvmti_env,
+            jmethodID method,
+            const void* code_addr) {
+    // Guard: feature is off by default; bail immediately when the flag was
+    // not set so this callback is free for unmeasured runs.
+    if (!opts.snapshot_on_unload) return;
+
+    // Look up the sym whose load-time address matches this unload event.
+    // The map is only populated when snapshot_on_unload is active, so the
+    // lookup is O(1) for that case.
+    EVENT_MUTEX_LOCK();
+    syms_t *s = addr_map_get((uintptr_t)code_addr);
+    if (s == NULL || s->entry.size == 0) {
+        EVENT_MUTEX_UNLOCK();
+        return;
+    }
+    // HotSpot guarantees the memory at code_addr is still readable inside
+    // the CompiledMethodUnload callback — "the event will be sent before the
+    // memory is reused by a newly generated compiled method" (JVMTI spec,
+    // §EventCompiledMethodUnload). We write synchronously here; the bytes
+    // land in the kernel buffer before write() returns, well within the
+    // spec's "before reuse" window.
+    //
+    // We seek to `offset` (not SEEK_END) so the write lands contiguously
+    // after any previously written code bytes, and then advance `offset` by
+    // the number of bytes written. This is the same pattern method_load uses
+    // for its code-byte write. Not using SEEK_END avoids a race if a
+    // concurrent method_load is happening (both paths are under the mutex, so
+    // in practice there is no race, but the seek-to-offset pattern keeps the
+    // dump layout deterministic and doesn't depend on the kernel's idea of the
+    // file end).
+    lseek(dump_fd, (off_t)offset, SEEK_SET);
+    uint64_t snap_off = offset;
+    uint64_t expected = s->entry.size;
+    uint64_t written = (uint64_t)write(dump_fd, code_addr, (size_t)expected);
+    offset += written;
+    if (written == expected) {
+        s->entry.unload_snapshot_fd_offset = snap_off;
+        s->entry.unload_snapshot_size      = (uint32_t)expected;
+        if (log_level >= LOG_DEBUG) {
+            fprintf(stderr, "[hexana-jitview] unload snapshot %p:%llu @%llu\n",
+                code_addr,
+                (unsigned long long)s->entry.size,
+                (unsigned long long)snap_off);
+        }
+    }
+    EVENT_MUTEX_UNLOCK();
+}
+
+static void JNICALL
+vm_init(jvmtiEnv *jvmti_env,
+            JNIEnv* jni_env,
+            jthread thread) {
+    (*jvmti_env)->GenerateEvents(jvmti_env, JVMTI_EVENT_COMPILED_METHOD_LOAD);
+    (*jvmti_env)->GenerateEvents(jvmti_env, JVMTI_EVENT_DYNAMIC_CODE_GENERATED);
+}
+
+static int find_or_create_string(char *buffer, string_t** needle) {
+    string_t *iterator;
+    LIST_FOREACH(iterator, &head_strings, strings) {
+        if (strcmp(iterator->name, buffer) == 0) {
+            *needle = iterator;
+            return 0;
+        }
+    }
+
+    string_t *s = malloc(sizeof(string_t));
+    s->name = strdup(buffer);
+    s->length = strlen(buffer);
+    LIST_INSERT_HEAD(&head_strings, s, strings);
+    *needle = s;
+    return 1;
+}
+
+static int method_string_representation(jvmtiEnv *jvmti_env,
+                                        jmethodID method,
+                                        string_t** ptr_representation,
+                                        uint8_t* ptr_version,
+                                        string_t **ptr_path) {
+    // JVMTI leaves out-pointers UNDEFINED on error (spec is explicit about
+    // this). We initialize to NULL and treat any non-success error as a
+    // bail-out so a late event that lands in a non-LIVE phase doesn't
+    // crash the agent by reading garbage stack memory through `name` etc.
+    char *name = NULL, *signature = NULL, *generic = NULL;
+    jvmtiError error = (*jvmti_env)->GetMethodName(jvmti_env, method, &name, &signature, &generic);
+    check_jvmti_errors(jvmti_env, error, "Unable to get method");
+    if (error != JVMTI_ERROR_NONE) {
+        return -1;
+    }
+
+    jclass clazz = NULL;
+    error = (*jvmti_env)->GetMethodDeclaringClass(jvmti_env, method, &clazz);
+    check_jvmti_errors(jvmti_env, error, "Unable to get class");
+    if (error != JVMTI_ERROR_NONE || clazz == NULL) {
+        if (name) (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)name);
+        if (signature) (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)signature);
+        if (generic) (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)generic);
+        return -1;
+    }
+
+    char *class_signature = NULL, *class_generic = NULL;
+    error = (*jvmti_env)->GetClassSignature(jvmti_env, clazz, &class_signature, &class_generic);
+    check_jvmti_errors(jvmti_env, error, "Unable to get class signature");
+    if (error != JVMTI_ERROR_NONE) {
+        if (name) (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)name);
+        if (signature) (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)signature);
+        if (generic) (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)generic);
+        return -1;
+    }
+
+    size_t buffer_length = class_signature ? strlen(class_signature) : 0;
+    buffer_length += class_generic ? strlen(class_generic) : 0;
+    buffer_length += signature ? strlen(signature) : 0;
+    buffer_length += generic ? strlen(generic) : 0;
+    buffer_length += name ? strlen(name) : 0;
+    buffer_length += 10;
+    char *buffer = malloc(buffer_length * sizeof(char));
+    memset(buffer, 0, buffer_length);
+    int length = sprintf(buffer, "[%s:%s::%s:%s:%s]",
+        class_signature ? class_signature : "_",
+        class_generic ? class_generic : "_",
+        name ? name : "_",
+        signature ? signature : "_",
+        generic ? generic : "_");
+
+    if (find_or_create_string(buffer, ptr_representation) == 0) {
+        if (ptr_version)
+            *ptr_version = 1;
+    }
+    free(buffer);
+    char *path = NULL;
+    error = (*jvmti_env)->GetSourceFileName(jvmti_env, clazz, &path);
+    check_jvmti_errors(jvmti_env, error, "Unable to get class source path");
+    // Some classes (e.g. anonymous lambdas, JDK internals) genuinely have
+    // no SourceFile attribute; treat that the same as an empty path so
+    // downstream callers can rely on `*ptr_path` being a valid string.
+    find_or_create_string(error == JVMTI_ERROR_NONE && path ? path : "", ptr_path);
+    if (path)
+        (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)path);
+
+    if (ptr_version) {
+        // Find the highest existing version for this signature and emit
+        // version+1. The list is LIFO so a `break` on first hit would have
+        // worked too, but taking the explicit max is robust to future
+        // changes in insertion order.
+        syms_t *iterator;
+        uint8_t latest_version = 0;
+        LIST_FOREACH(iterator, &head_syms, syms) {
+            if (iterator->string == *ptr_representation &&
+                iterator->entry.version > latest_version) {
+                latest_version = iterator->entry.version;
+            }
+        }
+        *ptr_version = latest_version + 1;
+    }
+    if (name)
+        (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)name);
+    if (signature)
+        (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)signature);
+    if (generic)
+        (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)generic);
+    if (class_signature)
+        (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)class_signature);
+    if (class_generic)
+        (*jvmti_env)->Deallocate(jvmti_env, (unsigned char *)class_generic);
+    return 0;
+}

@@ -1,0 +1,11 @@
+{
+  "sample": "hello_world-mps2_an521_cpu0",
+  "board": "mps2/an521/cpu0",
+  "expectedBackend": "Qemu",
+  "machineOrPlatform": "mps2-an521",
+  "qemuArgs": ["-machine", "mps2-an521", "-cpu", "cortex-m33", "-nographic"],
+  "bootBannerRegex": "\\*\\*\\* Booting Zephyr OS build [^*]*\\*\\*\\*",
+  "helloRegex": "Hello World! mps2/an521/cpu0",
+  "bannerValidated": true,
+  "negativeKind": null
+}

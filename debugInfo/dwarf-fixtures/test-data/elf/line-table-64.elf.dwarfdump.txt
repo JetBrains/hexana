@@ -1,0 +1,83 @@
+/out/elf/line-table-64.elf:	file format elf64-x86-64
+
+.debug_line contents:
+debug_line[0x00000000]
+Line table prologue:
+    total_length: 0x0000007a
+          format: DWARF32
+         version: 5
+    address_size: 8
+ seg_select_size: 0
+ prologue_length: 0x00000037
+ min_inst_length: 1
+max_ops_per_inst: 1
+ default_is_stmt: 1
+       line_base: -5
+      line_range: 14
+     opcode_base: 13
+standard_opcode_lengths[DW_LNS_copy] = 0
+standard_opcode_lengths[DW_LNS_advance_pc] = 1
+standard_opcode_lengths[DW_LNS_advance_line] = 1
+standard_opcode_lengths[DW_LNS_set_file] = 1
+standard_opcode_lengths[DW_LNS_set_column] = 1
+standard_opcode_lengths[DW_LNS_negate_stmt] = 0
+standard_opcode_lengths[DW_LNS_set_basic_block] = 0
+standard_opcode_lengths[DW_LNS_const_add_pc] = 0
+standard_opcode_lengths[DW_LNS_fixed_advance_pc] = 1
+standard_opcode_lengths[DW_LNS_set_prologue_end] = 0
+standard_opcode_lengths[DW_LNS_set_epilogue_begin] = 0
+standard_opcode_lengths[DW_LNS_set_isa] = 1
+include_directories[  0] =  .debug_line_str[0x00000000] = "/work"
+file_names[  0]:
+           name:  .debug_line_str[0x00000006] = "/src/src/line_table_64.c"
+      dir_index: 0
+   md5_checksum: 9176e72b058dafb5aafc2f7d53723f48
+
+            Address            Line   Column File   ISA Discriminator Flags
+            ------------------ ------ ------ ------ --- ------------- -------------
+0x00000043: 04 DW_LNS_set_file (0)
+0x00000045: 00 DW_LNE_set_address (0x0000000000201280)
+0x00000050: 16 address += 0,  line += 4
+            0x0000000000201280      5      0      0   0             0  is_stmt
+0x00000051: 05 DW_LNS_set_column (26)
+0x00000053: 0a DW_LNS_set_prologue_end
+0x00000054: e5 address += 15,  line += 1
+            0x000000000020128f      6     26      0   0             0  is_stmt prologue_end
+0x00000055: 05 DW_LNS_set_column (18)
+0x00000057: 06 DW_LNS_negate_stmt
+0x00000058: 9e address += 10,  line += 0
+            0x0000000000201299      6     18      0   0             0
+0x00000059: 05 DW_LNS_set_column (12)
+0x0000005b: 06 DW_LNS_negate_stmt
+0x0000005c: 3d address += 3,  line += 1
+            0x000000000020129c      7     12      0   0             0  is_stmt
+0x0000005d: 05 DW_LNS_set_column (18)
+0x0000005f: 06 DW_LNS_negate_stmt
+0x00000060: 9e address += 10,  line += 0
+            0x00000000002012a6      7     18      0   0             0
+0x00000061: 05 DW_LNS_set_column (12)
+0x00000063: 3c address += 3,  line += 0
+            0x00000000002012a9      7     12      0   0             0
+0x00000064: 05 DW_LNS_set_column (5)
+0x00000066: 3c address += 3,  line += 0
+            0x00000000002012ac      7      5      0   0             0
+0x00000067: 05 DW_LNS_set_column (0)
+0x00000069: 06 DW_LNS_negate_stmt
+0x0000006a: 03 DW_LNS_advance_line (1)
+0x0000006c: 08 DW_LNS_const_add_pc (0x0000000000000011)
+0x0000006d: 3c address += 3,  line += 0
+            0x00000000002012c0      1      0      0   0             0  is_stmt
+0x0000006e: 05 DW_LNS_set_column (12)
+0x00000070: 0a DW_LNS_set_prologue_end
+0x00000071: 75 address += 7,  line += 1
+            0x00000000002012c7      2     12      0   0             0  is_stmt prologue_end
+0x00000072: 05 DW_LNS_set_column (18)
+0x00000074: 06 DW_LNS_negate_stmt
+0x00000075: 3c address += 3,  line += 0
+            0x00000000002012ca      2     18      0   0             0
+0x00000076: 05 DW_LNS_set_column (5)
+0x00000078: 3c address += 3,  line += 0
+            0x00000000002012cd      2      5      0   0             0
+0x00000079: 02 DW_LNS_advance_pc (2)
+0x0000007b: 00 DW_LNE_end_sequence
+            0x00000000002012cf      2      5      0   0             0  end_sequence

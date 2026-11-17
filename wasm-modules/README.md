@@ -1,0 +1,33 @@
+# wasm-modules
+
+Rust modules compiled into `.wasm` binaries.
+
+## Teamcity
+
+You can launch the wasm builder build configuration from your CI (TeamCity)
+to get fresh `.wasm` binaries.
+
+## Docker Build (All Modules)
+
+ATTENTION: SHOULD BE RUNNED FROM REPOSITORY ROOT!
+**From repository root:**
+
+```bash
+docker build -t hexana-wasm-modules:build wasm-modules
+mkdir -p wasm-modules/out
+docker run --rm \
+  -v "$PWD/wasm-modules":/src:ro \
+  -v "$PWD/wasm-modules/out":/out \
+  hexana-wasm-modules:build
+```
+
+Docker output:
+
+- `wasm-modules/out/wasmprinter_wrapper.wasm`
+- `wasm-modules/out/wat2wasm_full.wasm`
+
+## Dependency locking
+
+`Cargo.lock` is committed for every crate and must be updated together with `Cargo.toml`.
+The wasm-tools git dependencies of `wat2wasm` are pinned to an exact revision, and the Docker build
+(`build-wasm.sh`) runs `cargo build --locked`, so it fails if a lock file is out of date.

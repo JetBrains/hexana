@@ -1,0 +1,75 @@
+{
+  "clusters": [
+    {
+      "asset": "screenshots/zephyr-cortex-m-firmware.png",
+      "entries": [
+        {
+          "section": "Fixed",
+          "text": "Cortex-M firmware ELFs (Zephyr, ZMK and similar) now disassemble as Thumb-2. The M profile recorded in `.ARM.attributes` selects the Thumb decoder for the whole file, and bit 0 of Thumb function symbol addresses (the interworking marker, not part of the real address) is stripped, so functions start at their even addresses and 32-bit wide encodings (`bl.w`, `mul.w`) decode exactly as objdump shows. Previously these files decoded as A32 from odd start addresses, producing garbage for every function. A-profile ELFs keep per-symbol mode selection: A32 by default, Thumb for symbols carrying the marker bit."
+        },
+        {
+          "section": "Fixed",
+          "text": "The **Debug Info** tab reported \"Debug info present, but Hexana did not resolve any source line rows\" for GCC-built ELFs even though `.debug_info` and `.debug_line` were present (every Zephyr/ZMK Cortex-M firmware, DWARF4 and DWARF5 alike). GCC emits DWARF version 2/3 line-program headers even in `-gdwarf-4/5` builds, and the line parser misread them with the version 4 layout, failing on the first such unit and discarding the whole section (clang and rustc emit v4/v5 headers, which always worked). Version 2/3 headers now parse, an unparseable line-table unit is skipped instead of taking the rest of the section down with it, and address-to-line resolution matches addr2line."
+        }
+      ],
+      "eyebrow": "Zephyr & Cortex-M",
+      "id": "zephyr-cortex-m-firmware",
+      "recipe": "zephyr-cortex-m-thumb-disassembly",
+      "summary": "Hexana now reads Zephyr, ZMK, and similar Cortex-M ELF firmware as Thumb-2, with correct function addresses and GCC source locations.",
+      "title": "Inspect Zephyr firmware with confidence"
+    },
+    {
+      "asset": "screenshots/component-model-debugger.gif",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "The **Wasm** debugger tab now works for component-model binaries: every embedded core module is indexed on its own, so the current-instruction highlight, per-instruction stepping and operand stack follow the module the runtime reports the stop in instead of assuming a single core module."
+        }
+      ],
+      "eyebrow": "Component Model debugging",
+      "id": "component-model-debugger",
+      "recipe": "component-model-wasm-debugger",
+      "summary": "The Wasm debugger now follows the embedded core module that stopped, keeping the instruction highlight, per-instruction stepping, and operand stack in sync.",
+      "title": "Follow Component Model modules in the debugger"
+    },
+    {
+      "asset": null,
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**Run and Debug for firmware ELFs** under QEMU and Renode. Opening a Zephyr-class ELF offers Run/Debug buttons in the editor header when a target profile resolves from the ELF header plus the `zephyr.dts` and `.config` found next to it (the same build-tree discovery the Memory tab uses). QEMU boards (`qemu_cortex_m3`, `mps2/an521`, `qemu_riscv32`, `qemu_cortex_a53`, ...) launch with the exact machine flags from a curated table; MCU-class boards run under Renode, on a built-in platform where Renode ships one (nRF52840 DK, STM32F4 Discovery) or on a platform generated from the devicetree by dts2repl. The emulator choice is annotated with a recommendation and persists in the new **Hexana Firmware** run configuration; a combination the target cannot support fails at validation time naming the reason and the alternative, never as a hung emulator. Console output streams to the Run tool window behind a one-line emulation notice (unmodeled peripherals read zero, timing differs, radios are not simulated), and a startup watchdog reports \"did not reach console output\" naming the first unimplemented-peripheral access from the Renode log. Stop kills the whole emulator process tree; nothing is left behind on IDE exit. Debug attaches GDB in DAP mode (preferring the Zephyr SDK's `arm-zephyr-eabi-gdb-py`; minimum GDB 14 with Python) to the emulator's frozen gdb stub with a configurable stop-at-entry policy (entry, `main`, or none); an LLDB fallback covers machines without a suitable GDB. Emulator tooling is acquired on demand from the run configuration's Tools section with consent-gated, checksum-verified, cancellable downloads: the Renode 1.16.1 portable build, a per-architecture Zephyr SDK GDB toolchain, and a standalone CPython for dts2repl (all desktop platforms); each tool is also overridable by path in Settings | Build | Firmware Emulator. QEMU comes from the system package manager."
+        }
+      ],
+      "eyebrow": "Firmware emulation",
+      "id": "firmware-emulation",
+      "recipe": "zephyr-firmware-qemu-renode",
+      "summary": "Run or debug Zephyr-class firmware ELFs with QEMU or Renode, target-aware setup, and clear validation when a target combination cannot run.",
+      "title": "Run and debug firmware with target-aware emulation"
+    },
+    {
+      "asset": null,
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**Memory** tab for ELF binaries: a section-level Flash/RAM budget view answering \"how full is my device\". One block per memory region with used/capacity in human units (exact bytes on hover) and a fill bar that turns yellow at 80% and red at 95%; ROM regions listed before RAM. Initialized data is annotated in both places it lives (\"load image\" in flash, \"runtime copy\" in RAM), so the totals stay explainable; `.bss` counts only toward RAM, and `noinit` sections are marked. Region capacities come from a linker map (`<name>.map`, `zephyr.map`, or any other `*.map` sibling that matches the ELF) or a Zephyr `zephyr.dts` found next to the ELF automatically, with a footer naming the source; a map whose section addresses do not match the ELF (stale build) is detected and ignored with a warning. Without any source the tab still shows the full ROM/RAM breakdown from the ELF's load segments, capacity-free, and a notification strip offers \"Link capacity source...\" (a `.map`, a `.dts`, or manual flash/RAM sizes; remembered per file). The budget measures address-space bytes, complementing the **Top** tab's file-byte profile: debug info that never reaches the device is excluded, and a zero-file-byte `.bss` heap arena shows up as the RAM consumer it is. Section rows navigate to the hex view. The tab appears for executable and shared-object ELFs, including fully stripped ones (no symbols or DWARF needed)."
+        }
+      ],
+      "eyebrow": "ELF memory",
+      "id": "elf-memory-budget",
+      "recipe": "elf-memory-flash-ram-budget",
+      "summary": "The new Memory tab breaks down ELF Flash and RAM by region, explains runtime-copy data, and reads capacities from linker maps or Zephyr devicetrees.",
+      "title": "See Flash and RAM budgets at a glance"
+    }
+  ],
+  "date": "2026-08-26",
+  "schema": 1,
+  "sources": {
+    "assets": "docs/whatsnew/assets.yml",
+    "assets_sha256": "160d3ef9a4b75bc52d843a38678d840771ae58bee28bd136f5397f3253e6c796",
+    "changelog": "idea-plugin/CHANGELOG.md",
+    "changelog_sha256": "10e27ed601fef47042888d79a52aa313a23b10963c13c1ccc1e8a4b605dadd8b",
+    "design": "docs/whatsnew/DESIGN.md",
+    "design_sha256": "46a170a15744493a36718e673ca921b17c716cb241cea22a9b7e2896f327e05d"
+  },
+  "version": "0.19"
+}

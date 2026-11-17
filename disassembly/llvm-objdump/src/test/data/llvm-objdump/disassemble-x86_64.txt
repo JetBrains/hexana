@@ -1,0 +1,17 @@
+
+app:	file format elf64-x86-64
+
+Disassembly of section .text:
+
+0000000000401140 <main>:
+  401140:	55	pushq	%rbp
+  401141:	48 89 e5	movq	%rsp, %rbp
+  401144:	48 8d 3d b5 0e 00 00	leaq	0xeb5(%rip), %rdi
+  40114b:	e8 e0 fe ff ff	callq	0x401030 <puts@plt>
+  401150:	31 c0	xorl	%eax, %eax
+  401152:	5d	popq	%rbp
+  401153:	c3	retq
+
+0000000000401160 <helper>:
+  401160: 83 c7 01 addl $0x1, %edi
+  401163: c3 retq

@@ -1,0 +1,508 @@
+# MCP Packaging
+
+This directory contains client-specific wrapper templates for the standalone runtime in `mcp/server`.
+
+Related documents:
+
+- [Run Script CLI](../RUN_SCRIPT.md) shows deterministic `run-script` examples and the `run_binary_script` profile.
+- [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) lists the native release gates and JVM fallback compatibility checks.
+- [CLAUDE_DESKTOP_MCPB.md](CLAUDE_DESKTOP_MCPB.md) describes the local Claude Desktop MCPB prototype and demo checklist.
+- [Hexana MCP Native Image Release Design](../../docs/superpowers/specs/2026-06-19-mcp-native-image-release-design.md)
+  records the native package support policy and current limitations.
+
+Use `CLAUDE_DESKTOP_MCPB.md` for reviewer-facing local install steps, `doctor`
+preflight, Claude Desktop log locations, `tools/list` proof expectations, the
+`const.wasm` fixture prompt, outside-root denial proof, and the manual
+`claude_desktop_config.json` fallback.
+
+Source layouts:
+
+- `claude-plugin/`
+- `claude-desktop-mcpb/`
+- `codex-plugin/`
+
+Build JVM fallback wrapper outputs with R8-obfuscated Hexana runtime classes:
+
+```bash
+./gradlew :mcp:assembleMcpPackaging
+```
+
+Build pre-R8 JVM fallback wrapper outputs for comparison/smoke gates with:
+
+```bash
+./gradlew :mcp:assembleMcpPackagingPlain
+```
+
+Build native-enabled wrapper outputs for the current host platform with:
+
+```bash
+./gradlew :mcp:assembleNativeMcpPackaging
+```
+
+Build and smoke-test native release artifacts for the current host platform with:
+
+```bash
+./gradlew :mcp:assembleNativeMcpReleaseArtifacts
+```
+
+Build and smoke-test the local Claude Desktop MCPB prototype for the current host platform with:
+
+```bash
+./gradlew :mcp:assembleClaudeDesktopMcpb
+```
+
+This task requires the official `mcpb` CLI on `PATH` and uses `mcpb pack` to
+produce the `.mcpb` artifact.
+
+Native builds require GraalVM 25 or newer with `native-image` installed. Set `GRAALVM_HOME` or `JAVA_HOME` to that
+distribution before running native tasks if Gradle does not auto-detect it. The repository JVM baseline and JVM fallback
+packages remain on JDK 21; native packaging requires GraalVM 25 because `wasm-language` 25.0.0 uses
+`VectorAPISupport`. JBR and ordinary JDKs can run JVM package gates, but they cannot rebuild the native executable.
+
+Install the Codex plugin into the repo-local dev marketplace with:
+
+```bash
+./gradlew :mcp:installRepoLocalCodexPlugin
+```
+
+The dev marketplace lives under the gitignored `build/repo-local-plugin/`, not in the tracked root `plugins/hexana/`
+(that directory is the public marketplace layout published to GitHub).
+
+This produces:
+
+```text
+mcp/build/packaging/claude-plugin/
+mcp/build/packaging/codex-plugin/
+mcp/build/distributions/
+```
+
+The native-enabled task produces outputs under:
+
+```text
+mcp/build/packaging-native/claude-plugin/
+mcp/build/packaging-native/codex-plugin/
+mcp/build/distributions-native/
+```
+
+The local Claude Desktop MCPB task produces:
+
+```text
+mcp/build/packaging-native/claude-desktop-mcpb/
+mcp/build/distributions-native/hexana-core-<platform>.mcpb
+```
+
+The pre-R8 task produces non-release smoke outputs under:
+
+```text
+mcp/build/packaging-plain/claude-plugin/
+mcp/build/packaging-plain/codex-plugin/
+mcp/build/distributions-plain/
+```
+
+and for repo-local testing (Codex writes `.agents/plugins/marketplace.json`, Claude writes
+`.claude-plugin/marketplace.json`; both name the marketplace `hexana-local`):
+
+```text
+build/repo-local-plugin/.agents/plugins/marketplace.json
+build/repo-local-plugin/.claude-plugin/marketplace.json
+build/repo-local-plugin/plugins/hexana/
+```
+
+## Package layout and fallback
+
+Each assembled wrapper includes its own bundled standalone JVM runtime under `server/` and exposes `bin/hexana-mcp`.
+Native-enabled wrappers also include `native/<platform>/hexana-mcp` for the current host platform, or
+`native/<platform>/hexana-mcp.exe` on Windows when a Windows native package is built outside the active release matrix.
+The supported native release matrix uses these platform tags:
+
+- `macos-arm64`
+- `linux-x64`
+
+The launcher first
+uses `HEXANA_SERVER_BIN` when explicitly set, then prefers the bundled native executable matching the current platform,
+then falls back to `server/bin/server`.
+Unsupported platforms keep working through the bundled JVM runtime; the launcher does not try to run a native
+executable built for a different platform.
+Release ZIPs must not contain build-machine absolute paths. The Claude package uses Claude's plugin-root variable, and
+the Codex package keeps its `.mcp.json` launcher path and working directory relative to the plugin root.
+
+Public Claude/Codex release packages use R8 at build time to obfuscate Hexana-owned runtime bytecode. The obfuscated
+runtime is shipped as `server/lib/hexana-runtime-obfuscated.jar`; third-party runtime dependencies remain as normal
+library jars. R8 itself and `mcp/build/r8/mapping.txt` are build outputs only and must not be shipped in plugin or
+server ZIPs.
+
+The public runtime layout intentionally remains a Gradle `installDist` style directory instead of a fat JAR for the
+first marketplace release path. A fat JAR would need separate validation for merged service descriptors, license and
+notice handling, native/JNA resources, Kotlin serialization metadata, classpath-sensitive libraries, and R8 behavior.
+
+The packaged `hexana-mcp` runtime is MCP-only. Its CLI surface is `stdio`, `http`, `doctor`, `version`, and `help`;
+direct analysis commands and the split-product `tools` command are deliberately rejected. Protocol `tools/list` and
+`tools/call` remain available, including `run_binary_script` under the scripting profile.
+
+The `.mcp.json` files checked into `mcp/packaging/*` are the source templates for distributable wrappers. Repo-local
+Codex install is the exception: `./gradlew :mcp:installRepoLocalCodexPlugin` rewrites the installed
+`build/repo-local-plugin/plugins/hexana/.mcp.json` to an absolute launcher path for local testing.
+
+For ad hoc local testing, you can still override the launcher path explicitly:
+
+```bash
+HEXANA_SERVER_BIN=/absolute/path/to/server/bin/server mcp/packaging/claude-plugin/bin/hexana-mcp version
+```
+
+When testing a native-enabled assembled package, run the wrapper from the assembled plugin root:
+
+```bash
+mcp/build/packaging-native/claude-plugin/bin/hexana-mcp version
+```
+
+For Codex local plugin testing, run `./gradlew :mcp:installRepoLocalCodexPlugin`, add the dev marketplace once with
+`codex plugin marketplace add "$PWD/build/repo-local-plugin"`, restart Codex, and install `Hexana` from the
+`Hexana Local` marketplace in the plugin directory (`/plugins` in CLI). Re-run the Gradle task after each change and
+restart Codex to pick up the new build.
+
+## Runtime configuration
+
+The packaged `hexana-mcp` launcher forwards server flags and reads the same `HEXANA_MCP_*` environment variables as
+the standalone runtime. Use these options to tune per-request resource limits:
+
+| Flag | Environment variable | Limit |
+|---|---|---|
+| `--max-file-bytes` | `HEXANA_MCP_MAX_FILE_BYTES` | Maximum input file size accepted by MCP tools. |
+| `--max-inline-bytes` | `HEXANA_MCP_MAX_INLINE_BYTES` | Maximum inline payload size accepted in tool arguments. |
+| `--max-text-file-bytes` | `HEXANA_MCP_MAX_TEXT_FILE_BYTES` | Maximum text file size read for text-oriented tool inputs. |
+| `--max-output-bytes` | `HEXANA_MCP_MAX_OUTPUT_BYTES` | Maximum encoded logical JSON result for successful tool calls. The duplicated MCP wire envelope is not counted; structured error responses are exempt so stable diagnostics can always be returned. |
+| `--max-candidate-count` | `HEXANA_MCP_MAX_CANDIDATE_COUNT` | Maximum number of candidate files or records kept during discovery. |
+| `--max-scan-roots` | `HEXANA_MCP_MAX_SCAN_ROOTS` | Maximum number of scan root directories accepted for discovery tools. |
+| `--max-scan-depth` | `HEXANA_MCP_MAX_SCAN_DEPTH` | Maximum directory depth traversed while scanning roots. |
+
+Command-line flags take precedence over environment variables when both are set. Use byte counts as plain integers.
+For example:
+
+```bash
+HEXANA_MCP_MAX_FILE_BYTES=10485760 mcp/build/packaging/claude-plugin/bin/hexana-mcp stdio --max-output-bytes 1048576
+```
+
+## Native support policy
+
+Native MCP releases are stdio-first and HTTP-verified. The release artifact task runs `hexana-mcp version`, native stdio
+MCP smoke, native HTTP MCP smoke, both split native CLI Kotlin/JUnit contracts, and the retained native archive checks
+before writing current-host artifacts. The supported native matrix remains `macos-arm64` and `linux-x64`.
+
+Standalone MCP analytics are enabled by default for JVM and GraalVM Native Image `stdio` and `http`; explicit opt-out
+works everywhere with `--telemetry-enabled false` or `HEXANA_MCP_TELEMETRY_ENABLED=false`. PostHog networking and
+shutdown-hook behavior adds runtime surface to native startup and smoke reliability, so the native release matrix must
+keep default-command-line smoke coverage.
+
+## Codex/Claude release automation
+
+`release-codex-claude-plugins.sh` owns the release mechanics for the Claude Code and Codex plugin wrappers. TeamCity
+should use it after the release build's snapshot dependencies have passed. The release path is native-first by default:
+`INCLUDE_NATIVE_ARTIFACTS` defaults to `true`, so artifact collection fails early unless the native matrix ZIPs are
+available. The script:
+
+1. builds pre-R8 JVM fallback standalone, Claude, and Codex MCP packages,
+2. smoke-tests the pre-R8 JVM fallback runtime plus Claude and Codex wrappers,
+3. builds R8-obfuscated JVM fallback standalone, Claude, and Codex MCP packages,
+4. smoke-tests the R8-obfuscated JVM fallback runtime plus Claude and Codex wrappers,
+5. builds and verifies the split CLI R8 release ZIPs with `:mcp:verifyCliR8ReleaseArchives`,
+6. collects the versioned JVM fallback ZIPs for `hexana-mcp`, `hexana-cli`, `hexana-cli-script`, Claude, and Codex,
+7. collects the required native ZIPs for `hexana-mcp`, `hexana-cli`, `hexana-cli-script`, Claude, and Codex,
+8. runs the release artifact security check,
+9. validates the generated public marketplace bundle JSON files and native artifact policy,
+10. validates, commits, pushes, and creates or updates the public marketplace pull request,
+11. creates a new GitHub Release with all collected ZIP assets, or updates title/notes for an existing release only
+    after verifying its ZIP asset names and SHA-256 digests exactly match the locally collected release set.
+
+Existing GitHub Release ZIP assets are immutable for this flow. If `RELEASE_TAG` already exists, the script downloads
+the existing ZIP assets and fails when an asset is missing, extra, or has a different digest; it does not supplement or
+replace ZIP assets on an existing release. Delete or retag the release deliberately when the artifact set must change.
+
+Downloads publication is handled by `publish-downloads-release-bundle.sh` after the same release chain has passed. It
+does not rebuild anything: TeamCity downloads the already verified native matrix ZIPs into `mcp/build/distributions-native`,
+then the script prepares two independent public products.
+
+The backward-compatible MCP bundle remains in `mcp/out/teamcity/downloads-release` and contains only:
+
+- `hexana-mcp-native-<platform>-<version>.zip`
+- `hexana-claude-plugin-<platform>-<version>.zip`
+- `hexana-codex-plugin-<platform>-<version>.zip`
+- `<artifact>.sha256` for every ZIP, generated from the copied file
+- `hexana-mcp-release-<version>.json`
+
+The CLI bundle is prepared in `mcp/out/teamcity/cli-downloads-release` and contains only:
+
+- `hexana-cli-native-<platform>-<version>.zip`
+- `hexana-cli-script-native-<platform>-<version>.zip`
+- `<artifact>.sha256` for every ZIP, generated from the copied file
+- the rendered, version-dependent `README.md`
+- `hexana-cli-release-<version>.json`
+
+`CLI_DOWNLOADS_README.md.template` stays in the source repository; only the rendered README is published, inside the
+CLI version directory. No README is written at the CLI downloads root.
+
+Both manifests record the shared version, git revision, TeamCity build id and URL, and for each product-owned artifact
+its name, platform, kind, size, SHA-256, downloads.jetbrains.com URL, and GitHub Release asset URL when
+`PUBLIC_REPO_SLUG` or `GITHUB_RELEASE_ASSET_BASE_URL` configures one. GitHub release behavior is unchanged: the release
+script continues to publish all CLI ZIP assets alongside the MCP assets.
+
+The versioned upload targets are:
+
+- `s3://$HEXANA_DOWNLOADS_S3_BUCKET/resources/hexana/mcp/<version>/`, served as
+  `https://download.jetbrains.com/resources/hexana/mcp/<version>/`
+- `s3://$HEXANA_DOWNLOADS_S3_BUCKET/resources/hexana/cli/<version>/`, served as
+  `https://download.jetbrains.com/resources/hexana/cli/<version>/`
+
+`HEXANA_DOWNLOADS_S3_BUCKET` names the S3 bucket and has no default. It is required whenever
+`PUBLISH_DOWNLOADS=true`; without it the script exits before generating or uploading anything. The destination guards
+only accept prefixes under that bucket.
+
+The script prepares independent root indexes at `mcp/out/teamcity/downloads-index/releases.json` and
+`mcp/out/teamcity/cli-downloads-index/releases.json`. They are published as the MCP and CLI root `releases.json`
+objects respectively. During publication, each index reads only its own existing S3 object, replaces its current
+version entry, orders known releases by semantic version, and uploads after its versioned bundle.
+
+Each versioned directory is uploaded recursively, then its root index is uploaded separately. Re-running the same
+TeamCity build is safe: both versioned prefixes are overwritten from the same downloaded artifacts, and each root
+index keeps one entry per version. Do not run downloads publication from a directory assembled locally or from
+expected filenames only.
+
+TeamCity may override the CLI output paths with `CLI_DOWNLOADS_BUNDLE_DIR` and `CLI_DOWNLOADS_INDEX_DIR`, and the CLI
+public/S3 locations with `CLI_DOWNLOADS_ROOT_PUBLIC_PREFIX`, `CLI_DOWNLOADS_PUBLIC_PREFIX`,
+`CLI_DOWNLOADS_ROOT_S3_PREFIX`, `CLI_DOWNLOADS_S3_PREFIX`, and `CLI_DOWNLOADS_RELEASES_INDEX_S3_URI`. Tests may provide
+`CLI_EXISTING_RELEASES_INDEX_FILE` to merge a local CLI index independently from
+`MCP_EXISTING_RELEASES_INDEX_FILE`. `CLI_DOWNLOADS_README_TEMPLATE` overrides the source template path. Existing MCP
+variables and defaults remain compatible.
+
+TeamCity stays responsible for branch policy, secure parameters, build-chain dependencies, and notifications. The
+packaging repository stays responsible for the release mechanics and public-file safety rules.
+
+Native release artifacts are built by a platform CI matrix rather than by the GitHub release script on one host. Each
+matrix leg must run on GraalVM 25 or newer with `native-image`:
+
+```bash
+./gradlew :mcp:assembleNativeMcpReleaseArtifacts
+```
+
+That task builds the current host's GraalVM Native Image executable, requires `hexana-mcp version` to print exactly
+`hexana-mcp <mcpServerVersion>` from `mcp/server/gradle.properties`, runs the native stdio and HTTP MCP smoke tests,
+verifies native archives, and writes versioned artifacts to `mcp/build/distributions-native/`:
+
+- `hexana-mcp-native-<platform>-<version>.zip`: standalone native executable with license files.
+- `hexana-cli-native-<platform>-<version>.zip`: standard CLI native executable with license files.
+- `hexana-cli-script-native-<platform>-<version>.zip`: script CLI native executable with license files.
+- `hexana-claude-plugin-<platform>-<version>.zip`: Claude wrapper with the native executable and JVM fallback.
+- `hexana-codex-plugin-<platform>-<version>.zip`: Codex wrapper with the native executable and JVM fallback.
+
+The release job must download all native matrix artifacts into one directory before running
+`release-codex-claude-plugins.sh`. By default the script requires `macos-arm64 linux-x64`;
+override `NATIVE_RELEASE_PLATFORMS` only when intentionally changing the supported matrix. Unsupported platforms keep
+using the bundled JVM runtime through the wrapper fallback. Windows users are supported through that JVM
+fallback rather than a required Windows native artifact.
+
+Release script example:
+
+```bash
+GH_TOKEN=... \
+PUBLIC_REPO_SLUG=owner/repo \
+GENERATED_PUBLIC_DIR=mcp/out/teamcity/public-marketplace \
+AUTO_MERGE=false \
+mcp/packaging/release-codex-claude-plugins.sh
+```
+
+The release script reads `PLUGIN_VERSION` from `mcp/server/gradle.properties:mcpServerVersion` when the variable is not
+set, defaults `RELEASE_TAG` to `v<PLUGIN_VERSION>`, and writes release artifacts under
+`mcp/out/teamcity/release`.
+
+GitHub Release notes are generated from `mcp/CHANGELOG.md`. Before public publication, the script extracts the
+`## <PLUGIN_VERSION>` section, fails if it is missing or contains no notes, writes it to
+`mcp/out/teamcity/release/release-notes.md`, and scans that generated file with the public GitHub text guard. Keep
+changelog entries public-safe: no internal hosts, CI parameter names, local machine paths, direct URLs, or token-like
+markers.
+
+The script never pushes to `main` or `master`. It creates a branch named
+`automation/update-<plugin-name>-<version>`, copies only allowlisted public files from `GENERATED_PUBLIC_DIR`, validates
+JSON files, scans the staged diff for private paths and obvious secret patterns, pushes the branch, and creates or
+updates a GitHub PR. Re-running the same plugin/version updates the same branch and PR.
+
+Required tools on the TeamCity agent:
+
+- `bash`
+- `git`
+- `gh`
+- `jar`
+- `jq`
+- `rsync`
+- `strings`
+- `unzip`
+- `shasum` or `sha256sum`
+
+Additional tools for downloads publication:
+
+- `aws`
+
+Required environment variables:
+
+- `GH_TOKEN` or `GITHUB_TOKEN`: fine-grained PAT or GitHub App token. Pass it as a TeamCity password parameter.
+- `PUBLIC_REPO_SLUG`: public GitHub repository, for example `owner/repo`.
+- `HEXANA_LEAK_GUARD_INTERNAL_NAMES`: extended-regex alternation of internal names (CI token parameter names and
+  parameter-reference prefixes) that the public-text, artifact and staged-content guards must reject, for example
+  `name-one|name-two`. No default and no empty branches; a release run exits before any build or publication step
+  without it. In the validation-only `RELEASE_ARTIFACT_SECURITY_CHECK_DIR` mode (used by
+  `:mcp:verifyMcpR8ReleaseArchives`) it is optional so that outside builds keep working: when it is unset the log says
+  so and only the built-in public patterns are checked. Internal CI should set it there too. The self-tests use their
+  own fake names.
+- `PLUGIN_NAME`: marketplace plugin directory name, for example `hexana`.
+- `PLUGIN_VERSION`: version being published.
+- `GENERATED_PUBLIC_DIR`: directory that already contains the public marketplace bundle.
+
+Optional environment variables:
+
+- `PUBLIC_REPO_BASE_BRANCH`: defaults to `main`.
+- `PUBLICATION_MODE`: defaults to `production`. Use `test-nightly` only for publication into a non-production GitHub
+  repository such as a personal nightly test repo.
+- `PRODUCTION_PUBLIC_REPO_SLUG`: defaults to `JetBrains/hexana` and is used by publication-mode guards.
+- `ALLOW_PRODUCTION_TO_NON_CANONICAL_REPO`: defaults to `false`; leave it false for normal release publishing.
+- `RELEASE_TAG`: release tag to mention in the PR body, for example `v1.2.3`. In `test-nightly` mode, when this is not
+  set, the script defaults it to `nightly-<version>-<TeamCity build id>`.
+- `AUTO_MERGE`: defaults to `false`. When `true`, the script queues `gh pr merge --auto --rebase --delete-branch`.
+- `DRY_RUN`: defaults to `false`. When `true`, the script clones, syncs, validates, scans, and prints a diff summary
+  but does not commit, push, create/update a PR, or enable auto-merge.
+- `PR_LABELS`: comma-separated labels to add to the PR.
+- `PR_REVIEWERS`: comma-separated reviewers to request.
+- `PUBLIC_REPO_CLONE_DIR`: reuse this local clone instead of a temporary clone.
+- `COMMIT_AUTHOR_NAME`: required git commit author name for marketplace PR commits.
+- `COMMIT_AUTHOR_EMAIL`: required git commit author email for marketplace PR commits. Use an approved bot, GitHub App,
+  or noreply automation identity; do not use a personal email.
+- `ALLOW_BUNDLED_JAR`: defaults to `false`. When `true`, jars are allowed only under
+  `plugins/<plugin-name>/server/lib/`.
+- `INCLUDE_NATIVE_ARTIFACTS`: defaults to `true`. Release publishing should keep the default so the script verifies
+  every listed native executable, Claude plugin, and Codex plugin ZIP is present before publishing. Set it to `false`
+  only for explicit JVM fallback diagnostics; public `release.lock.json` native policy still rejects publishing when
+  native artifacts are advertised.
+- `NATIVE_RELEASE_ARTIFACT_DIR`: defaults to `mcp/build/distributions-native`.
+- `NATIVE_RELEASE_PLATFORMS`: defaults to `macos-arm64 linux-x64`.
+- `VALIDATE_CLAUDE_CMD`: optional command run from the cloned public repo root.
+- `VALIDATE_CODEX_CMD`: optional command run from the cloned public repo root.
+- `SKIP_RELEASE_BUILD_AND_SMOKE`: defaults to `false`. TeamCity sets this to `true` only after it has already run the
+  visible pre-R8 and R8-obfuscated JVM fallback smoke steps plus the native matrix gates in the same build chain.
+
+Public files allowlist:
+
+- `.claude-plugin/marketplace.json`
+- `.agents/plugins/marketplace.json`
+- `plugins/<plugin-name>/.claude-plugin/**`
+- `plugins/<plugin-name>/.codex-plugin/**`
+- `plugins/<plugin-name>/.mcp.json`
+- `plugins/<plugin-name>/release.lock.json`
+- `plugins/<plugin-name>/README.md`
+- `plugins/<plugin-name>/LICENSE.txt`
+- `plugins/<plugin-name>/THIRD-PARTY-NOTICES.md`
+- `plugins/<plugin-name>/skills/**`
+- `plugins/<plugin-name>/mcp/**`
+- `plugins/<plugin-name>/bin/**`
+- `plugins/<plugin-name>/native/**`
+- `plugins/<plugin-name>/server/**`; jars inside this tree are allowed only under
+  `plugins/<plugin-name>/server/lib/**` with `ALLOW_BUNDLED_JAR=true`
+
+Safety checks fail the build if the staged diff contains source/build/private paths such as `src/`, `build/`,
+`target/`, `out/`, `.gradle/`, `.idea/`, `.teamcity/`, `.env`, `private/`, `secret/`, `secrets/`, source-like or
+credential file extensions such as `*.java`, `*.kt`, `*.class`, `*.pem`, `*.key`, `*.p12`, `*.keystore`, `*.jks`, any
+unexpected `*.jar`, symlinks, or obvious secret markers such as `BEGIN PRIVATE KEY`, `github_pat_`, `ghp_`, `gho_`,
+`ghu_`, `ghs_`, `sk-`, `AKIA`, `password=`, `secret=`, or `token=`. It also fails on local machine paths such as
+`/Users/` or `/private/`, this workspace name, internal repository hostnames, TeamCity/GitHub token variable names, and
+the TeamCity GitHub-token parameter placeholder.
+
+Before publishing GitHub Release assets, the script also extracts every release ZIP and scans the artifact contents.
+This artifact security check fails on local machine paths such as `/Users/` or `/private/`, this workspace name,
+internal repository hostnames, TeamCity/GitHub token variable names, private-key markers, obvious token prefixes,
+source files, credential files, private/build path names, R8 mapping output, or pre-obfuscation Hexana runtime jars.
+PostHog/analytics dependencies are allowed and are included in the obfuscated runtime jar.
+
+`THIRD-PARTY-NOTICES.md` is generated by `./gradlew :mcp:generateThirdPartyNotices` from the MCP runtime classpath's
+Maven POM license metadata and is copied into the plugin root and bundled server root during packaging. Legal files are
+published inside `plugins/<plugin-name>/`; the public repository root must not receive standalone legal files from this
+automation.
+
+GitHub-facing text is scanned separately before public mutation calls. Release notes, PR title, PR body, and PR update
+comments fail on internal CI wording, internal hostnames, local paths, token names or prefixes, and direct URLs. The
+guard can be checked without network access by running
+`PUBLIC_GITHUB_TEXT_GUARD_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh`.
+The changelog extraction and generated release-note guard can be checked without network access by running
+`MCP_CHANGELOG_RELEASE_NOTES_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh`.
+The publication-mode guard can be checked without network access by running
+`PUBLICATION_MODE_GUARD_SELF_TEST=true ./mcp/packaging/release-codex-claude-plugins.sh`.
+The downloads checksum/manifest generator can be checked without network access by running
+`MCP_DOWNLOADS_BUNDLE_SELF_TEST=true bash ./mcp/packaging/publish-downloads-release-bundle.sh`.
+
+The secret scan is intentionally conservative. If it reports a false positive, either change the public file content so
+the marker is not present verbatim, or adjust the script in the same review with a narrowly scoped exception. Do not
+disable the scan in TeamCity.
+
+Dry run example:
+
+```bash
+GH_TOKEN=... \
+PUBLIC_REPO_SLUG=owner/repo \
+PLUGIN_NAME=hexana \
+PLUGIN_VERSION=1.2.3 \
+GENERATED_PUBLIC_DIR=mcp/out/teamcity/public-marketplace \
+DRY_RUN=true \
+mcp/packaging/release-codex-claude-plugins.sh
+```
+
+Real PR example:
+
+```bash
+GH_TOKEN=... \
+PUBLIC_REPO_SLUG=owner/repo \
+PUBLIC_REPO_BASE_BRANCH=main \
+PLUGIN_NAME=hexana \
+PLUGIN_VERSION=1.2.3 \
+GENERATED_PUBLIC_DIR=mcp/out/teamcity/public-marketplace \
+RELEASE_TAG=v1.2.3 \
+AUTO_MERGE=false \
+mcp/packaging/release-codex-claude-plugins.sh
+```
+
+Test-nightly publication example:
+
+```bash
+GH_TOKEN=... \
+PUBLIC_REPO_SLUG=<owner>/<test-repo> \
+PUBLICATION_MODE=test-nightly \
+PUBLIC_REPO_BASE_BRANCH=main \
+PLUGIN_NAME=hexana \
+PLUGIN_VERSION=1.2.3 \
+GENERATED_PUBLIC_DIR=mcp/out/teamcity/public-marketplace \
+AUTO_MERGE=false \
+mcp/packaging/release-codex-claude-plugins.sh
+```
+
+Use a fine-grained PAT or GitHub App token scoped to the public repository. Required permissions:
+
+- Contents: read/write
+- Pull requests: read/write
+- Metadata: read
+
+For TeamCity, add the token as a password parameter and expose it as `env.GH_TOKEN`. The release build should run:
+
+```bash
+./mcp/packaging/release-codex-claude-plugins.sh
+```
+
+Recommended TeamCity environment:
+
+- `env.GH_TOKEN`: password parameter.
+- `env.PUBLIC_REPO_SLUG`: public repository slug.
+- `env.HEXANA_LEAK_GUARD_INTERNAL_NAMES`: internal names the leak guards reject.
+- `env.PUBLIC_REPO_BASE_BRANCH`: `main`.
+- `env.PLUGIN_NAME`: `hexana`.
+- `env.PLUGIN_VERSION`: release or build version.
+- `env.GENERATED_PUBLIC_DIR`: path to the generated public marketplace bundle.
+- `env.RELEASE_TAG`: `v<version>` when there is a release tag.
+- `env.AUTO_MERGE`: `false` initially.
+- `env.DRY_RUN`: `true` for the first TeamCity wiring test, then `false`.
+
+Do not hardcode GitHub tokens in Kotlin DSL, shell scripts, XML, or committed config. Enable `AUTO_MERGE=true` only
+after branch protection and required checks are configured in the public GitHub repository and the manual PR flow has
+been verified.

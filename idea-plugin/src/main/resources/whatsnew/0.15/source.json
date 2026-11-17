@@ -1,0 +1,117 @@
+{
+  "clusters": [
+    {
+      "asset": "screenshots/top-size-visualization.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Size diagram (\"Top\" tab) for wasm and native binaries that shows largest by size entities."
+        }
+      ],
+      "eyebrow": "Size analysis",
+      "id": "top-size-visualization",
+      "recipe": "top-size-table-and-treemap",
+      "summary": "The Top tab pairs a sortable size breakdown with a treemap, making the largest sections and functions immediately visible across WASM and native binaries.",
+      "title": "See where every byte goes"
+    },
+    {
+      "asset": "screenshots/inline-dispatch-candidates.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "`call_indirect` dispatch candidates in the WAT view. Every `call_indirect` / `return_call_indirect` row now shows its statically known dispatch candidates: the functions in the table whose signature matches the call site's type (matching is structural, so candidates declared under different but identical type entries are merged). Click the instruction row (or press Go to Declaration) for a candidates popup that navigates to any candidate, or expand the inline `show N candidates` row beneath the instruction for the full list as click-navigable rows. A signature with no table entries is called out explicitly: that call site can only trap. Candidates are the element-segment entries (active and passive); functions written into the table at runtime via `table.set` are not visible to static analysis, so the lists say \"statically known\", not \"all possible targets\"."
+        },
+        {
+          "section": "Added",
+          "text": "**Dispatch** tab in the WASM module diff, next to **Size Impact** and **Entities**: per canonical signature, which dispatch candidates entered or left the function table between the two builds. Cross-build candidate identity uses the same content-hash function matcher as the **Entities** tab (names are not trusted: wasm-bindgen closure shims rename every build), and each change distinguishes a brand-new or removed function from an existing function that merely entered or left the table, the quiet mechanism that pins code `wasm-opt` cannot remove. Clicking a row opens the side-by-side WAT of the candidate. As an example of what it surfaces: running `wasm-opt -Oz` on a workers-rs module leaves the element segments byte-identical in count while duplicate-function elimination makes hundreds of table slots share one body, and the tab shows exactly that shrinkage per signature."
+        },
+        {
+          "section": "Changed",
+          "text": "The call graph now models indirect calls through one hub node per canonical signature (`<indirect: (i32, i32) -> i32>`) instead of the single `<indirect calls>` node introduced in 0.14. Each indirect-calling function connects to the hubs of the signatures it actually dispatches through, and each hub fans out only to the table functions matching that signature, so the **Dominators** and **Caller Paths** views read \"retained by indirect callers of this signature\" instead of one undifferentiated bucket. The edge count keeps the same linear bound as before (call sites plus table entries, now partitioned), preserving the scaling fix that made indirect-call-heavy Emscripten modules analyzable."
+        }
+      ],
+      "eyebrow": "Dynamic dispatch",
+      "id": "inline-dispatch-candidates",
+      "recipe": "call-indirect-inline-candidates",
+      "summary": "WAT call_indirect rows now reveal their statically known dispatch candidates inline, with click-through navigation to each matching function.",
+      "title": "Expand indirect-call candidates inline"
+    },
+    {
+      "asset": "screenshots/exception-surface.png",
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Exception-handling visibility for the exception-handling proposal (`try_table` / `throw` / `throw_ref`). Exception instructions now render with their real WAT text (`throw 0`, `try_table (catch 0 1) (catch_all 2)`, `throw_ref`) plus a trailing comment decoding each index: the tag a `throw` raises with its payload signature, and every catch clause's tag and target label. Clicking a `throw` row resolves where it is caught, the enclosing `try_table` and clause (tag-specific or `catch_all`), or reports that it escapes the function, and for an escaping throw names the exported entry points its exception reaches uncaught. A **Tags** tab decodes the module's exception tags (index, origin, attribute, payload) the way the **Types** tab decodes types. An **Exceptions** tab shows the module's panic surface: exported entry points whose exceptions escape to the host, with the tags (and any dynamic `throw_ref` / host-import throws) that get out. Analysis is a sound static under-approximation: `throw_ref` and imported-function throws are tracked as a dynamic category, and a `catch_all` on the path correctly makes a throw \"caught\"."
+        }
+      ],
+      "eyebrow": "Exception handling",
+      "id": "exception-surface",
+      "recipe": "exported-exception-surface",
+      "summary": "The Exceptions tab distinguishes precise statically propagated tags from dynamic host-import and throw_ref categories, without claiming exhaustive runtime prediction.",
+      "title": "Understand what can escape to the host"
+    },
+    {
+      "asset": null,
+      "entries": [
+        {
+          "section": "Added",
+          "text": "**Go to Source** context menu items across the WASM views. Right-clicking a row in the **Functions** or **Exports** tab, or an instruction row in the WAT view, now offers `Go to Source (dir/file.rs:123)` when the module carries debug information; clicking opens the file at that line. Function rows resolve to the function's first mapped line (the signature), WAT rows resolve per instruction. Locations come from DWARF when present, otherwise from a source map. The WAT row menu also carries the dispatch-candidates action on `call_indirect` rows."
+        },
+        {
+          "section": "Added",
+          "text": "Source maps are now discovered through the module's `sourceMappingURL` custom section, the form Kotlin/Wasm and Emscripten emit: a path is resolved relative to the wasm file (absolute paths accepted) and `data:` URLs with the inline map are decoded, with the existing `<file>.map` sidecar convention as the fallback. Remote http(s) URLs are not fetched."
+        },
+        {
+          "section": "Fixed",
+          "text": "Source locations resolve on Rust-produced modules. The DWARF lookup found compilation units by their low/high-pc attributes, which rustc does not emit (it uses range lists), so the hex view's \"Open in sources\" never appeared for Rust artifacts; the lookup now also consults the line tables directly. Two more mismatches fixed along the way: callers pass module-absolute offsets while wasm DWARF addresses are code-section-relative (queries are now converted, and DWARF-based navigation was one line off), and a module that parses but has no DWARF, the Kotlin/Wasm case, never fell back to a loaded source map (the fallback now happens per lookup)."
+        }
+      ],
+      "eyebrow": "Source navigation",
+      "id": "source-navigation",
+      "recipe": "go-to-source-and-source-map-discovery",
+      "summary": "Go to Source connects Functions, Exports, and WAT instructions to DWARF or source-map locations, including sourceMappingURL discovery.",
+      "title": "Go from WASM rows back to source"
+    },
+    {
+      "asset": null,
+      "entries": [
+        {
+          "section": "Added",
+          "text": "Semantic section labels are now clickable when there is a corresponding information tab below, and clicking on a label opens the corresponding tab."
+        },
+        {
+          "section": "Added",
+          "text": "\"Save as\" for nested wasm modules and jar/zip entries, allows saving the content to a separate file."
+        },
+        {
+          "section": "Fixed",
+          "text": "The call-graph **Dominators** tree rendered empty in 0.14. The compact dominator storage introduced there used -1 as its \"no parent\" marker, which is also the virtual root's node id, so every function dominated directly by the root was dropped from the tree; function-level CFG dominators were unaffected, which is how it slipped through. The tree now renders fully again."
+        },
+        {
+          "section": "Fixed",
+          "text": "Rows of nested tables are sorted again according to the parent sorting rules (it was broken recently). This, for instance fixes the sorting of the \"Top\" tab."
+        },
+        {
+          "section": "Fixed",
+          "text": "Fixed a UI freeze that had rarely been happening when switching between \"Decompiled\" and other tabs multiple times."
+        }
+      ],
+      "eyebrow": "Workflow",
+      "id": "inspection-workflow-015",
+      "recipe": "section-navigation-save-as-and-reliability",
+      "summary": "Clickable section labels, Save As for nested content, restored nested-table sorting, a repaired Dominators tree, and smoother tab switching keep inspection workflows reliable.",
+      "title": "Move through binary structure with less friction"
+    }
+  ],
+  "date": "2026-07-29",
+  "schema": 1,
+  "sources": {
+    "assets": "docs/whatsnew/assets.yml",
+    "assets_sha256": "19abefb4c2fe8f0018ce5abde512b8e6e3bcf88d486f62e0358e67b237346048",
+    "changelog": "idea-plugin/CHANGELOG.md",
+    "changelog_sha256": "b3192c7f9866d69901bcd9c6e2ddddff759eb8c22cafb544a607b09ffcda7a2e",
+    "design": "docs/whatsnew/DESIGN.md",
+    "design_sha256": "9d78242126b778ea9b2e726407499489193e7c5a71661d09e2dda0f9c8238af4"
+  },
+  "version": "0.15"
+}

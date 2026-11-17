@@ -1,0 +1,74 @@
+/* Dark+ theme variables for the Hexana standalone webapp.
+   Maps all --vscode-* custom properties used by editor.css to VS Code Dark+
+   palette values so the UI looks correct without a VS Code host. */
+
+:root {
+    /* Editor */
+    --vscode-editor-background: #1e1e1e;
+    --vscode-editor-foreground: #d4d4d4;
+    --vscode-editor-font-family: "SF Mono", Monaco, Consolas, "Courier New", monospace;
+    --vscode-editor-font-size: 13px;
+    --vscode-editor-selectionBackground: rgba(38, 79, 120, 0.7);
+    --vscode-editor-findMatchBackground: rgba(156, 183, 255, 0.6);
+    --vscode-editor-findMatchBorder: rgba(156, 183, 255, 0.8);
+    --vscode-editor-findMatchHighlightBackground: rgba(234, 92, 0, 0.33);
+
+    /* Buttons */
+    --vscode-button-background: #0e639c;
+    --vscode-button-foreground: #ffffff;
+    --vscode-button-hoverBackground: #1177bb;
+    --vscode-button-border: transparent;
+    --vscode-button-secondaryBackground: #3a3d41;
+    --vscode-button-secondaryForeground: #ffffff;
+    --vscode-button-secondaryBorder: transparent;
+    --vscode-button-secondaryHoverBackground: #45494e;
+
+    /* Focus / contrast */
+    --vscode-focusBorder: #007fd4;
+    --vscode-contrastBorder: transparent;
+
+    /* Input */
+    --vscode-input-background: #3c3c3c;
+    --vscode-input-foreground: #cccccc;
+    --vscode-input-border: #3c3c3c;
+    --vscode-inputValidation-errorForeground: #f48771;
+    --vscode-inputValidation-warningBackground: #352a05;
+    --vscode-editorWarning-foreground: #cca700;
+
+    /* Panels */
+    --vscode-panel-border: #80808059;
+
+    /* Tabs */
+    --vscode-tab-activeBackground: #1e1e1e;
+    --vscode-tab-inactiveBackground: #2d2d2d;
+
+    /* Lists */
+    --vscode-list-hoverBackground: #2a2d2e;
+
+    /* Scrollbars */
+    --vscode-scrollbar-shadow: rgba(0, 0, 0, 0.1);
+    --vscode-scrollbarSlider-background: rgba(121, 121, 121, 0.4);
+    --vscode-scrollbarSlider-hoverBackground: rgba(100, 100, 100, 0.7);
+    --vscode-scrollbarSlider-activeBackground: rgba(191, 191, 191, 0.4);
+
+    /* Editor hover widget */
+    --vscode-editorHoverWidget-background: #2d2d30;
+    --vscode-editorHoverWidget-border: #454545;
+
+    /* Editor widget (dialogs, search boxes) */
+    --vscode-editorWidget-background: #252526;
+    --vscode-editorWidget-border: #454545;
+
+    /* Menus */
+    --vscode-menu-background: #2d2d30;
+    --vscode-menu-foreground: #cccccc;
+    --vscode-menu-border: #454545;
+    --vscode-menu-selectionBackground: #094771;
+    --vscode-menu-selectionForeground: #ffffff;
+}
+
+body {
+    margin: 0;
+    background: var(--vscode-editor-background);
+    color: var(--vscode-editor-foreground);
+}

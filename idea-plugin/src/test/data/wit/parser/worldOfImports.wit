@@ -1,0 +1,21 @@
+package local:demo;
+
+interface my-interface {
+    // ..
+}
+
+world command {
+    // generates an import of the name `local:demo/my-interface`
+    import my-interface;
+
+    // generates an import of the name `wasi:filesystem/types`
+    import wasi:filesystem/types;
+
+    // generates an import of the plain name `foo`
+    import foo: func();
+
+    // generates an import of the plain name `bar`
+    import bar: interface {
+      // ...
+    }
+}

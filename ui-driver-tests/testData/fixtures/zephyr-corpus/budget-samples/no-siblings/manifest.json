@@ -1,0 +1,13 @@
+{
+  "sample": "no-siblings",
+  "board": "nrf52840dk/nrf52840",
+  "linker": "ld",
+  "builtAt": "2026-08-23T00:00:00Z",
+  "sizeTool": "/home/user/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-size",
+  "size": {"text": 21168, "data": 212, "bss": 4366, "dec": 25746},
+  "romReport": null,
+  "ramReport": null,
+  "memoryConfiguration": null,
+  "dtsMemoryNodes": null,
+  "notes": "Negative sample: bare ELF with no zephyr.map and no zephyr.dts in any sibling directory. Source: hello_world nrf52840dk-Os. Purpose: tests that the parser gracefully handles a missing map/dts — should produce no budget data, no crash."
+}

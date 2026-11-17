@@ -1,0 +1,376 @@
+
+File: /out/macho/sample-arm64.o
+Format: Mach-O arm64
+Arch: aarch64
+AddressSize: 64bit
+MachHeader {
+  Magic: Magic64 (0xFEEDFACF)
+  CpuType: Arm64 (0x100000C)
+  CpuSubType: CPU_SUBTYPE_ARM64_ALL (0x0)
+  FileType: Relocatable (0x1)
+  NumOfLoadCommands: 4
+  SizeOfLoadCommands: 1160
+  Flags [ (0x2000)
+    MH_SUBSECTIONS_VIA_SYMBOLS (0x2000)
+  ]
+  Reserved: 0x0
+}
+Sections [
+  Section {
+    Index: 0
+    Name: __text (5F 5F 74 65 78 74 00 00 00 00 00 00 00 00 00 00)
+    Segment: __TEXT (5F 5F 54 45 58 54 00 00 00 00 00 00 00 00 00 00)
+    Address: 0x0
+    Size: 0x104
+    Offset: 1192
+    Alignment: 2
+    RelocationOffset: 0xBF8
+    RelocationCount: 7
+    Type: Regular (0x0)
+    Attributes [ (0x800004)
+      PureInstructions (0x800000)
+      SomeInstructions (0x4)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 1
+    Name: __data (5F 5F 64 61 74 61 00 00 00 00 00 00 00 00 00 00)
+    Segment: __DATA (5F 5F 44 41 54 41 00 00 00 00 00 00 00 00 00 00)
+    Address: 0x108
+    Size: 0x10
+    Offset: 1456
+    Alignment: 3
+    RelocationOffset: 0xC30
+    RelocationCount: 1
+    Type: Regular (0x0)
+    Attributes [ (0x0)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 2
+    Name: __const (5F 5F 63 6F 6E 73 74 00 00 00 00 00 00 00 00 00)
+    Segment: __TEXT (5F 5F 54 45 58 54 00 00 00 00 00 00 00 00 00 00)
+    Address: 0x118
+    Size: 0x1D
+    Offset: 1472
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x0)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 3
+    Name: __debug_abbrev (5F 5F 64 65 62 75 67 5F 61 62 62 72 65 76 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x135
+    Size: 0xCB
+    Offset: 1501
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 4
+    Name: __debug_info (5F 5F 64 65 62 75 67 5F 69 6E 66 6F 00 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x200
+    Size: 0x174
+    Offset: 1704
+    Alignment: 0
+    RelocationOffset: 0xC38
+    RelocationCount: 8
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 5
+    Name: __debug_str (5F 5F 64 65 62 75 67 5F 73 74 72 00 00 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x374
+    Size: 0xD2
+    Offset: 2076
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 6
+    Name: __apple_names (5F 5F 61 70 70 6C 65 5F 6E 61 6D 65 73 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x446
+    Size: 0xE4
+    Offset: 2286
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 7
+    Name: __apple_objc (5F 5F 61 70 70 6C 65 5F 6F 62 6A 63 00 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x52A
+    Size: 0x24
+    Offset: 2514
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 8
+    Name: __apple_namespac (5F 5F 61 70 70 6C 65 5F 6E 61 6D 65 73 70 61 63)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x54E
+    Size: 0x24
+    Offset: 2550
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 9
+    Name: __apple_types (5F 5F 61 70 70 6C 65 5F 74 79 70 65 73 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x572
+    Size: 0x85
+    Offset: 2586
+    Alignment: 0
+    RelocationOffset: 0x0
+    RelocationCount: 0
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 10
+    Name: __compact_unwind (5F 5F 63 6F 6D 70 61 63 74 5F 75 6E 77 69 6E 64)
+    Segment: __LD (5F 5F 4C 44 00 00 00 00 00 00 00 00 00 00 00 00)
+    Address: 0x5F8
+    Size: 0x80
+    Offset: 2720
+    Alignment: 3
+    RelocationOffset: 0xC78
+    RelocationCount: 4
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+  Section {
+    Index: 11
+    Name: __debug_line (5F 5F 64 65 62 75 67 5F 6C 69 6E 65 00 00 00 00)
+    Segment: __DWARF (5F 5F 44 57 41 52 46 00 00 00 00 00 00 00 00 00)
+    Address: 0x678
+    Size: 0xD6
+    Offset: 2848
+    Alignment: 0
+    RelocationOffset: 0xC98
+    RelocationCount: 1
+    Type: Regular (0x0)
+    Attributes [ (0x20000)
+      Debug (0x20000)
+    ]
+    Reserved1: 0x0
+    Reserved2: 0x0
+    Reserved3: 0x0
+  }
+]
+NeededLibraries [
+]
+Relocations [
+  Section __text {
+    0xE0 1 2 1 ARM64_RELOC_BRANCH26 0 _hexana_dispatch
+    0x84 0 2 1 ARM64_RELOC_PAGEOFF12 0 _hexana_message
+    0x80 1 2 1 ARM64_RELOC_PAGE21 0 _hexana_message
+    0x74 1 2 1 ARM64_RELOC_BRANCH26 0 _hexana_square
+    0x64 1 2 1 ARM64_RELOC_BRANCH26 0 _hexana_add
+    0x1C 0 2 1 ARM64_RELOC_PAGEOFF12 0 _hexana_counter
+    0x18 1 2 1 ARM64_RELOC_PAGE21 0 _hexana_counter
+  }
+  Section __data {
+    0x8 0 3 1 ARM64_RELOC_UNSIGNED 0 _hexana_add
+  }
+  Section __debug_info {
+    0x134 0 3 0 ARM64_RELOC_UNSIGNED 0 __text
+    0x10C 0 3 0 ARM64_RELOC_UNSIGNED 0 __text
+    0xE4 0 3 0 ARM64_RELOC_UNSIGNED 0 __text
+    0xAE 0 3 0 ARM64_RELOC_UNSIGNED 0 __text
+    0x90 0 3 0 ARM64_RELOC_UNSIGNED 0 __data
+    0x5C 0 3 0 ARM64_RELOC_UNSIGNED 0 __const
+    0x3B 0 3 0 ARM64_RELOC_UNSIGNED 0 __data
+    0x22 0 3 0 ARM64_RELOC_UNSIGNED 0 __text
+  }
+  Section __compact_unwind {
+    0x60 0 3 0 ARM64_RELOC_UNSIGNED 0 __text
+    0x40 0 3 0 ARM64_RELOC_UNSIGNED 0 __text
+    0x20 0 3 0 ARM64_RELOC_UNSIGNED 0 __text
+    0x0 0 3 0 ARM64_RELOC_UNSIGNED 0 __text
+  }
+  Section __debug_line {
+    0x36 0 3 0 ARM64_RELOC_UNSIGNED 0 __text
+  }
+]
+Symbols [
+  Symbol {
+    Name: ltmp0 (117)
+    Type: Section (0xE)
+    Section: __text (0x1)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0x0
+  }
+  Symbol {
+    Name: _hexana_square (56)
+    Type: Section (0xE)
+    Section: __text (0x1)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0xA8
+  }
+  Symbol {
+    Name: ltmp1 (111)
+    Type: Section (0xE)
+    Section: __data (0x2)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0x108
+  }
+  Symbol {
+    Name: ltmp2 (105)
+    Type: Section (0xE)
+    Section: __const (0x3)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0x118
+  }
+  Symbol {
+    Name: ltmp3 (99)
+    Type: Section (0xE)
+    Section: __compact_unwind (0xB)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0x5F8
+  }
+  Symbol {
+    Name: _hexana_add (87)
+    Extern
+    Type: Section (0xE)
+    Section: __text (0x1)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0x0
+  }
+  Symbol {
+    Name: _hexana_add_ptr (1)
+    Extern
+    Type: Section (0xE)
+    Section: __data (0x2)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0x110
+  }
+  Symbol {
+    Name: _hexana_counter (17)
+    Extern
+    Type: Section (0xE)
+    Section: __data (0x2)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0x108
+  }
+  Symbol {
+    Name: _hexana_dispatch (39)
+    Extern
+    Type: Section (0xE)
+    Section: __text (0x1)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0x2C
+  }
+  Symbol {
+    Name: _hexana_message (71)
+    Extern
+    Type: Section (0xE)
+    Section: __const (0x3)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0x118
+  }
+  Symbol {
+    Name: _main (33)
+    Extern
+    Type: Section (0xE)
+    Section: __text (0x1)
+    RefType: UndefinedNonLazy (0x0)
+    Flags [ (0x0)
+    ]
+    Value: 0xC4
+  }
+]

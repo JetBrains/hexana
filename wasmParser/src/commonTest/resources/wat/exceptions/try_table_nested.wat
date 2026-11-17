@@ -1,0 +1,12 @@
+(module
+  (tag $e1 (param i32))
+  (tag $e2 (param i64))
+  (func $nested (export "nested") (result i32)
+    (try_table (result i32) (catch $e1 0)
+      (try_table (catch $e2 1)
+        (throw $e2 (i64.const 99))
+      )
+      (i32.const 0)
+    )
+  )
+)

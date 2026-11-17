@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What's New in Hexana 0.14</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+  <section class="hero">
+    <p class="eyebrow">Hexana update</p>
+    <h1>What's New in Hexana 0.14</h1>
+    <p class="lead">Hexana 0.14 focuses on Native binaries, WASM, and Component Model while refining binary inspection inside JetBrains IDEs.</p>
+    <div class="actions">
+      <a class="button primary" href="https://plugins.jetbrains.com/plugin/29090-hexana--webassembly--binary-inspector">Open release notes</a>
+      <a class="button" href="https://github.com/JetBrains/hexana">Open GitHub</a>
+    </div>
+  </section>
+
+  <section class="feature">
+    <div>
+      <p class="eyebrow">Native binaries</p>
+      <h2>Compare native binary size changes</h2>
+      <p>Compare two native binaries directly in Hexana and see how every section’s size changed.</p>
+        <ul class="note-list">
+          <li>Action to show a diff between two native binary files with size changes per section.</li>
+        </ul>
+    </div>
+      <img src="screenshots/native-binary-size-diff.png" alt="Compare native binary size changes screenshot">
+  </section>
+  <section class="feature reversed">
+    <div>
+      <p class="eyebrow">WASM</p>
+      <h2>Analyze large WASM modules without freezing the IDE</h2>
+      <p>Functions and dominator analysis now load in the background, while compact call-graph data keeps very large modules within the IDE’s normal memory budget.</p>
+        <input class="more-toggle" type="checkbox" id="large-wasm-analysis-more">
+        <ul class="note-list">
+          <li>The call graph models indirect calls through a single synthetic <code>&lt;indirect calls&gt;</code> node: each function containing a <code>call_indirect</code> gets one edge to it, and it fans out to the function table. <span class="more-continuation">In the <strong>Dominators</strong> view, functions reachable only through indirect calls now group under that node instead of scattering across the tree.</span></li>
+          <li>Opening the <strong>Functions</strong> tab of a large module no longer freezes the whole IDE. <span class="more-continuation">Its module-wide inputs (function signatures.</span></li>
+          <li>Large modules, including 64-bit memory (memory64 / wasm64) builds, no longer exhaust the IDE heap when analyzed. <span class="more-continuation">Dominator results are stored in one compact int buffer instead of boxed hash maps, the dominance frontier (a near-quadratic structure nothing in the product consumed) is no.</span></li>
+        </ul>
+        <label class="show-more-link" for="large-wasm-analysis-more">Show more</label>
+        <label class="show-less-link" for="large-wasm-analysis-more">Show less</label>
+    </div>
+      <img src="screenshots/large-wasm-analysis.png" alt="Analyze large WASM modules without freezing the IDE screenshot">
+  </section>
+  <section class="feature">
+    <div>
+      <p class="eyebrow">Component Model</p>
+      <h2>See how Component Model dependencies connect</h2>
+      <p>Explore a visual graph of imports, embedded modules and components, instances, and exports wired through instantiation arguments.</p>
+        <ul class="note-list">
+          <li>Component Model binaries now have a <strong>Dependencies</strong> tab that visualizes how imports, embedded core modules and nested components, instances, and exports are connected through instantiation arguments.</li>
+        </ul>
+    </div>
+      <img src="screenshots/component-dependencies.png" alt="See how Component Model dependencies connect screenshot">
+  </section>
+  <section class="feature reversed">
+    <div>
+      <p class="eyebrow">Inspection</p>
+      <h2>Read binary structure at a glance</h2>
+      <p>Hexana now highlights binary sections and lets you move between them in WASM and native files.</p>
+        <ul class="note-list">
+          <li>Semantic highlighting of sections and navigation between sections for WASM and Native binary files.</li>
+        </ul>
+    </div>
+      <img src="screenshots/semantic-highlighting.png" alt="Read binary structure at a glance screenshot">
+  </section>
+
+  <section class="notes">
+    <h2>Also in 0.14</h2>
+    <ul class="improvements">
+      <li>
+        <strong>Smoother binary-inspection workflows</strong>
+        <span>Empty analysis tabs now finish cleanly, the vertical splitter is easier to grab, and WASM Diff respects two files selected in the project view.</span>
+      </li>
+    </ul>
+  </section>
+
+</main>
+</body>
+</html>

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What's New in Hexana 0.21</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+  <section class="hero">
+    <p class="eyebrow">Hexana update</p>
+    <h1>What's New in Hexana 0.21</h1>
+    <p class="lead">Hexana 0.21 focuses on Binary diff, Native binaries, and WebAssembly while refining binary inspection inside JetBrains IDEs.</p>
+    <div class="actions">
+      <a class="button primary" href="https://plugins.jetbrains.com/plugin/29090-hexana--webassembly--binary-inspector">Open release notes</a>
+      <a class="button" href="https://github.com/JetBrains/hexana">Open GitHub</a>
+    </div>
+  </section>
+
+  <section class="feature">
+    <div>
+      <p class="eyebrow">Binary diff</p>
+      <h2>See binary changes byte by byte</h2>
+      <p>Compare binaries in the IDE diff window with highlighted bytes, expandable unchanged regions, paired sections, and table-level changes.</p>
+        <input class="more-toggle" type="checkbox" id="hex-diff-021-more">
+        <ul class="note-list">
+          <li><strong>Hex diff in the IDE&#x27;s own diff window.</strong> Comparing two binaries with the platform <strong>Compare Files</strong> (or viewing a binary&#x27;s VCS change) now shows a side-by-side hex view with changed bytes highlighted and long unchanged stretches collapsed into expandable &quot;N unchanged rows&quot; folds, plus previous / next difference navigation. <span class="more-continuation">Sections are tinted in colors that never clash with the diff&#x27;s own, and one section bar for both sides pairs sections by name and marks which changed and by how much.</span></li>
+          <li>One diff editor for every format: WASM module, Component Model and native comparisons share the same tab strip, tables (now searchable and sortable) and side-by-side detail pane.</li>
+          <li><strong>Compare WASM With…</strong> and <strong>Compare Binary With…</strong> are merged into one <strong>Compare Binaries With…</strong> action (Hexana context menu, Find Action) that picks the comparison from the files&#x27; contents. <span class="more-continuation">It is offered for any WASM or native binary Hexana recognizes by content, including extensionless executables and modules, rather than for a fixed list of extensions.</span></li>
+        </ul>
+        <label class="show-more-link" for="hex-diff-021-more">Show more</label>
+        <label class="show-less-link" for="hex-diff-021-more">Show less</label>
+    </div>
+      <img src="screenshots/hex-diff-021.png" alt="See binary changes byte by byte screenshot">
+  </section>
+  <section class="feature reversed">
+    <div>
+      <p class="eyebrow">Native binaries</p>
+      <h2>Compare native functions</h2>
+      <p>See which functions changed between ELF, Mach-O, or COFF builds, then compare their disassembly side by side. PE images and archives keep section-size comparison.</p>
+        <input class="more-toggle" type="checkbox" id="native-functions-021-more">
+        <ul class="note-list">
+          <li><strong>Per-function native binary diff.</strong> Comparing two ELF, Mach-O or COFF files adds a <strong>Functions</strong> tab next to Size Impact: functions are paired by name, renames are recognized by identical code, and a function that only moved because the code before it grew is reported as moved rather than modified. <span class="more-continuation">Selecting a function shows its disassembly side by side, with shifted addresses ignored when lining up instructions.</span></li>
+        </ul>
+        <label class="show-more-link" for="native-functions-021-more">Show more</label>
+        <label class="show-less-link" for="native-functions-021-more">Show less</label>
+    </div>
+      <img src="screenshots/native-functions-021.png" alt="Compare native functions screenshot">
+  </section>
+  <section class="feature">
+    <div>
+      <p class="eyebrow">WebAssembly</p>
+      <h2>Explore WasmGC type relationships</h2>
+      <p>Explore subtype and field-reference relationships in an interactive type graph, and jump back to the corresponding WAT type.</p>
+        <input class="more-toggle" type="checkbox" id="wasmgc-graph-021-more">
+        <ul class="note-list">
+          <li><strong>WasmGC type graph</strong> in the <strong>WAT (virtualized)</strong> tab. <span class="more-continuation">For WasmGC modules every type in the type section gets inline annotations showing its kind and fields.</span></li>
+        </ul>
+        <label class="show-more-link" for="wasmgc-graph-021-more">Show more</label>
+        <label class="show-less-link" for="wasmgc-graph-021-more">Show less</label>
+    </div>
+      <img src="screenshots/wasmgc-graph-021.png" alt="Explore WasmGC type relationships screenshot">
+  </section>
+
+  <section class="notes">
+    <h2>Also in 0.21</h2>
+    <ul class="improvements">
+      <li>
+        <strong>Run checks and script suites</strong>
+        <span>Define named checks and typed flags, run script suites in the IDE test console, and navigate findings in the Problems tab.</span>
+      </li>
+      <li>
+        <strong>Open binaries by content</strong>
+        <span>Open Arrow IPC streams and recognized extensionless binaries directly in their format-specific views.</span>
+      </li>
+      <li>
+        <strong>More responsive, bounded inspection</strong>
+        <span>Apply analytics consent changes immediately, process large native symbol tables faster, and refuse gzip payloads over 128 MiB inflated.</span>
+      </li>
+    </ul>
+  </section>
+
+</main>
+</body>
+</html>

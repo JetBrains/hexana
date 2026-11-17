@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>What's New in Hexana 0.17</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="page">
+  <section class="hero">
+    <p class="eyebrow">Hexana update</p>
+    <h1>What's New in Hexana 0.17</h1>
+    <p class="lead">Hexana 0.17 focuses on WASM debugger, WASM inspection, and Network captures while refining binary inspection inside JetBrains IDEs.</p>
+    <div class="actions">
+      <a class="button primary" href="https://plugins.jetbrains.com/plugin/29090-hexana--webassembly--binary-inspector">Open release notes</a>
+      <a class="button" href="https://github.com/JetBrains/hexana">Open GitHub</a>
+    </div>
+  </section>
+
+  <section class="feature">
+    <div>
+      <p class="eyebrow">WASM debugger</p>
+      <h2>Step through paused WASM at instruction precision</h2>
+      <p>The Wasm debugger tab shows the paused function, current instruction, and operand stack for Node.js, browser, and wasmtime sessions.</p>
+        <input class="more-toggle" type="checkbox" id="wasm-debugger-tab-more">
+        <ul class="note-list">
+          <li><strong>Wasm</strong> tab in the debugger when debugging a wasm module under Node.js or a browser. <span class="more-continuation">The left pane disassembles the paused function to WAT (same mnemonics and symbolic <code>call $name</code> operands as the WAT view, block bodies indented) with the current instruction.</span></li>
+          <li>The <strong>Wasm</strong> debugger tab now also appears when debugging under wasmtime. <span class="more-continuation">The left pane disassembles the paused function with the current wasm instruction selected.</span></li>
+        </ul>
+        <label class="show-more-link" for="wasm-debugger-tab-more">Show more</label>
+        <label class="show-less-link" for="wasm-debugger-tab-more">Show less</label>
+    </div>
+      <img src="screenshots/wasm-debugger-tab.png" alt="Step through paused WASM at instruction precision screenshot">
+  </section>
+  <section class="feature reversed">
+    <div>
+      <p class="eyebrow">WASM inspection</p>
+      <h2>Keep investigating modules with parse problems</h2>
+      <p>The Problems tab preserves the readable part of a module and links each unparsed region back to WAT or its original bytes.</p>
+        <input class="more-toggle" type="checkbox" id="wasm-problems-tab-more">
+        <ul class="note-list">
+          <li><strong>Problems</strong> tab for WASM binaries. <span class="more-continuation">When the parser hits bytes it cannot decode (for example instructions from a not-yet-supported proposal), it no longer discards the whole function body.</span></li>
+          <li>Opening the <strong>Dependencies</strong> tab of a Component Model binary crashed with <code>NotImplementedError</code> when the core-instance section contained an entry the parser cannot decode. <span class="more-continuation">Such entries are now recorded as parse problems instead: an unknown instance-encoding tag consumes only the tag byte.</span></li>
+          <li>Navigating to a function in the <strong>WAT (virtualized)</strong> tab (from the Problems tab, go-to-function or search) landed on the wrong function in modules whose type section contains collapsed <code>(rec …)</code> groups: every collapsed group member before the target shifted the scroll one row further (clicking func 25 landed on func 83 in a 216-type WasmGC module). <span class="more-continuation">The scroll index now accounts for group-collapsed rows.</span></li>
+        </ul>
+        <label class="show-more-link" for="wasm-problems-tab-more">Show more</label>
+        <label class="show-less-link" for="wasm-problems-tab-more">Show less</label>
+    </div>
+      <img src="screenshots/wasm-problems-tab.png" alt="Keep investigating modules with parse problems screenshot">
+  </section>
+  <section class="feature">
+    <div>
+      <p class="eyebrow">Network captures</p>
+      <h2>Inspect PCAP and PCAPNG packets</h2>
+      <p>Open packet captures in Hexana, browse their packets, and open HTTP response bodies in a separate tab.</p>
+        <ul class="note-list">
+          <li>Basic support for pcap/pcapng files - viewing packets, opening http response body in a new tab.</li>
+        </ul>
+    </div>
+      <img src="screenshots/pcap-packet-inspection.png" alt="Inspect PCAP and PCAPNG packets screenshot">
+  </section>
+
+  <section class="notes">
+    <h2>Also in 0.17</h2>
+    <ul class="improvements">
+      <li>
+        <strong>Debug source-level state with more context</strong>
+        <span>Conditional breakpoints, reconstructed inlined frames, and DWARF-backed linear-memory variables make optimized and unoptimized WASM sessions easier to understand.</span>
+      </li>
+      <li>
+        <strong>Open TAR entries and gzip-compressed binaries directly</strong>
+        <span>Browse TAR entries in Hexana and inspect supported files such as .wasm.gz without manually unpacking them first.</span>
+      </li>
+      <li>
+        <strong>Read current WasmGC custom descriptors</strong>
+        <span>Type sections using custom-descriptor encodings now retain their alignment, so modules from current Kotlin/Wasm and J2CL toolchains remain inspectable.</span>
+      </li>
+    </ul>
+  </section>
+
+</main>
+</body>
+</html>
