@@ -65,6 +65,8 @@ consult-first / write-back rules.
   where licence texts come from, and what fails when a dependency has no reviewed text.
 - [[entities/leak-guard]] — what a clean-machine build of the public part needs and why (`CONTRIBUTING.md`), and the
   two leak-guard checks (private TeamCity/Patronus, public GitHub Action).
+- [[entities/top-size-tab]] — the shared Top (size) tab: nested modules/components expand under their parent, size-based
+  treemap depth, absolute offsets, the shared-slice-cursor gotcha, and the Components tab listing every nested component.
 
 ## Sources
 

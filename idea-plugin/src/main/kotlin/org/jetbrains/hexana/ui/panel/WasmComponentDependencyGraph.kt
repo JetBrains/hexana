@@ -704,15 +704,15 @@ private fun buildDependencyGraph(provider: WasmComponentBinaryProvider): Depende
     }
 
     // Nested components
-    val componentSection = provider.wasmModule?.componentSection
-    provider.nestedComponents.forEachIndexed { i, _ ->
-        val id = "component:$i"
+    provider.nestedComponents.forEachIndexed { i, nested ->
+        // Edges name components by their component index space index, not the list position.
+        val id = "component:${nested.componentIndex}"
         val exportCount = provider.nestedComponentExports(i).size
         nodes[id] = GraphNode(
-            id, NodeKind.NESTED_COMPONENT, "component $i", "$exportCount exports",
-            navigation = componentSection?.let {
-                GraphNavigation.NestedBinary(i, isComponent = true, it.contentOffset, it.contentSize)
-            },
+            id, NodeKind.NESTED_COMPONENT, "component ${nested.componentIndex}", "$exportCount exports",
+            navigation = GraphNavigation.NestedBinary(
+                i, isComponent = true, nested.section.contentOffset, nested.section.contentSize,
+            ),
         )
     }
 

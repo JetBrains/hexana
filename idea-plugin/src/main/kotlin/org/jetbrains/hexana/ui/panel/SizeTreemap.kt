@@ -81,7 +81,9 @@ internal fun SizeTreemap(
         // Draw labels on rectangles large enough to fit text.
         // Skip labels for group nodes that have visible children to avoid overlap.
         for (lr in rects) {
-            if (lr.depth > 1) continue
+            // Deeper leaves (inside large nested modules/components) only get a label when roomy,
+            // so dense levels such as individual functions stay unlabelled.
+            if (lr.depth > 1 && (lr.rect.width < MIN_DEEP_LABEL_WIDTH || lr.rect.height < MIN_DEEP_LABEL_HEIGHT)) continue
             if (lr.node.children.isNotEmpty()) continue
             drawNodeLabel(lr, textMeasurer, textColor)
         }
@@ -102,6 +104,8 @@ private const val MIN_CLICKABLE_SIZE = 4f
 private const val MIN_LABEL_WIDTH = 24f
 private const val MIN_LABEL_HEIGHT = 14f
 private const val LABEL_PADDING = 3f
+private const val MIN_DEEP_LABEL_WIDTH = 80f
+private const val MIN_DEEP_LABEL_HEIGHT = 18f
 
 private fun DrawScope.drawNodeLabel(
     lr: LayoutRect,
@@ -124,7 +128,8 @@ private fun DrawScope.drawNodeLabel(
     val measured = if (result.hasVisualOverflow) {
         val numberSuffix = lr.node.name.trimEnd().let { name ->
             val lastSpace = name.lastIndexOf(' ')
-            if (lastSpace >= 0) name.substring(lastSpace + 1) else null
+            // Only a numeric suffix ("func 453" -> "f#453"); "Custom: .debug_line" must not become "C#.debug_line".
+            if (lastSpace >= 0) name.substring(lastSpace + 1).takeIf { it.isNotEmpty() && it.all(Char::isDigit) } else null
         }
         if (numberSuffix != null) {
             val shortResult = textMeasurer.measure(
