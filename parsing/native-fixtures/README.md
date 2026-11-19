@@ -125,13 +125,14 @@ the three `sample-clr*.exe` assemblies converted to Webcil, the container a Blaz
 assemblies in, by the .NET SDK's own `WebcilConverter` (the same code `dotnet publish` runs). They are wrapped in
 the Wasm module the SDK emits; `sample-clr.webcil` is the bare `WbIL` payload. Because the input is the PE fixtures,
 `WebcilParserTest`, `WebcilAssemblyTest` and `WebcilTableTabsTest` check them against the PE decode, and the portable
-one matches `sample-clr-portable.pdb`. Rebuild them after the PE fixtures change (the converter comes from the
+one matches `sample-clr-portable.pdb`. `sample-clr-v2.webcil.wasm` is the head side of `WebcilDiffTest`, which
+expects the Webcil pair to diff exactly like the PE pair. Rebuild them after the PE fixtures change (the converter comes from the
 `microsoft.net.sdk.webassembly.pack` NuGet package; pass `-p:WebAssemblySdkPack=<dir>` for another version):
 
 ```bash
 cd parsing/native-fixtures/src/clr/webcil
 T=../../../test-data/pe
-for f in sample-clr sample-clr-portable sample-clr-embedded; do
+for f in sample-clr sample-clr-v2 sample-clr-portable sample-clr-embedded; do
   dotnet run -- "$T/$f.exe" "$T/$f.webcil.wasm"
 done
 dotnet run -- "$T/sample-clr.exe" "$T/sample-clr.webcil" --bare

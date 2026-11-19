@@ -141,3 +141,12 @@ Native libraries. Under managed code System.Private.CoreLib comes first; `Counte
 `void BuildRenderTree(RenderTreeBuilder __builder)` and `void IncrementCount()`; selecting a method highlights its code.
 The treemap shows the same tree. The interpreter-only module has no **.NET AOT** tab.
 
+### 14.17 Comparing Blazor WebAssembly builds
+**Steps:** Select `parsing/native-fixtures/test-data/pe/sample-clr.webcil.wasm` and `sample-clr-v2.webcil.wasm` and run
+**Compare Binaries With…**; open **Methods** and select `Hexana.Sample.Greeter::string Greet(string name)`. Then compare
+`sample-clr.exe` with `sample-clr.webcil.wasm`, and two plain `.wasm` modules.
+**Expected:** The Webcil pair shows **Size Impact**, **Types** and **Methods** (not Entities/Dispatch), with the same rows
+as comparing `sample-clr.exe` with `sample-clr-v2.exe`; the selected method's IL is side by side, `", "` removed and
+`", dear "` added. The `.exe`/`.wasm` pair of the same assembly reports no type or method changes. Plain modules still
+get the Wasm module diff.
+
