@@ -104,6 +104,8 @@ class WebcilAssembly(private val sharedBytes: CommonByteBuffer, val image: Webci
                 }
                 // Custom (0) and type (1) sections may precede the imports; anything later means there are none.
                 if (id > IMPORT_SECTION_ID) return false
+                // A declared size past the end is a truncated or malformed module, not a reason to wrap around.
+                if (size > bytes.size - sizeEnd) return false
                 position = sizeEnd + size
             }
             return false

@@ -5,6 +5,7 @@ import {
     directoryListing,
     directoryListingFailure,
     listDirectory,
+    MAX_CONCURRENT_OPERATIONS,
     MAX_HASHED_FILE_BYTES,
 } from '../../../src/directoryListing';
 
@@ -54,6 +55,56 @@ describe('directory listing', function () {
         expect(entries.find((e) => e.name === 'app.abc.wasm.br')?.sha256).to.equal(undefined);
         expect(entries.find((e) => e.name === 'huge.dat')?.sha256).to.equal(undefined);
         expect(entries.find((e) => e.name === 'gone.js')?.sha256).to.equal(undefined);
+    });
+
+    it('runs a bounded number of file system operations at once', async function () {
+        let inFlight = 0;
+        let peak = 0;
+        const track = async <T>(value: T): Promise<T> => {
+            inFlight++;
+            peak = Math.max(peak, inFlight);
+            await new Promise((resolve) => setTimeout(resolve, 1));
+            inFlight--;
+            return value;
+        };
+        const names = Array.from({length: 100}, (_, i) => `f${i}.wasm`);
+        const many: DirectoryFileSystem = {
+            readDirectory: async () => names.map((n): [string, number] => [n, 1]),
+            stat: (path) => track({type: 1, size: 4}),
+            readFile: (path) => track(new Uint8Array(4)),
+        };
+        const entries = await listDirectory(many, '/fw', names);
+        expect(entries.length).to.equal(100);
+        expect(entries.every((e) => e.sha256 !== undefined)).to.equal(true);
+        expect(peak).to.be.at.most(MAX_CONCURRENT_OPERATIONS);
+    });
+
+    it('stops hashing at the total budget without reading the files past it', async function () {
+        const limits = {maxHashedFileBytes: 100, maxHashedTotalBytes: 250, maxConcurrentOperations: 2};
+        const names = ['a.wasm', 'b.wasm', 'c.wasm', 'd.wasm'];
+        const reads: string[] = [];
+        const sized: DirectoryFileSystem = {
+            readDirectory: async () => names.map((n): [string, number] => [n, 1]),
+            stat: async () => ({type: 1, size: 100}),
+            readFile: async (path) => {
+                reads.push(path);
+                return new Uint8Array(100);
+            },
+        };
+        const entries = await listDirectory(sized, '/fw', names, limits);
+        expect(entries.filter((e) => e.sha256 !== undefined).map((e) => e.name)).to.deep.equal(['a.wasm', 'b.wasm']);
+        expect(reads).to.deep.equal(['/fw/a.wasm', '/fw/b.wasm']);
+    });
+
+    it('does not hash a file whose size changed between the stat and the read', async function () {
+        const grown: DirectoryFileSystem = {
+            readDirectory: async () => [['grew.wasm', 1]],
+            stat: async () => ({type: 1, size: 4}),
+            readFile: async () => new Uint8Array(5),
+        };
+        const entries = await listDirectory(grown, '/fw', ['grew.wasm']);
+        expect(entries[0].size).to.equal(4);
+        expect(entries[0].sha256).to.equal(undefined);
     });
 
     it('replies with one message shape for success and failure', function () {

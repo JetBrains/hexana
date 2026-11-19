@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.vscode
 
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.*
 import org.jetbrains.compose.web.css.*
 import org.jetbrains.compose.web.dom.Div
@@ -536,6 +537,11 @@ private suspend fun loadBlazorBundle(
 /**
  * The .NET AOT breakdown of [wasm], the app's runtime module: reads the app's assemblies through the
  * extension host for their metadata. Nothing is read for an interpreter-only build or without symbol names.
+ *
+ * The webview has one thread, and parsing ~35 assemblies' metadata and attributing ~55,000 functions is
+ * a few hundred milliseconds of work even on the JVM. It runs after the first paint and hands the event
+ * loop back between assemblies and between batches of functions ([yieldToBrowser]), so the editor stays
+ * responsive while the tab is computed.
  */
 private suspend fun loadMonoAotReport(host: Host, wasm: WasmBinaryProvider, bundle: BlazorBundle): MonoAotReport? {
     val files = MonoAotReport.assembliesToRead(wasm, bundle).takeIf { it.isNotEmpty() } ?: return null
@@ -547,10 +553,18 @@ private suspend fun loadMonoAotReport(host: Host, wasm: WasmBinaryProvider, bund
         } catch (_: Throwable) {
             null
         }
-        MonoAotAssembly(name, bytes?.let(MonoAotReport::metadataOf))
+        val metadata = bytes?.let(MonoAotReport::metadataOf)
+        yieldToBrowser()
+        MonoAotAssembly(name, metadata)
     }
-    return MonoAotReport.build(wasm, assemblies)
+    return MonoAotReport.build(wasm, assemblies, pause = ::yieldToBrowser)
 }
+
+/**
+ * Lets the browser run input, layout and paint before the next slice of work. `yield()` would resume on
+ * the same dispatcher without leaving the current task; a timer is a new macrotask.
+ */
+private suspend fun yieldToBrowser() = delay(1)
 
 /** Reads [candidates] in order through the extension host and attaches the first symbol map that fits. */
 private suspend fun loadSymbolMapCompanion(provider: WasmBinaryProvider, candidates: List<String>, host: Host) {
