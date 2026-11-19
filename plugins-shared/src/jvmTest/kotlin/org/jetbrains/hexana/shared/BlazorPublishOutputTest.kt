@@ -3,6 +3,8 @@ package org.jetbrains.hexana.shared
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.createBinaryProvider
+import org.jetbrains.hexana.shared.blazor.BlazorBundle
+import org.jetbrains.hexana.shared.blazor.BlazorIntegrity
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -48,21 +50,35 @@ class BlazorPublishOutputTest {
     }
 
     @Test
+    fun `the published bundle matches its manifest`() {
+        val framework = dir("HEXANA_BLAZOR_FRAMEWORK_DIR") ?: return
+        val core = framework.listFiles { f -> f.name.startsWith("System.Private.CoreLib.") && f.name.endsWith(".wasm") }.orEmpty().single()
+        val started = System.nanoTime()
+        val bundle = assertNotNull(BlazorBundle.load(core.path, fileSystem, verifyIntegrity = true))
+        val millis = (System.nanoTime() - started) / 1_000_000
+        println("Blazor bundle: ${bundle.files.size} files, ${bundle.files.sumOf { it.size ?: 0 }} bytes hashed in $millis ms")
+        assertEquals(emptyList(), bundle.files.filter { it.integrity != BlazorIntegrity.Matches && it.integrity != BlazorIntegrity.NoHash }.map { "${it.resource.fileName}: ${it.integrity}" })
+        assertTrue(bundle.files.count { it.integrity == BlazorIntegrity.Matches } > 30)
+        assertEquals("System.Private.CoreLib.wasm", bundle.current?.resource?.virtualPath)
+    }
+
+    private val fileSystem = object : FileSystem {
+        override fun listEntries(dir: String) = File(dir).listFiles().orEmpty().map { FileEntry(it.name, it.isDirectory, it.isFile) }
+        override fun readFile(path: String) = File(path).takeIf { it.isFile }?.readBytes()
+        override fun fileExists(path: String) = File(path).isFile
+        override fun parentDir(path: String): String = File(path).parent
+        override fun joinPath(base: String, child: String): String = File(base, child).path
+        override fun pathRoot(path: String) = "/"
+        override fun regularFileSize(path: String) = File(path).takeIf { it.isFile }?.length()
+    }
+
+    @Test
     fun `the runtime's symbol map names its functions`() {
         val native = dir("HEXANA_BLAZOR_RUNTIME_NATIVE_DIR") ?: return
         val file = native.resolve("dotnet.native.wasm")
         val provider = wasm(file)
         assertNull(provider.nameSection?.functionSubsection)
-        val fs = object : FileSystem {
-            override fun listEntries(dir: String) = File(dir).listFiles().orEmpty().map { FileEntry(it.name, it.isDirectory, it.isFile) }
-            override fun readFile(path: String) = File(path).takeIf { it.isFile }?.readBytes()
-            override fun fileExists(path: String) = File(path).isFile
-            override fun parentDir(path: String): String = File(path).parent
-            override fun joinPath(base: String, child: String): String = File(base, child).path
-            override fun pathRoot(path: String) = "/"
-            override fun regularFileSize(path: String) = File(path).takeIf { it.isFile }?.length()
-        }
-        assertTrue(WasmSymbolMapCompanionLoader.load(provider, file.path, fs))
+        assertTrue(WasmSymbolMapCompanionLoader.load(provider, file.path, fileSystem))
         val names = assertNotNull(provider.nameSection?.functionSubsection?.namemap)
         assertEquals(provider.functionIndexSpaceSize, names.size)
         assertTrue(names.values.any { it.startsWith("mono_") })

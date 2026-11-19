@@ -117,3 +117,15 @@ build (or an edited copy with `0:wrong_name` on every import line) beside it and
 **Expected:** Functions carry Mono names (`mono_wasm_load_runtime`, `mono_runtime_invoke`, …) instead of bare indices. The
 mismatching map is ignored and the functions stay unnamed.
 
+### 14.15 Blazor App tab
+**Steps:** `dotnet publish -c Release` a `dotnet new blazorwasm` app and open
+`bin/…/publish/wwwroot/_framework/System.Private.CoreLib.*.wasm`, then `dotnet.native.*.wasm`. Open **Blazor App**.
+Then copy the `_framework` directory, change one byte of the app's own `app.*.wasm` copy, delete one `System.*.wasm`,
+and open the changed file.
+**Expected:** The tab lists every manifest file (runtime first, then core assemblies and assemblies by download size,
+ICU data, JS modules) with Size, Brotli and Gzip columns; Integrity reads `matches` for all. The text above says the
+manifest is `dotnet.<hash>.js (embedded, .NET 10+)` (or `blazor.boot.json (.NET 8/9)` for a .NET 9 app), the startup
+download (about 2 MB Brotli for the template app), the three ICU shards, `Globalization sharded, trimmed, debugging off`,
+and which file is open. In the edited copy the changed file's row is tinted and reads `differs from the manifest`, the
+deleted one `file missing`, and both are named above the table. A `.wasm` that is not in the manifest gets no tab.
+

@@ -3,6 +3,8 @@ package org.jetbrains.hexana.shared
 import org.jetbrains.hexana.shared.inspections.BinaryProblem
 import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.shared.features.WasmRuntimeCompatibility
+import org.jetbrains.hexana.shared.blazor.BlazorBundle
+import org.jetbrains.hexana.shared.blazor.BlazorBundleTableTabsProvider
 
 /**
  * Priority level for tab ordering.
@@ -471,6 +473,11 @@ class TableTabsContext(
     val openRuntimeSettings: (() -> Unit)? = null,
     val hostProblems: List<BinaryProblem> = emptyList(),
     val problemNavigator: ProblemNavigator? = null,
+    /**
+     * The Blazor WebAssembly app the file belongs to, read from its directory by the host
+     * ([BlazorBundle.load]); drives the Blazor App tab.
+     */
+    val blazorBundle: BlazorBundle? = null,
 )
 
 object TableTabsProviderRegistry {
@@ -478,6 +485,7 @@ object TableTabsProviderRegistry {
         listOf(
             WasmComponentTableTabsProvider(),
             WasmTableTabsProvider(),
+            BlazorBundleTableTabsProvider(),
             NativeTableTabsProvider(),
             ArchiveTableTabsProvider(),
             ZipTableTabsProvider(),

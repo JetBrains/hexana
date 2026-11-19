@@ -1,5 +1,6 @@
 package org.jetbrains.hexana.vscode
 
+import org.jetbrains.hexana.shared.blazor.BlazorBundle
 import org.jetbrains.hexana.shared.PROBLEMS_TAB_NAME
 import org.jetbrains.hexana.shared.isPartialView
 import org.jetbrains.hexana.shared.largeFileNotice
@@ -186,6 +187,8 @@ fun BinaryEditorContent(
      * fetch bytes beyond [provider]'s head ([PagedHexBytes]); `null` shows the provider's bytes.
      */
     hexBytes: HexBytes? = null,
+    /** The Blazor WebAssembly app [provider] belongs to, when the host read its directory. */
+    blazorBundle: BlazorBundle? = null,
     /**
      * What the tabs cover while the host is still fetching the structures [provider] reads past
      * its head ([StructureBytesFetcher.coverageOverride]); `null` leaves it to the provider.
@@ -538,6 +541,7 @@ fun BinaryEditorContent(
                 scriptExecution = scriptExecution,
                 sslKeyLogGeneration = sslKeyLogGeneration,
                 runtimeCompatibility = runtimeCompatibility,
+                blazorBundle = blazorBundle,
                 onConfigureRuntimes = if (host.canEditRuntimeTargets) {
                     { showRuntimeTargetsDialog = true }
                 } else {
