@@ -81,6 +81,51 @@ class WebcilAssembly(private val sharedBytes: CommonByteBuffer, val image: Webci
 
     companion object {
         /**
+         * True when [bytes] is a core Wasm module whose first import comes from `webcil` — the wrapper
+         * shape every SDK emits. Walks the section headers up to the import section and reads one name,
+         * without parsing the module, so callers sniffing many files (a diff, a file list) stay cheap.
+         * [locate] still decides; this only nominates.
+         */
+        fun isWebcilModule(bytes: CommonByteBuffer): Boolean {
+            if (bytes.size < 8) return false
+            val header = byteArrayOf(0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00)
+            for (i in header.indices) if (bytes[i] != header[i]) return false
+            var position = 8
+            while (position < bytes.size) {
+                val id = bytes[position].toInt() and 0xFF
+                val (size, sizeEnd) = readUleb(bytes, position + 1) ?: return false
+                if (id == IMPORT_SECTION_ID) {
+                    val (count, countEnd) = readUleb(bytes, sizeEnd) ?: return false
+                    if (count == 0) return false
+                    val (length, nameStart) = readUleb(bytes, countEnd) ?: return false
+                    val module = WebcilParser.WASM_WRAPPER_IMPORT_MODULE
+                    if (length != module.length || nameStart + length > bytes.size) return false
+                    return module.indices.all { bytes[nameStart + it].toInt() == module[it].code }
+                }
+                // Custom (0) and type (1) sections may precede the imports; anything later means there are none.
+                if (id > IMPORT_SECTION_ID) return false
+                position = sizeEnd + size
+            }
+            return false
+        }
+
+        private const val IMPORT_SECTION_ID = 2
+
+        /** A ULEB128 `u32` at [offset]: the value and the offset after it, or null past the buffer. */
+        private fun readUleb(bytes: CommonByteBuffer, offset: Int): Pair<Int, Int>? {
+            var result = 0L
+            var shift = 0
+            var position = offset
+            while (position < bytes.size && shift < 35) {
+                val byte = bytes[position++].toInt() and 0xFF
+                result = result or ((byte and 0x7F).toLong() shl shift)
+                if (byte and 0x80 == 0) return result.takeIf { it <= Int.MAX_VALUE }?.let { it.toInt() to position }
+                shift += 7
+            }
+            return null
+        }
+
+        /**
          * Finds the Webcil payload of a Wasm wrapper module: the module imports from `webcil` and one
          * of its data segments starts with `WbIL` (segment 1 in every SDK so far; segment 0
          * holds the payload size). Null for any other module.

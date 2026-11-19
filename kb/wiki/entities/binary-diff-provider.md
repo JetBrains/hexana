@@ -17,8 +17,9 @@ Per-function native diff was next, so it needed one abstraction first.
 ```
 BinaryDiffInput(left, right, leftName, rightName, symbol maps)
         │  BinaryDiffProviderRegistry.forInput — first accepting provider wins:
-        │    WasmComponentDiffProvider (both components) → WasmModuleDiffProvider (both core)
-        │    → ClrDiffProvider (both managed PE) → NativeDiffProvider (neither is Wasm).  A mixed pair has none → "cannot compare".
+        │    WasmComponentDiffProvider (both components) → ClrDiffProvider (both .NET assemblies:
+        │    managed PE or Webcil) → WasmModuleDiffProvider (both core) → NativeDiffProvider (neither is Wasm).
+        │    A mixed pair has none → "cannot compare".
         ▼
 BinaryDiffSession(tabs: List<DiffTab>, banner: () -> lines, detail: DiffDetailSource?)
    DiffTab(name, loadingMessage, compute: (DiffTabContext) -> DiffTabContent)
@@ -87,6 +88,8 @@ pair only when both sides are PE images with a CLR header (`PeBinaryProvider.isM
 native PE still goes to the native provider. Tabs: **Size Impact** (the native one, which already nests CLR metadata /
 IL bodies / R2R code via `clrSizeAnalysis`), **Types**, **Methods**; detail = IL side by side. Pinned by
 `ClrDiffProviderTest` (jvmTest) over `pe/sample-clr.exe` → `pe/sample-clr-v2.exe` (`src/clr/diff/SampleV2.cs`).
+Since 2026-11-16 it also takes Blazor WebAssembly (Webcil) modules, alone or against a PE, and so sits ahead of the
+module diff; see [[entities/blazor-wasm-feasibility]] (step 5, `WebcilDiffTest`).
 
 - **Compare rendered IL, not bytes.** Any new type, MemberRef or `#US` string renumbers tokens, so raw IL of untouched
   methods changes. Each method is rendered once per side with `clrIlMethodRows` (tokens resolved to names, gutter

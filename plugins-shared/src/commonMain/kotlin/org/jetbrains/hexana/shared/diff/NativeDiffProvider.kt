@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.shared.diff
 
 import org.jetbrains.hexana.io.CommonByteBuffer
+import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormatDetector
 import org.jetbrains.hexana.providers.BinaryProviderType
@@ -71,10 +72,16 @@ data class NativeSizeRow(
     val delta: Int,
 )
 
-/** Parses both sides and diffs their section sizes; `null` when either side has no size analysis. */
-fun nativeSizeDiff(input: BinaryDiffInput): NativeSizeDiff? {
-    val leftSize = nativeOrGenericBinaryProvider(input.left.duplicate()).sizeAnalysis ?: return null
-    val rightSize = nativeOrGenericBinaryProvider(input.right.duplicate()).sizeAnalysis ?: return null
+/**
+ * Parses both sides and diffs their section sizes; `null` when either side has no size analysis.
+ * [sizeOf] builds one side's size tree: the native provider's by default, the assembly's for .NET.
+ */
+fun nativeSizeDiff(
+    input: BinaryDiffInput,
+    sizeOf: (CommonByteBuffer) -> BinarySizeNode? = { nativeOrGenericBinaryProvider(it).sizeAnalysis },
+): NativeSizeDiff? {
+    val leftSize = sizeOf(input.left.duplicate()) ?: return null
+    val rightSize = sizeOf(input.right.duplicate()) ?: return null
     val diff = BinarySizeDiff.diff(leftSize, rightSize)
     return NativeSizeDiff(diff.sizeA, diff.sizeB, diff.delta, nativeSizeRows(diff))
 }
@@ -98,8 +105,11 @@ internal fun nativeSizeRows(root: SizeDiffNode): List<NativeSizeRow> {
 private fun SizeDiffNode.toNativeRow(prefix: String = "") =
     NativeSizeRow(prefix + displayName, classification, sizeA, sizeB, delta)
 
-internal fun nativeSizeTab(input: BinaryDiffInput): DiffTabContent {
-    val diff = nativeSizeDiff(input)
+internal fun nativeSizeTab(
+    input: BinaryDiffInput,
+    sizeOf: (CommonByteBuffer) -> BinarySizeNode? = { nativeOrGenericBinaryProvider(it).sizeAnalysis },
+): DiffTabContent {
+    val diff = nativeSizeDiff(input, sizeOf)
         ?: return DiffTabContent(emptyMessage = "Size analysis is not available for one or both binaries.")
     val rows = diff.rows
     val changed = rows.filter { it.classification != DiffClass.IDENTICAL }

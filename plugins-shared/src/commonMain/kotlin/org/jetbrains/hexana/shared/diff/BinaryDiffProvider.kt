@@ -152,8 +152,9 @@ object BinaryDiffProviderRegistry {
     val providers: List<BinaryDiffProvider> by lazy {
         listOf(
             WasmComponentDiffProvider(),
-            WasmModuleDiffProvider(),
+            // Before the module diff: a Blazor WebAssembly (Webcil) pair is a .NET assembly diff.
             ClrDiffProvider(),
+            WasmModuleDiffProvider(),
             NativeDiffProvider(),
         )
     }
