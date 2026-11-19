@@ -1569,7 +1569,7 @@ interface MachOBinaryProvider extends NativeBinaryProvider {
   };
 }
 
-interface PeBinaryProvider extends NativeBinaryProvider {
+interface PeBinaryProvider extends NativeBinaryProvider, ClrAssemblySource {
   attachment?: {
     sourceLocations: {
       value: T;
@@ -1632,6 +1632,7 @@ interface PeBinaryProvider extends NativeBinaryProvider {
     targetRva: number;
     type: number;
   }[];
+  clrMachine?: number;
   clrMetadata?: {
     assembly?: {
       culture: string;
@@ -3000,6 +3001,7 @@ interface WasmBinaryProvider extends BinaryProvider {
     offset: number;
     size: number;
   }[];
+  functionIndexSpaceSize: number;
   functions: {
     hasDescriptorClause: boolean;
     isFinal: boolean;
@@ -3198,6 +3200,44 @@ interface WasmBinaryProvider extends BinaryProvider {
       sectionSize: number;
     }[];
   };
+  parsedNameSection?: {
+    dataSegmentsNameSection?: {
+      namemap: Record<number, string>;
+    };
+    elemsNameSection?: {
+      namemap: Record<number, string>;
+    };
+    fieldsNameSection?: {
+      namemap: Record<number, Record<number, string>>;
+    };
+    functionSubsection?: {
+      namemap: Record<number, string>;
+    };
+    globalsNameSection?: {
+      namemap: Record<number, string>;
+    };
+    labelsSection?: {
+      namemap: Record<number, Record<number, string>>;
+    };
+    localsSection?: {
+      namemap: Record<number, Record<number, string>>;
+    };
+    memoriesNameSection?: {
+      namemap: Record<number, string>;
+    };
+    moduleSubsection?: {
+      moduleName: string;
+    };
+    tablesNameSection?: {
+      namemap: Record<number, string>;
+    };
+    tagsNameSection?: {
+      namemap: Record<number, string>;
+    };
+    typesSection?: {
+      namemap: Record<number, string>;
+    };
+  };
   sectionScanFailures: {
     byteOffset: number;
     kind: "TRUNCATED" | "RESOLVER_FAILURE";
@@ -3323,6 +3363,45 @@ interface WasmBinaryProvider extends BinaryProvider {
     size: number;
     tabName?: string;
   }[];
+  symbolMapOverlay?: {
+    dataSegmentsNameSection?: {
+      namemap: Record<number, string>;
+    };
+    elemsNameSection?: {
+      namemap: Record<number, string>;
+    };
+    fieldsNameSection?: {
+      namemap: Record<number, Record<number, string>>;
+    };
+    functionSubsection?: {
+      namemap: Record<number, string>;
+    };
+    globalsNameSection?: {
+      namemap: Record<number, string>;
+    };
+    labelsSection?: {
+      namemap: Record<number, Record<number, string>>;
+    };
+    localsSection?: {
+      namemap: Record<number, Record<number, string>>;
+    };
+    memoriesNameSection?: {
+      namemap: Record<number, string>;
+    };
+    moduleSubsection?: {
+      moduleName: string;
+    };
+    tablesNameSection?: {
+      namemap: Record<number, string>;
+    };
+    tagsNameSection?: {
+      namemap: Record<number, string>;
+    };
+    typesSection?: {
+      namemap: Record<number, string>;
+    };
+  };
+  symbolMapPath?: string;
   typeGraphIndex?: {
     fieldRefsOf: {
       size: number;
@@ -3724,6 +3803,788 @@ interface WasmBinaryProvider extends BinaryProvider {
       };
       sectionSize: number;
     }[];
+  };
+  webcil?: {
+    attachedPdb?: {
+      documents: {
+        hash: string;
+        hashAlgorithm?: string;
+        language?: string;
+        name: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+      }[];
+      header: {
+        entryPointToken: number;
+        guid: string;
+        range: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        referencedTableRows: Record<number, number>;
+        stamp: number;
+      };
+      methodDebugInformationCount: number;
+      methodsWithSequencePoints: number;
+      sequencePointReader: Function1;
+    };
+    bytes: {
+      indices: {
+        endExclusive: number;
+        endInclusive: number;
+        first: number;
+        last: number;
+        start: number;
+        step: number;
+      };
+      lastIndex: number;
+      size: number;
+    };
+    clrMachine?: number;
+    clrMetadata?: {
+      assembly?: {
+        culture: string;
+        flags: number;
+        hashAlgorithm: number;
+        name: string;
+        publicKey: number[];
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        version: {
+          build: number;
+          major: number;
+          minor: number;
+          revision: number;
+        };
+      };
+      assemblyRefs: {
+        culture: string;
+        flags: number;
+        name: string;
+        publicKeyOrToken: number[];
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+        token: number;
+        version: {
+          build: number;
+          major: number;
+          minor: number;
+          revision: number;
+        };
+      }[];
+      diagnostics: {
+        code: string;
+        message: string;
+        range?: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        severity: "Info" | "Warning" | "Error";
+      }[];
+      entryPoint?: string;
+      fields: {
+        declaringTypeRow: number;
+        flags: number;
+        name: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+        token: number;
+        type: string;
+      }[];
+      fieldsByType: Record<number, {
+        declaringTypeRow: number;
+        flags: number;
+        name: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+        token: number;
+        type: string;
+      }[]>;
+      header: {
+        entryPointToken: number;
+        flags: number;
+        hasNativeEntryPoint: boolean;
+        headerRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        isIlOnly: boolean;
+        isStrongNameSigned: boolean;
+        majorRuntimeVersion: number;
+        managedNativeHeaderRva: number;
+        managedNativeHeaderSize: number;
+        metadataRva: number;
+        metadataSize: number;
+        minorRuntimeVersion: number;
+        prefers32Bit: boolean;
+        requires32Bit: boolean;
+        resourcesRva: number;
+        resourcesSize: number;
+        size: number;
+        strongNameSignatureRva: number;
+        strongNameSignatureSize: number;
+        vTableFixupsRva: number;
+        vTableFixupsSize: number;
+      };
+      manifestResources: {
+        dataRange?: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        flags: number;
+        implementation: string;
+        isPublic: boolean;
+        name: string;
+        offset: number;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+        size?: number;
+      }[];
+      memberRefs: {
+        isField: boolean;
+        name: string;
+        parent: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+        signature: string;
+        token: number;
+      }[];
+      methods: {
+        body?: {
+          codeRange: {
+            end: number;
+            endExclusive: number;
+            fitsInt: boolean;
+            length: number;
+            offset: number;
+            size: number;
+            start: number;
+          };
+          codeSize: number;
+          exceptionClauses: {
+            catchType?: string;
+            filterOffset?: number;
+            handlerLength: number;
+            handlerOffset: number;
+            kind: "Catch" | "Filter" | "Finally" | "Fault";
+            tryLength: number;
+            tryOffset: number;
+          }[];
+          exceptionSectionsRange?: {
+            end: number;
+            endExclusive: number;
+            fitsInt: boolean;
+            length: number;
+            offset: number;
+            size: number;
+            start: number;
+          };
+          hasExceptionSections: boolean;
+          initLocals: boolean;
+          isFat: boolean;
+          localVarSigToken: number;
+          maxStack: number;
+          range: {
+            end: number;
+            endExclusive: number;
+            fitsInt: boolean;
+            length: number;
+            offset: number;
+            size: number;
+            start: number;
+          };
+        };
+        declaringTypeRow: number;
+        flags: number;
+        implFlags: number;
+        name: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+        rva: number;
+        signature: string;
+        token: number;
+      }[];
+      methodsByType: Record<number, {
+        body?: {
+          codeRange: {
+            end: number;
+            endExclusive: number;
+            fitsInt: boolean;
+            length: number;
+            offset: number;
+            size: number;
+            start: number;
+          };
+          codeSize: number;
+          exceptionClauses: {
+            catchType?: string;
+            filterOffset?: number;
+            handlerLength: number;
+            handlerOffset: number;
+            kind: "Catch" | "Filter" | "Finally" | "Fault";
+            tryLength: number;
+            tryOffset: number;
+          }[];
+          exceptionSectionsRange?: {
+            end: number;
+            endExclusive: number;
+            fitsInt: boolean;
+            length: number;
+            offset: number;
+            size: number;
+            start: number;
+          };
+          hasExceptionSections: boolean;
+          initLocals: boolean;
+          isFat: boolean;
+          localVarSigToken: number;
+          maxStack: number;
+          range: {
+            end: number;
+            endExclusive: number;
+            fitsInt: boolean;
+            length: number;
+            offset: number;
+            size: number;
+            start: number;
+          };
+        };
+        declaringTypeRow: number;
+        flags: number;
+        implFlags: number;
+        name: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+        rva: number;
+        signature: string;
+        token: number;
+      }[]>;
+      module?: {
+        generation: number;
+        mvid?: string;
+        name: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+      };
+      moduleRefs: {
+        name: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+      }[];
+      portablePdb?: {
+        documents: {
+          hash: string;
+          hashAlgorithm?: string;
+          language?: string;
+          name: string;
+          recordRange: {
+            end: number;
+            endExclusive: number;
+            fitsInt: boolean;
+            length: number;
+            offset: number;
+            size: number;
+            start: number;
+          };
+          row: number;
+        }[];
+        header: {
+          entryPointToken: number;
+          guid: string;
+          range: {
+            end: number;
+            endExclusive: number;
+            fitsInt: boolean;
+            length: number;
+            offset: number;
+            size: number;
+            start: number;
+          };
+          referencedTableRows: Record<number, number>;
+          stamp: number;
+        };
+        methodDebugInformationCount: number;
+        methodsWithSequencePoints: number;
+        sequencePointReader: Function1;
+      };
+      qualifiedTokens: ClrTokenResolver;
+      readyToRun: boolean;
+      root?: {
+        flags: number;
+        majorVersion: number;
+        minorVersion: number;
+        range: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        streamCount: number;
+        version: string;
+      };
+      streams: {
+        contentRange?: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        headerRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        index: number;
+        name: string;
+        offset: number;
+        size: number;
+      }[];
+      tables: {
+        id: number;
+        name: string;
+        range?: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        rowCount: number;
+        rowSize: number;
+        sorted: boolean;
+      }[];
+      tablesHeader?: {
+        heapSizes: number;
+        majorVersion: number;
+        minorVersion: number;
+        range: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        sortedMask: number;
+        streamName: string;
+        validMask: number;
+      };
+      targetFramework?: string;
+      tokens: ClrTokenResolver;
+      typeDefs: {
+        enclosingTypeRow?: number;
+        extends?: string;
+        flags: number;
+        fullName: string;
+        genericParameters: string[];
+        interfaces: string[];
+        kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module";
+        name: string;
+        namespace: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+        token: number;
+      }[];
+      typeRefs: {
+        fullName: string;
+        name: string;
+        namespace: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+        scope: string;
+        token: number;
+      }[];
+      userStrings: {
+        heapOffset: number;
+        range: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        token: number;
+        value: string;
+      }[];
+    };
+    debugEntries: {
+      addressOfRawData: number;
+      codeView?: {
+        age?: number;
+        guid?: string;
+        pdbPath?: string;
+        signature: string;
+      };
+      dataRange?: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      index: number;
+      isPortablePdbCodeView: boolean;
+      majorVersion: number;
+      minorVersion: number;
+      pointerToRawData: number;
+      recordRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      sizeOfData: number;
+      timeDateStamp: number;
+      type: number;
+    }[];
+    embeddedPortablePdb?: {
+      documents: {
+        hash: string;
+        hashAlgorithm?: string;
+        language?: string;
+        name: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+      }[];
+      header: {
+        entryPointToken: number;
+        guid: string;
+        range: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        referencedTableRows: Record<number, number>;
+        stamp: number;
+      };
+      methodDebugInformationCount: number;
+      methodsWithSequencePoints: number;
+      sequencePointReader: Function1;
+    };
+    image: {
+      diagnostics: {
+        code: string;
+        message: string;
+        range?: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        severity: "Info" | "Warning" | "Error";
+      }[];
+      header: {
+        cliHeaderRva: number;
+        cliHeaderSize: number;
+        debugDirectoryRva: number;
+        debugDirectorySize: number;
+        range: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        sectionCount: number;
+        versionMajor: number;
+        versionMinor: number;
+      };
+      optionalHeader: {
+        addressOfEntryPoint: number;
+        dataDirectories: {
+          index: number;
+          name: string;
+          recordRange: {
+            end: number;
+            endExclusive: number;
+            fitsInt: boolean;
+            length: number;
+            offset: number;
+            size: number;
+            start: number;
+          };
+          rva: number;
+          size: number;
+        }[];
+        dataDirectoryCount: number;
+        dllCharacteristics: number;
+        fileAlignment: number;
+        headerRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        imageBase: number;
+        magic: number;
+        sectionAlignment: number;
+        sizeOfHeaders: number;
+        sizeOfImage: number;
+        subsystem: number;
+        wordSize: "Bits32" | "Bits64" | "Unknown";
+      };
+      payloadRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      sections: {
+        characteristics: number;
+        contentRange?: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        headerRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        index: number;
+        lineNumberCount: number;
+        lineNumberPointer: number;
+        name: string;
+        rawDataPointer: number;
+        rawDataSize: number;
+        relocationCount: number;
+        relocationPointer: number;
+        virtualAddress: number;
+        virtualSize: number;
+      }[];
+    };
+    pdbReference?: {
+      guid: string;
+      label: string;
+      path?: string;
+    };
+    portablePdb?: {
+      documents: {
+        hash: string;
+        hashAlgorithm?: string;
+        language?: string;
+        name: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+      }[];
+      header: {
+        entryPointToken: number;
+        guid: string;
+        range: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        referencedTableRows: Record<number, number>;
+        stamp: number;
+      };
+      methodDebugInformationCount: number;
+      methodsWithSequencePoints: number;
+      sequencePointReader: Function1;
+    };
+    sharedBytes: {
+      indices: {
+        endExclusive: number;
+        endInclusive: number;
+        first: number;
+        last: number;
+        start: number;
+        step: number;
+      };
+      lastIndex: number;
+      size: number;
+    };
+    sizeAnalysis?: {
+      children: BinarySizeNode[];
+      name: string;
+      offset: number;
+      size: number;
+    };
   };
 }
 
@@ -21272,6 +22133,1689 @@ interface WasmValueSection {
 
 interface WasmValueType {
   code: T;
+}
+
+interface WebcilAssembly {
+  attachedPdb?: {
+    documents: {
+      hash: string;
+      hashAlgorithm?: string;
+      language?: string;
+      name: string;
+      recordRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      row: number;
+    }[];
+    header: {
+      entryPointToken: number;
+      guid: string;
+      range: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      referencedTableRows: Record<number, number>;
+      stamp: number;
+    };
+    methodDebugInformationCount: number;
+    methodsWithSequencePoints: number;
+    sequencePointReader: Function1;
+  };
+  bytes: {
+    indices: {
+      endExclusive: number;
+      endInclusive: number;
+      first: number;
+      last: number;
+      start: number;
+      step: number;
+    };
+    lastIndex: number;
+    size: number;
+  };
+  clrMachine?: number;
+  clrMetadata?: {
+    assembly?: {
+      culture: string;
+      flags: number;
+      hashAlgorithm: number;
+      name: string;
+      publicKey: number[];
+      recordRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      version: {
+        build: number;
+        major: number;
+        minor: number;
+        revision: number;
+      };
+    };
+    assemblyRefs: {
+      culture: string;
+      flags: number;
+      name: string;
+      publicKeyOrToken: number[];
+      recordRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      row: number;
+      token: number;
+      version: {
+        build: number;
+        major: number;
+        minor: number;
+        revision: number;
+      };
+    }[];
+    diagnostics: {
+      code: string;
+      message: string;
+      range?: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      severity: "Info" | "Warning" | "Error";
+    }[];
+    entryPoint?: string;
+    fields: {
+      declaringTypeRow: number;
+      flags: number;
+      name: string;
+      recordRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      row: number;
+      token: number;
+      type: string;
+    }[];
+    fieldsByType: Record<number, {
+      declaringTypeRow: number;
+      flags: number;
+      name: string;
+      recordRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      row: number;
+      token: number;
+      type: string;
+    }[]>;
+    header: {
+      entryPointToken: number;
+      flags: number;
+      hasNativeEntryPoint: boolean;
+      headerRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      isIlOnly: boolean;
+      isStrongNameSigned: boolean;
+      majorRuntimeVersion: number;
+      managedNativeHeaderRva: number;
+      managedNativeHeaderSize: number;
+      metadataRva: number;
+      metadataSize: number;
+      minorRuntimeVersion: number;
+      prefers32Bit: boolean;
+      requires32Bit: boolean;
+      resourcesRva: number;
+      resourcesSize: number;
+      size: number;
+      strongNameSignatureRva: number;
+      strongNameSignatureSize: number;
+      vTableFixupsRva: number;
+      vTableFixupsSize: number;
+    };
+    manifestResources: {
+      dataRange?: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      flags: number;
+      implementation: string;
+      isPublic: boolean;
+      name: string;
+      offset: number;
+      recordRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      row: number;
+      size?: number;
+    }[];
+    memberRefs: {
+      isField: boolean;
+      name: string;
+      parent: string;
+      recordRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      row: number;
+      signature: string;
+      token: number;
+    }[];
+    methods: {
+      body?: {
+        codeRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        codeSize: number;
+        exceptionClauses: {
+          catchType?: string;
+          filterOffset?: number;
+          handlerLength: number;
+          handlerOffset: number;
+          kind: "Catch" | "Filter" | "Finally" | "Fault";
+          tryLength: number;
+          tryOffset: number;
+        }[];
+        exceptionSectionsRange?: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        hasExceptionSections: boolean;
+        initLocals: boolean;
+        isFat: boolean;
+        localVarSigToken: number;
+        maxStack: number;
+        range: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+      };
+      declaringTypeRow: number;
+      flags: number;
+      implFlags: number;
+      name: string;
+      recordRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      row: number;
+      rva: number;
+      signature: string;
+      token: number;
+    }[];
+    methodsByType: Record<number, {
+      body?: {
+        codeRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        codeSize: number;
+        exceptionClauses: {
+          catchType?: string;
+          filterOffset?: number;
+          handlerLength: number;
+          handlerOffset: number;
+          kind: "Catch" | "Filter" | "Finally" | "Fault";
+          tryLength: number;
+          tryOffset: number;
+        }[];
+        exceptionSectionsRange?: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        hasExceptionSections: boolean;
+        initLocals: boolean;
+        isFat: boolean;
+        localVarSigToken: number;
+        maxStack: number;
+        range: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+      };
+      declaringTypeRow: number;
+      flags: number;
+      implFlags: number;
+      name: string;
+      recordRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      row: number;
+      rva: number;
+      signature: string;
+      token: number;
+    }[]>;
+    module?: {
+      generation: number;
+      mvid?: string;
+      name: string;
+      recordRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+    };
+    moduleRefs: {
+      name: string;
+      recordRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      row: number;
+    }[];
+    portablePdb?: {
+      documents: {
+        hash: string;
+        hashAlgorithm?: string;
+        language?: string;
+        name: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+      }[];
+      header: {
+        entryPointToken: number;
+        guid: string;
+        range: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        referencedTableRows: Record<number, number>;
+        stamp: number;
+      };
+      methodDebugInformationCount: number;
+      methodsWithSequencePoints: number;
+      sequencePointReader: Function1;
+    };
+    qualifiedTokens: ClrTokenResolver;
+    readyToRun: boolean;
+    root?: {
+      flags: number;
+      majorVersion: number;
+      minorVersion: number;
+      range: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      streamCount: number;
+      version: string;
+    };
+    streams: {
+      contentRange?: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      headerRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      index: number;
+      name: string;
+      offset: number;
+      size: number;
+    }[];
+    tables: {
+      id: number;
+      name: string;
+      range?: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      rowCount: number;
+      rowSize: number;
+      sorted: boolean;
+    }[];
+    tablesHeader?: {
+      heapSizes: number;
+      majorVersion: number;
+      minorVersion: number;
+      range: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      sortedMask: number;
+      streamName: string;
+      validMask: number;
+    };
+    targetFramework?: string;
+    tokens: ClrTokenResolver;
+    typeDefs: {
+      enclosingTypeRow?: number;
+      extends?: string;
+      flags: number;
+      fullName: string;
+      genericParameters: string[];
+      interfaces: string[];
+      kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module";
+      name: string;
+      namespace: string;
+      recordRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      row: number;
+      token: number;
+    }[];
+    typeRefs: {
+      fullName: string;
+      name: string;
+      namespace: string;
+      recordRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      row: number;
+      scope: string;
+      token: number;
+    }[];
+    userStrings: {
+      heapOffset: number;
+      range: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      token: number;
+      value: string;
+    }[];
+  };
+  debugEntries: {
+    addressOfRawData: number;
+    codeView?: {
+      age?: number;
+      guid?: string;
+      pdbPath?: string;
+      signature: string;
+    };
+    dataRange?: {
+      end: number;
+      endExclusive: number;
+      fitsInt: boolean;
+      length: number;
+      offset: number;
+      size: number;
+      start: number;
+    };
+    index: number;
+    isPortablePdbCodeView: boolean;
+    majorVersion: number;
+    minorVersion: number;
+    pointerToRawData: number;
+    recordRange: {
+      end: number;
+      endExclusive: number;
+      fitsInt: boolean;
+      length: number;
+      offset: number;
+      size: number;
+      start: number;
+    };
+    sizeOfData: number;
+    timeDateStamp: number;
+    type: number;
+  }[];
+  embeddedPortablePdb?: {
+    documents: {
+      hash: string;
+      hashAlgorithm?: string;
+      language?: string;
+      name: string;
+      recordRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      row: number;
+    }[];
+    header: {
+      entryPointToken: number;
+      guid: string;
+      range: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      referencedTableRows: Record<number, number>;
+      stamp: number;
+    };
+    methodDebugInformationCount: number;
+    methodsWithSequencePoints: number;
+    sequencePointReader: Function1;
+  };
+  image: {
+    diagnostics: {
+      code: string;
+      message: string;
+      range?: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      severity: "Info" | "Warning" | "Error";
+    }[];
+    header: {
+      cliHeaderRva: number;
+      cliHeaderSize: number;
+      debugDirectoryRva: number;
+      debugDirectorySize: number;
+      range: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      sectionCount: number;
+      versionMajor: number;
+      versionMinor: number;
+    };
+    optionalHeader: {
+      addressOfEntryPoint: number;
+      dataDirectories: {
+        index: number;
+        name: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        rva: number;
+        size: number;
+      }[];
+      dataDirectoryCount: number;
+      dllCharacteristics: number;
+      fileAlignment: number;
+      headerRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      imageBase: number;
+      magic: number;
+      sectionAlignment: number;
+      sizeOfHeaders: number;
+      sizeOfImage: number;
+      subsystem: number;
+      wordSize: "Bits32" | "Bits64" | "Unknown";
+    };
+    payloadRange: {
+      end: number;
+      endExclusive: number;
+      fitsInt: boolean;
+      length: number;
+      offset: number;
+      size: number;
+      start: number;
+    };
+    sections: {
+      characteristics: number;
+      contentRange?: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      headerRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      index: number;
+      lineNumberCount: number;
+      lineNumberPointer: number;
+      name: string;
+      rawDataPointer: number;
+      rawDataSize: number;
+      relocationCount: number;
+      relocationPointer: number;
+      virtualAddress: number;
+      virtualSize: number;
+    }[];
+  };
+  pdbReference?: {
+    guid: string;
+    label: string;
+    path?: string;
+  };
+  portablePdb?: {
+    documents: {
+      hash: string;
+      hashAlgorithm?: string;
+      language?: string;
+      name: string;
+      recordRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      row: number;
+    }[];
+    header: {
+      entryPointToken: number;
+      guid: string;
+      range: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      referencedTableRows: Record<number, number>;
+      stamp: number;
+    };
+    methodDebugInformationCount: number;
+    methodsWithSequencePoints: number;
+    sequencePointReader: Function1;
+  };
+  sharedBytes: {
+    indices: {
+      endExclusive: number;
+      endInclusive: number;
+      first: number;
+      last: number;
+      start: number;
+      step: number;
+    };
+    lastIndex: number;
+    size: number;
+  };
+  sizeAnalysis?: {
+    children: BinarySizeNode[];
+    name: string;
+    offset: number;
+    size: number;
+  };
+  attachDebugSymbols(symbols: {
+    bytes: {
+      indices: {
+        endExclusive: number;
+        endInclusive: number;
+        first: number;
+        last: number;
+        start: number;
+        step: number;
+      };
+      lastIndex: number;
+      size: number;
+    };
+    fileSize: number;
+    metadata: {
+      assembly?: {
+        culture: string;
+        flags: number;
+        hashAlgorithm: number;
+        name: string;
+        publicKey: number[];
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        version: {
+          build: number;
+          major: number;
+          minor: number;
+          revision: number;
+        };
+      };
+      assemblyRefs: {
+        culture: string;
+        flags: number;
+        name: string;
+        publicKeyOrToken: number[];
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+        token: number;
+        version: {
+          build: number;
+          major: number;
+          minor: number;
+          revision: number;
+        };
+      }[];
+      diagnostics: {
+        code: string;
+        message: string;
+        range?: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        severity: "Info" | "Warning" | "Error";
+      }[];
+      entryPoint?: string;
+      fields: {
+        declaringTypeRow: number;
+        flags: number;
+        name: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+        token: number;
+        type: string;
+      }[];
+      fieldsByType: Record<number, {
+        declaringTypeRow: number;
+        flags: number;
+        name: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+        token: number;
+        type: string;
+      }[]>;
+      header: {
+        entryPointToken: number;
+        flags: number;
+        hasNativeEntryPoint: boolean;
+        headerRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        isIlOnly: boolean;
+        isStrongNameSigned: boolean;
+        majorRuntimeVersion: number;
+        managedNativeHeaderRva: number;
+        managedNativeHeaderSize: number;
+        metadataRva: number;
+        metadataSize: number;
+        minorRuntimeVersion: number;
+        prefers32Bit: boolean;
+        requires32Bit: boolean;
+        resourcesRva: number;
+        resourcesSize: number;
+        size: number;
+        strongNameSignatureRva: number;
+        strongNameSignatureSize: number;
+        vTableFixupsRva: number;
+        vTableFixupsSize: number;
+      };
+      manifestResources: {
+        dataRange?: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        flags: number;
+        implementation: string;
+        isPublic: boolean;
+        name: string;
+        offset: number;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+        size?: number;
+      }[];
+      memberRefs: {
+        isField: boolean;
+        name: string;
+        parent: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+        signature: string;
+        token: number;
+      }[];
+      methods: {
+        body?: {
+          codeRange: {
+            end: number;
+            endExclusive: number;
+            fitsInt: boolean;
+            length: number;
+            offset: number;
+            size: number;
+            start: number;
+          };
+          codeSize: number;
+          exceptionClauses: {
+            catchType?: string;
+            filterOffset?: number;
+            handlerLength: number;
+            handlerOffset: number;
+            kind: "Catch" | "Filter" | "Finally" | "Fault";
+            tryLength: number;
+            tryOffset: number;
+          }[];
+          exceptionSectionsRange?: {
+            end: number;
+            endExclusive: number;
+            fitsInt: boolean;
+            length: number;
+            offset: number;
+            size: number;
+            start: number;
+          };
+          hasExceptionSections: boolean;
+          initLocals: boolean;
+          isFat: boolean;
+          localVarSigToken: number;
+          maxStack: number;
+          range: {
+            end: number;
+            endExclusive: number;
+            fitsInt: boolean;
+            length: number;
+            offset: number;
+            size: number;
+            start: number;
+          };
+        };
+        declaringTypeRow: number;
+        flags: number;
+        implFlags: number;
+        name: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+        rva: number;
+        signature: string;
+        token: number;
+      }[];
+      methodsByType: Record<number, {
+        body?: {
+          codeRange: {
+            end: number;
+            endExclusive: number;
+            fitsInt: boolean;
+            length: number;
+            offset: number;
+            size: number;
+            start: number;
+          };
+          codeSize: number;
+          exceptionClauses: {
+            catchType?: string;
+            filterOffset?: number;
+            handlerLength: number;
+            handlerOffset: number;
+            kind: "Catch" | "Filter" | "Finally" | "Fault";
+            tryLength: number;
+            tryOffset: number;
+          }[];
+          exceptionSectionsRange?: {
+            end: number;
+            endExclusive: number;
+            fitsInt: boolean;
+            length: number;
+            offset: number;
+            size: number;
+            start: number;
+          };
+          hasExceptionSections: boolean;
+          initLocals: boolean;
+          isFat: boolean;
+          localVarSigToken: number;
+          maxStack: number;
+          range: {
+            end: number;
+            endExclusive: number;
+            fitsInt: boolean;
+            length: number;
+            offset: number;
+            size: number;
+            start: number;
+          };
+        };
+        declaringTypeRow: number;
+        flags: number;
+        implFlags: number;
+        name: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+        rva: number;
+        signature: string;
+        token: number;
+      }[]>;
+      module?: {
+        generation: number;
+        mvid?: string;
+        name: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+      };
+      moduleRefs: {
+        name: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+      }[];
+      portablePdb?: {
+        documents: {
+          hash: string;
+          hashAlgorithm?: string;
+          language?: string;
+          name: string;
+          recordRange: {
+            end: number;
+            endExclusive: number;
+            fitsInt: boolean;
+            length: number;
+            offset: number;
+            size: number;
+            start: number;
+          };
+          row: number;
+        }[];
+        header: {
+          entryPointToken: number;
+          guid: string;
+          range: {
+            end: number;
+            endExclusive: number;
+            fitsInt: boolean;
+            length: number;
+            offset: number;
+            size: number;
+            start: number;
+          };
+          referencedTableRows: Record<number, number>;
+          stamp: number;
+        };
+        methodDebugInformationCount: number;
+        methodsWithSequencePoints: number;
+        sequencePointReader: Function1;
+      };
+      qualifiedTokens: ClrTokenResolver;
+      readyToRun: boolean;
+      root?: {
+        flags: number;
+        majorVersion: number;
+        minorVersion: number;
+        range: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        streamCount: number;
+        version: string;
+      };
+      streams: {
+        contentRange?: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        headerRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        index: number;
+        name: string;
+        offset: number;
+        size: number;
+      }[];
+      tables: {
+        id: number;
+        name: string;
+        range?: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        rowCount: number;
+        rowSize: number;
+        sorted: boolean;
+      }[];
+      tablesHeader?: {
+        heapSizes: number;
+        majorVersion: number;
+        minorVersion: number;
+        range: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        sortedMask: number;
+        streamName: string;
+        validMask: number;
+      };
+      targetFramework?: string;
+      tokens: ClrTokenResolver;
+      typeDefs: {
+        enclosingTypeRow?: number;
+        extends?: string;
+        flags: number;
+        fullName: string;
+        genericParameters: string[];
+        interfaces: string[];
+        kind: "Class" | "Interface" | "Struct" | "Enum" | "Delegate" | "Module";
+        name: string;
+        namespace: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+        token: number;
+      }[];
+      typeRefs: {
+        fullName: string;
+        name: string;
+        namespace: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        row: number;
+        scope: string;
+        token: number;
+      }[];
+      userStrings: {
+        heapOffset: number;
+        range: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        token: number;
+        value: string;
+      }[];
+    };
+    nativeFormat?: {
+      displayName: string;
+    };
+    pdbGuid?: string;
+    sizeAnalysis?: {
+      children: BinarySizeNode[];
+      name: string;
+      offset: number;
+      size: number;
+    };
+    strings: {
+      index: number;
+      offset: number;
+      size: number;
+      tag?: string;
+      value: string;
+    }[];
+    structureRanges: {
+      label: string;
+      offset: number;
+      size: number;
+      tabName?: string;
+    }[];
+  }): "Matches" | "NoReference" | "WrongKind" | "Unreadable" | "TooLarge" | "GuidMismatch" | "AgeMismatch" | "StampMismatch";
+}
+
+interface WebcilHeader {
+  cliHeaderRva: number;
+  cliHeaderSize: number;
+  debugDirectoryRva: number;
+  debugDirectorySize: number;
+  range: {
+    end: number;
+    endExclusive: number;
+    fitsInt: boolean;
+    length: number;
+    offset: number;
+    size: number;
+    start: number;
+  };
+  sectionCount: number;
+  versionMajor: number;
+  versionMinor: number;
+  copy(versionMajor: number, versionMinor: number, sectionCount: number, cliHeaderRva: number, cliHeaderSize: number, debugDirectoryRva: number, debugDirectorySize: number, range: {
+    end: number;
+    endExclusive: number;
+    fitsInt: boolean;
+    length: number;
+    offset: number;
+    size: number;
+    start: number;
+  }): {
+    cliHeaderRva: number;
+    cliHeaderSize: number;
+    debugDirectoryRva: number;
+    debugDirectorySize: number;
+    range: {
+      end: number;
+      endExclusive: number;
+      fitsInt: boolean;
+      length: number;
+      offset: number;
+      size: number;
+      start: number;
+    };
+    sectionCount: number;
+    versionMajor: number;
+    versionMinor: number;
+  };
+}
+
+interface WebcilImage {
+  diagnostics: {
+    code: string;
+    message: string;
+    range?: {
+      end: number;
+      endExclusive: number;
+      fitsInt: boolean;
+      length: number;
+      offset: number;
+      size: number;
+      start: number;
+    };
+    severity: "Info" | "Warning" | "Error";
+  }[];
+  header: {
+    cliHeaderRva: number;
+    cliHeaderSize: number;
+    debugDirectoryRva: number;
+    debugDirectorySize: number;
+    range: {
+      end: number;
+      endExclusive: number;
+      fitsInt: boolean;
+      length: number;
+      offset: number;
+      size: number;
+      start: number;
+    };
+    sectionCount: number;
+    versionMajor: number;
+    versionMinor: number;
+  };
+  optionalHeader: {
+    addressOfEntryPoint: number;
+    dataDirectories: {
+      index: number;
+      name: string;
+      recordRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      rva: number;
+      size: number;
+    }[];
+    dataDirectoryCount: number;
+    dllCharacteristics: number;
+    fileAlignment: number;
+    headerRange: {
+      end: number;
+      endExclusive: number;
+      fitsInt: boolean;
+      length: number;
+      offset: number;
+      size: number;
+      start: number;
+    };
+    imageBase: number;
+    magic: number;
+    sectionAlignment: number;
+    sizeOfHeaders: number;
+    sizeOfImage: number;
+    subsystem: number;
+    wordSize: "Bits32" | "Bits64" | "Unknown";
+  };
+  payloadRange: {
+    end: number;
+    endExclusive: number;
+    fitsInt: boolean;
+    length: number;
+    offset: number;
+    size: number;
+    start: number;
+  };
+  sections: {
+    characteristics: number;
+    contentRange?: {
+      end: number;
+      endExclusive: number;
+      fitsInt: boolean;
+      length: number;
+      offset: number;
+      size: number;
+      start: number;
+    };
+    headerRange: {
+      end: number;
+      endExclusive: number;
+      fitsInt: boolean;
+      length: number;
+      offset: number;
+      size: number;
+      start: number;
+    };
+    index: number;
+    lineNumberCount: number;
+    lineNumberPointer: number;
+    name: string;
+    rawDataPointer: number;
+    rawDataSize: number;
+    relocationCount: number;
+    relocationPointer: number;
+    virtualAddress: number;
+    virtualSize: number;
+  }[];
+  copy(payloadRange: {
+    end: number;
+    endExclusive: number;
+    fitsInt: boolean;
+    length: number;
+    offset: number;
+    size: number;
+    start: number;
+  }, header: {
+    cliHeaderRva: number;
+    cliHeaderSize: number;
+    debugDirectoryRva: number;
+    debugDirectorySize: number;
+    range: {
+      end: number;
+      endExclusive: number;
+      fitsInt: boolean;
+      length: number;
+      offset: number;
+      size: number;
+      start: number;
+    };
+    sectionCount: number;
+    versionMajor: number;
+    versionMinor: number;
+  }, sections: {
+    characteristics: number;
+    contentRange?: {
+      end: number;
+      endExclusive: number;
+      fitsInt: boolean;
+      length: number;
+      offset: number;
+      size: number;
+      start: number;
+    };
+    headerRange: {
+      end: number;
+      endExclusive: number;
+      fitsInt: boolean;
+      length: number;
+      offset: number;
+      size: number;
+      start: number;
+    };
+    index: number;
+    lineNumberCount: number;
+    lineNumberPointer: number;
+    name: string;
+    rawDataPointer: number;
+    rawDataSize: number;
+    relocationCount: number;
+    relocationPointer: number;
+    virtualAddress: number;
+    virtualSize: number;
+  }[], optionalHeader: {
+    addressOfEntryPoint: number;
+    dataDirectories: {
+      index: number;
+      name: string;
+      recordRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      rva: number;
+      size: number;
+    }[];
+    dataDirectoryCount: number;
+    dllCharacteristics: number;
+    fileAlignment: number;
+    headerRange: {
+      end: number;
+      endExclusive: number;
+      fitsInt: boolean;
+      length: number;
+      offset: number;
+      size: number;
+      start: number;
+    };
+    imageBase: number;
+    magic: number;
+    sectionAlignment: number;
+    sizeOfHeaders: number;
+    sizeOfImage: number;
+    subsystem: number;
+    wordSize: "Bits32" | "Bits64" | "Unknown";
+  }, diagnostics: {
+    code: string;
+    message: string;
+    range?: {
+      end: number;
+      endExclusive: number;
+      fitsInt: boolean;
+      length: number;
+      offset: number;
+      size: number;
+      start: number;
+    };
+    severity: "Info" | "Warning" | "Error";
+  }[]): {
+    diagnostics: {
+      code: string;
+      message: string;
+      range?: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      severity: "Info" | "Warning" | "Error";
+    }[];
+    header: {
+      cliHeaderRva: number;
+      cliHeaderSize: number;
+      debugDirectoryRva: number;
+      debugDirectorySize: number;
+      range: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      sectionCount: number;
+      versionMajor: number;
+      versionMinor: number;
+    };
+    optionalHeader: {
+      addressOfEntryPoint: number;
+      dataDirectories: {
+        index: number;
+        name: string;
+        recordRange: {
+          end: number;
+          endExclusive: number;
+          fitsInt: boolean;
+          length: number;
+          offset: number;
+          size: number;
+          start: number;
+        };
+        rva: number;
+        size: number;
+      }[];
+      dataDirectoryCount: number;
+      dllCharacteristics: number;
+      fileAlignment: number;
+      headerRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      imageBase: number;
+      magic: number;
+      sectionAlignment: number;
+      sizeOfHeaders: number;
+      sizeOfImage: number;
+      subsystem: number;
+      wordSize: "Bits32" | "Bits64" | "Unknown";
+    };
+    payloadRange: {
+      end: number;
+      endExclusive: number;
+      fitsInt: boolean;
+      length: number;
+      offset: number;
+      size: number;
+      start: number;
+    };
+    sections: {
+      characteristics: number;
+      contentRange?: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      headerRange: {
+        end: number;
+        endExclusive: number;
+        fitsInt: boolean;
+        length: number;
+        offset: number;
+        size: number;
+        start: number;
+      };
+      index: number;
+      lineNumberCount: number;
+      lineNumberPointer: number;
+      name: string;
+      rawDataPointer: number;
+      rawDataSize: number;
+      relocationCount: number;
+      relocationPointer: number;
+      virtualAddress: number;
+      virtualSize: number;
+    }[];
+  };
 }
 
 interface ZipEntry {

@@ -10,9 +10,16 @@ import org.jetbrains.hexana.wasm.analysis.garbage.GarbageResult
 /**
  * [TableTabsProvider] for core Wasm binaries.
  *
- * Produces table-based tabs: Data, Exports, Imports, Functions, Custom.
+ * Produces table-based tabs: Data, Exports, Imports, Functions, Custom. A Blazor WebAssembly
+ * assembly (a Webcil wrapper, [WasmBinaryProvider.webcil]) also gets the .NET tabs, first, since
+ * the wrapper itself is two functions and a data segment.
  */
 class WasmTableTabsProvider : TableTabsProvider {
+    override fun groupedTabs(provider: BinaryProvider): List<GroupedTableTabDescriptor> {
+        val assembly = (provider as? WasmBinaryProvider)?.webcil ?: return emptyList()
+        return listOfNotNull(clrMetadataGroup(assembly))
+    }
+
     override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> =
         tableTabs(provider, TableTabsContext())
 
@@ -20,6 +27,7 @@ class WasmTableTabsProvider : TableTabsProvider {
         if (provider !is WasmBinaryProvider) return emptyList()
         if (!provider.canProvideWasmModule()) return emptyList()
         return buildList {
+            provider.webcil?.let { assembly -> CLR_TAB_NAMES.mapNotNullTo(this) { clrTab(it, assembly) } }
             dataTab(provider)?.let { add(it) }
             exportsTab(provider)?.let { add(it) }
             importsTab(provider)?.let { add(it) }
@@ -34,7 +42,10 @@ class WasmTableTabsProvider : TableTabsProvider {
     override fun availableTabNames(provider: BinaryProvider, context: TableTabsContext): Pair<List<String>, List<String>>? {
         if (provider !is WasmBinaryProvider) return Pair(emptyList(), emptyList())
         val module = provider.wasmModule ?: return Pair(emptyList(), emptyList())
+        val webcil = provider.webcil
         val names = buildList {
+            // Webcil detection reads the import list and data segment headers only; metadata waits for the tab.
+            if (webcil != null) addAll(CLR_TAB_NAMES)
             if (module.dataSection != null) add("Data")
             if (module.exportSection != null) add("Exports")
             if (module.importSection != null) add("Imports")
@@ -51,12 +62,13 @@ class WasmTableTabsProvider : TableTabsProvider {
             // resolves to null and the placeholder is dropped when no proposals are used.
             if (context.runtimeCompatibility != null) add(COMPATIBILITY_TAB_NAME)
         }
-        return Pair(names, emptyList())
+        return Pair(names, if (webcil != null) listOf(CLR_METADATA_GROUP_NAME) else emptyList())
     }
 
     override fun singleTab(name: String, provider: BinaryProvider, context: TableTabsContext): TableTabDescriptor? {
         if (provider !is WasmBinaryProvider) return null
         if (!provider.canProvideWasmModule()) return null
+        provider.webcil?.let { assembly -> if (name in CLR_TAB_NAMES) return clrTab(name, assembly) }
         return when (name) {
             "Data" -> dataTab(provider)
             "Exports" -> exportsTab(provider)

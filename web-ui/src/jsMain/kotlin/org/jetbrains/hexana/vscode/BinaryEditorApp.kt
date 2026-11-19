@@ -102,7 +102,7 @@ class DiffPayload(
  * [provider] is optional but worth passing: for a DEX it is a
  * [DexBinaryProvider] that has already parsed the file, so handing it over
  * avoids decoding the string table a second time. A .NET assembly gets its IL tab only from a
- * [PeBinaryProvider]. The DWARF tabs need it outright - they read
+ * [PeBinaryProvider], or a [WasmBinaryProvider] holding a Blazor WebAssembly (Webcil) assembly. The DWARF tabs need it outright - they read
  * custom sections off an already-parsed wasm module and are skipped without one.
  */
 fun computeExtraTabs(
@@ -133,6 +133,11 @@ fun computeExtraTabs(
     // shared with the provider's table tabs.
     if (provider is PeBinaryProvider && provider.isManaged) {
         return provider.clrMetadata?.let { clrIlExtraTabs(it, provider.bytes, provider.portablePdb) }.orEmpty()
+    }
+    // A Blazor WebAssembly assembly: the IL view comes first, then whatever DWARF tabs the wrapper has (none so far).
+    (provider as? WasmBinaryProvider)?.webcil?.let { assembly ->
+        val il = assembly.clrMetadata?.let { clrIlExtraTabs(it, assembly.bytes, assembly.portablePdb) }.orEmpty()
+        return il + dwarfExtraTabs(provider)
     }
     return dwarfExtraTabs(provider ?: return emptyList())
 }

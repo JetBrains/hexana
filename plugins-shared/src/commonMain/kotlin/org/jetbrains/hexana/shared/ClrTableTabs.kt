@@ -1,7 +1,8 @@
 package org.jetbrains.hexana.shared
 
 import org.jetbrains.hexana.parsing.common.NativeByteRange
-import org.jetbrains.hexana.providers.PeBinaryProvider
+import org.jetbrains.hexana.providers.ClrAssemblySource
+import org.jetbrains.hexana.providers.WebcilAssembly
 import org.jetbrains.hexana.providers.pe.clr.ClrPortablePdb
 import org.jetbrains.hexana.providers.pe.clr.ClrCliHeader
 import org.jetbrains.hexana.providers.pe.clr.ClrField
@@ -16,11 +17,11 @@ import org.jetbrains.hexana.providers.pe.clr.ClrTypeKind
 internal const val CLR_OVERVIEW_TAB_NAME = ".NET"
 internal const val CLR_METADATA_GROUP_NAME = ".NET Metadata"
 
-/** Top-level tabs of a managed PE image, in display order: overview, type tree, methods, assembly references. */
+/** Top-level tabs of a .NET assembly (managed PE image or Webcil), in display order: overview, type tree, methods, assembly references. */
 internal val CLR_TAB_NAMES: List<String> = listOf(CLR_OVERVIEW_TAB_NAME, "Types", "Methods", "Assembly Refs")
 
 /** The top-level CLR tab called [name], or null when the image has no metadata or nothing to show there. */
-internal fun clrTab(name: String, provider: PeBinaryProvider): TableTabDescriptor? {
+internal fun clrTab(name: String, provider: ClrAssemblySource): TableTabDescriptor? {
     val metadata = provider.clrMetadata ?: return null
     return when (name) {
         CLR_OVERVIEW_TAB_NAME -> clrOverviewTab(provider, metadata)
@@ -32,7 +33,7 @@ internal fun clrTab(name: String, provider: PeBinaryProvider): TableTabDescripto
 }
 
 /** Lower-level metadata views, grouped so they do not crowd the main tab strip. */
-internal fun clrMetadataGroup(provider: PeBinaryProvider): GroupedTableTabDescriptor? {
+internal fun clrMetadataGroup(provider: ClrAssemblySource): GroupedTableTabDescriptor? {
     val metadata = provider.clrMetadata ?: return null
     val innerTabs = listOfNotNull(
         clrStreamsTab(metadata),
@@ -46,12 +47,18 @@ internal fun clrMetadataGroup(provider: PeBinaryProvider): GroupedTableTabDescri
     return GroupedTableTabDescriptor(name = CLR_METADATA_GROUP_NAME, innerTabs = innerTabs)
 }
 
-private fun clrOverviewTab(provider: PeBinaryProvider, metadata: ClrMetadata): TableTabDescriptor {
+private fun clrOverviewTab(provider: ClrAssemblySource, metadata: ClrMetadata): TableTabDescriptor {
     val header = metadata.header
     val rows = buildList {
         add(HeaderRow("Runtime Header Version", "${header.majorRuntimeVersion}.${header.minorRuntimeVersion}", header.headerRange))
         add(HeaderRow("Flags", clrHeaderFlagsLabel(header.flags), header.headerRange))
-        add(HeaderRow("Platform", clrPlatform(provider.coffHeader?.machine, header, metadata.readyToRun), header.headerRange))
+        if (provider is WebcilAssembly) {
+            val webcil = provider.image.header
+            add(HeaderRow("Container", "Webcil ${webcil.versionMajor}.${webcil.versionMinor} in a Wasm wrapper (browser-wasm)", webcil.range))
+            add(HeaderRow("Payload", "${provider.image.payloadRange.length} bytes at ${hex(provider.image.payloadRange.start)}", provider.image.payloadRange))
+        } else {
+            add(HeaderRow("Platform", clrPlatform(provider.clrMachine, header, metadata.readyToRun), header.headerRange))
+        }
         add(HeaderRow("Entry Point", metadata.entryPoint ?: "none (library)", header.headerRange))
         add(HeaderRow("Strong Name Signed", yesNo(header.isStrongNameSigned), header.headerRange))
         add(HeaderRow("ReadyToRun", yesNo(metadata.readyToRun), header.headerRange))
@@ -272,7 +279,7 @@ private fun clrUserStringsTab(metadata: ClrMetadata): TableTabDescriptor? {
     )
 }
 
-private fun clrResourcesTab(provider: PeBinaryProvider, metadata: ClrMetadata): TableTabDescriptor? {
+private fun clrResourcesTab(provider: ClrAssemblySource, metadata: ClrMetadata): TableTabDescriptor? {
     val resources = metadata.manifestResources.takeIf { it.isNotEmpty() } ?: return null
     // Embedded `.resources` sets expand to their entries. Decoded here, while the descriptor is
     // built (a background job in IntelliJ), rather than on demand: tree tables ask every root row

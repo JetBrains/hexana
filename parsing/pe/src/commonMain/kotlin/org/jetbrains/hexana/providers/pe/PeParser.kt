@@ -506,10 +506,16 @@ object PeParser {
         return relocations
     }
 
+    /**
+     * Decodes the debug directory. [rawDataBase] is added to every entry's `PointerToRawData` to get
+     * its file offset: zero for PE files, the payload offset for Webcil, whose pointers are
+     * payload-relative ([WebcilImage]).
+     */
     fun parseDebugEntries(
         bytes: CommonByteBuffer,
         optionalHeader: PeOptionalHeader,
         sections: List<PeSection>,
+        rawDataBase: UInt = 0u,
     ): List<PeDebugEntry>? {
         val debugDirectory = optionalHeader.dataDirectories.getOrNull(DEBUG_DIRECTORY_INDEX) ?: return emptyList()
         if (debugDirectory.rva == 0u || debugDirectory.size == 0u) return emptyList()
@@ -524,7 +530,7 @@ object PeParser {
                 val offset = directoryOffset + index * DEBUG_DIRECTORY_ENTRY_SIZE
                 val sizeOfData = bytes.u32LeOrNull(offset + 16) ?: return null
                 val pointerToRawData = bytes.u32LeOrNull(offset + 24) ?: return null
-                val dataRange = fileRange(bytes, pointerToRawData, sizeOfData)
+                val dataRange = checkedAdd(pointerToRawData, rawDataBase)?.let { fileRange(bytes, it, sizeOfData) }
                 val type = bytes.u32LeOrNull(offset + 12) ?: return null
                 add(
                     PeDebugEntry(

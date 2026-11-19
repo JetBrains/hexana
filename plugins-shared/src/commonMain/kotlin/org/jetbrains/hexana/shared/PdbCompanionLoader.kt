@@ -6,6 +6,7 @@ import org.jetbrains.hexana.providers.PdbMatch
 import org.jetbrains.hexana.providers.PdbSymbolsBinaryProvider
 import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.providers.PortablePdbBinaryProvider
+import org.jetbrains.hexana.providers.WebcilAssembly
 import org.jetbrains.hexana.pdb.PdbParser
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -32,13 +33,13 @@ object PdbCompanionLoader {
     fun candidatePaths(provider: PeBinaryProvider, binaryPath: String? = provider.sourcePath): List<String> {
         val reference = provider.pdbReference ?: return emptyList()
         if (binaryPath == null || provider.debugSymbols != null) return emptyList()
-        val directory = parentDirectory(binaryPath)
-        val fileName = fileName(binaryPath)
+        val directory = companionParentDirectory(binaryPath)
+        val fileName = companionFileName(binaryPath)
         val stem = fileName.substringBeforeLast('.', missingDelimiterValue = fileName)
         return listOfNotNull(
-            reference.path?.let(::fileName)?.takeIf { it.isNotEmpty() && it != "." && it != ".." }?.let { join(directory, it) },
-            join(directory, "$stem.pdb"),
-            join(directory, "$fileName.pdb"),
+            reference.path?.let(::companionFileName)?.takeIf { it.isNotEmpty() && it != "." && it != ".." }?.let { companionJoin(directory, it) },
+            companionJoin(directory, "$stem.pdb"),
+            companionJoin(directory, "$fileName.pdb"),
         ).distinct()
     }
 
@@ -90,16 +91,61 @@ object PdbCompanionLoader {
         return outcome
     }
 
-    private fun fileName(path: String): String = path.substringAfterLast('/').substringAfterLast('\\')
-
-    private fun parentDirectory(path: String): String {
-        val cut = maxOf(path.lastIndexOf('/'), path.lastIndexOf('\\'))
-        return if (cut <= 0) path.take(cut + 1) else path.substring(0, cut)
+    /**
+     * Where the Portable PDB of a Blazor WebAssembly assembly may be, best first. The SDK fingerprints
+     * both files independently (`app.ol0snvssxq.wasm` next to `app.en9mhn99g3.pdb`), so beyond the
+     * recorded name (`app.pdb`) and the module's own stem, [siblingNames] — the directory listing,
+     * when the host can list it — supplies `<recorded stem>.<fingerprint>.pdb`. The GUID check in
+     * [attach] decides; a name only nominates. Empty when the module needs nothing.
+     */
+    fun candidatePaths(assembly: WebcilAssembly, binaryPath: String?, siblingNames: List<String> = emptyList()): List<String> {
+        val reference = assembly.pdbReference ?: return emptyList()
+        if (binaryPath == null || assembly.portablePdb != null) return emptyList()
+        val directory = companionParentDirectory(binaryPath)
+        val fileName = companionFileName(binaryPath)
+        val stem = fileName.substringBeforeLast('.', missingDelimiterValue = fileName)
+        val recorded = reference.path?.let(::companionFileName)?.takeIf { it.isNotEmpty() && it != "." && it != ".." }
+        val recordedStem = recorded?.substringBeforeLast('.', missingDelimiterValue = recorded)
+        val fingerprinted = recordedStem?.let { prefix ->
+            siblingNames.filter { name ->
+                name.startsWith("$prefix.") && name.endsWith(".pdb", ignoreCase = true) &&
+                    // Exactly one segment between them: `app.<fingerprint>.pdb`, not `app.Extra.<fp>.pdb`.
+                    name.removePrefix("$prefix.").dropLast(4).let { it.isNotEmpty() && '.' !in it }
+            }.sorted()
+        }.orEmpty()
+        return (listOfNotNull(recorded?.let { companionJoin(directory, it) }, companionJoin(directory, "$stem.pdb")) +
+            fingerprinted.map { companionJoin(directory, it) }).distinct()
     }
 
-    private fun join(directory: String, name: String): String = when {
-        directory.isEmpty() -> name
-        directory.endsWith('/') || directory.endsWith('\\') -> directory + name
-        else -> "$directory${if (directory.contains('\\') && !directory.contains('/')) '\\' else '/'}$name"
+    /** Attaches [bytes] as the Portable PDB of [assembly]; anything else is [PdbMatch.Unreadable]. */
+    fun attach(assembly: WebcilAssembly, bytes: ByteArray): PdbMatch = try {
+        val buffer = bytes.toCommonByteBuffer()
+        when {
+            PortablePdbBinaryProvider.isPortablePdbFile(buffer) -> assembly.attachDebugSymbols(PortablePdbBinaryProvider(buffer))
+            PdbParser.isPdb(buffer) -> PdbMatch.WrongKind
+            else -> PdbMatch.Unreadable
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        PdbMatch.Unreadable
+    }
+
+    /** [load] for a Blazor WebAssembly assembly at [binaryPath]; lists its directory for fingerprinted names. */
+    fun load(assembly: WebcilAssembly, binaryPath: String, fs: FileSystem): PdbMatch? {
+        if (assembly.pdbReference == null || assembly.portablePdb != null) return null
+        val siblings = fs.listEntries(companionParentDirectory(binaryPath)).filter { it.isFile }.map { it.name }
+        var outcome: PdbMatch? = null
+        for (path in candidatePaths(assembly, binaryPath, siblings)) {
+            if (!fs.fileExists(path)) continue
+            val size = fs.regularFileSize(path)
+            if (size == null || size > MAX_AUTOMATIC_PDB_SIZE) {
+                outcome = if (size == null) PdbMatch.Unreadable else PdbMatch.TooLarge
+                continue
+            }
+            outcome = fs.readFile(path)?.let { attach(assembly, it) } ?: PdbMatch.Unreadable
+            if (outcome == PdbMatch.Matches) break
+        }
+        return outcome
     }
 }

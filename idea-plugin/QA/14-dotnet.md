@@ -97,3 +97,23 @@ PDB: status `does not match`, "Not loaded: the image expects the other kind of P
 **Steps:** Copy `sample-clr.exe`, truncate the copy to 3,400 bytes, and open it.
 **Expected:** The file opens; tabs that need missing data are empty or absent, **Top** shows `.text` with only the
 bytes present. No exception in `idea.log`.
+
+### 14.13 Blazor WebAssembly (Webcil)
+**Steps:** Open `parsing/native-fixtures/test-data/pe/sample-clr.webcil.wasm` and open **.NET**, **Types** and
+**IL Disassembly** (expand `Hexana.Sample.Greeter`). Then open `sample-clr-portable.webcil.wasm` (its
+`sample-clr-portable.pdb` is next to it) and `sample-clr-embedded.webcil.wasm`. Optionally `dotnet publish` a
+`dotnet new blazorwasm` app and open a few `wwwroot/_framework/*.wasm` files, including `System.Private.CoreLib.*.wasm`.
+**Expected:** The file type reads `Core Wasm (.NET Webcil)`. The .NET tabs come before **Data**/**Exports**; **.NET**
+shows `Container: Webcil 0.0 in a Wasm wrapper (browser-wasm)` and assembly `sample-clr`, with no Platform row.
+**Types** matches `sample-clr.exe`. Clicking an IL instruction selects bytes inside the wrapper's data segment.
+Both PDB samples show `.line 19,19 : 9,38 '/src/clr/Sample.cs'` in the `Greeter` constructor. Published assemblies
+all open with types and methods; `dotnet.native.*.wasm` stays a plain Wasm module.
+
+### 14.14 Symbol map names for `dotnet.native.wasm`
+**Steps:** Copy `dotnet.native.wasm` and `dotnet.native.js.symbols` from
+`~/.nuget/packages/microsoft.netcore.app.runtime.mono.browser-wasm/<version>/runtimes/browser-wasm/native/` into one
+directory and open the `.wasm`; open **Functions** and **WAT (virtualized)**. Then put a symbol map of a different
+build (or an edited copy with `0:wrong_name` on every import line) beside it and reopen.
+**Expected:** Functions carry Mono names (`mono_wasm_load_runtime`, `mono_runtime_invoke`, …) instead of bare indices. The
+mismatching map is ignored and the functions stay unnamed.
+

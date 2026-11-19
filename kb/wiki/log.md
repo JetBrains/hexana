@@ -208,3 +208,5 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-16 — `entities/top-size-tab` — reworked: nesting under the parent instead of flattening, mapped-slice cursor fix, Components tab lists all nested components.
 - 2026-11-16 — `entities/top-size-tab` — deep treemap levels draw only children of 1% or more (rest folded); numeric-only label shortening.
 - 2026-11-16 — `entities/top-size-tab` — review follow-ups: nested component views not copies, component index space index for graph IDs; deep-treemap perf claim measured and declined.
+- 2026-11-16 — `entities/blazor-wasm-feasibility` — new: Blazor WASM/Webcil artifact anatomy from a real .NET 10 publish, current Hexana behaviour, work breakdown.
+- 2026-11-16 — `entities/blazor-wasm-feasibility` — steps 1–2 implemented: Webcil → CLR tabs/IL/PDB, symbol-map function names; `entities/clr-metadata` links it.
