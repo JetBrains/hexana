@@ -59,16 +59,17 @@ data class BlazorBundle(
         /** Largest file hashed for the integrity check; `System.Private.CoreLib` is ~1.6 MB, ICU data ~1 MB. */
         const val MAX_HASHED_FILE_SIZE: Long = 64L * 1024 * 1024
 
-        private val DOTNET_JS = Regex("""dotnet(\.[A-Za-z0-9]+)?\.js""")
+        private val DOTNET_JS = Regex("""dotnet(\.(?!(?:native|runtime)\.)[A-Za-z0-9]+)?\.js""")
 
         /**
          * The files in [siblingNames] that may hold the manifest, best first: `blazor.boot.json`
          * (.NET 8/9), then `dotnet.js` / `dotnet.<fingerprint>.js` (.NET 10 embeds it there).
-         * `dotnet.native.*.js` and `dotnet.runtime.*.js` never hold it and do not match.
+         * `dotnet.native[.*].js` and `dotnet.runtime[.*].js` never hold it and do not match, with or
+         * without a fingerprint. Ties are broken by name so the order does not depend on directory listing.
          */
         fun configCandidates(siblingNames: Collection<String>): List<String> = buildList {
             if ("blazor.boot.json" in siblingNames) add("blazor.boot.json")
-            siblingNames.filter { DOTNET_JS.matches(it) }.sortedBy { it.length }.forEach(::add)
+            siblingNames.filter { DOTNET_JS.matches(it) }.sortedWith(compareBy({ it.length }, { it })).forEach(::add)
         }
 
         /**
