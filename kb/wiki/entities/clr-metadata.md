@@ -179,3 +179,9 @@ Two managed images compare through `ClrDiffProvider` (Types / Methods tabs, IL s
   decoder and resolver on JS and WasmJS too.
 - JVM: `System.Private.CoreLib.dll` (15 MB, 38.5k methods, ReadyToRun) parses in ~190 ms with
   zero undecodable signatures; `FSharp.Core.dll` in ~50 ms.
+
+## Blazor WebAssembly (Webcil)
+
+Webcil assemblies inside `.wasm` wrappers reuse this decoder through synthesized PE sections; the CLR tabs and IL
+views take `ClrAssemblySource` rather than `PeBinaryProvider`. See [[entities/blazor-wasm-feasibility]].
+

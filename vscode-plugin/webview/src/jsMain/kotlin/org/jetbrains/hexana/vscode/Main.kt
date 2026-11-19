@@ -8,6 +8,7 @@ import org.jetbrains.compose.web.renderComposable
 import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.shared.PdbCompanionLoader
+import org.jetbrains.hexana.shared.WasmSymbolMapCompanionLoader
 import org.jetbrains.hexana.shared.diff.BinaryDiffInput
 import org.jetbrains.hexana.shared.features.ParserRef
 import org.jetbrains.hexana.shared.features.parseFileAssociations
@@ -324,14 +325,24 @@ fun BinaryEditorApp() {
             // A PE image's PDB lives next to it. Load it before any tab is built, so the IL view,
             // Methods and Debug Info show its source lines on first paint instead of rebuilding.
             val pdbCandidates = remember(provider) {
-                (provider as? PeBinaryProvider)?.let { PdbCompanionLoader.candidatePaths(it) }.orEmpty()
+                when (provider) {
+                    is PeBinaryProvider -> PdbCompanionLoader.candidatePaths(provider)
+                    // No directory listing here, so a fingerprinted Blazor PDB is found only under its recorded name.
+                    is WasmBinaryProvider -> provider.webcil?.let { PdbCompanionLoader.candidatePaths(it, filePath.ifBlank { null }) }.orEmpty()
+                    else -> emptyList()
+                }
+            }
+            // A stripped Emscripten module's symbol map (`dotnet.native.js.symbols`): no directory
+            // listing here, so only the names derived from the module's own name are tried.
+            val symbolMapCandidates = remember(provider) {
+                (provider as? WasmBinaryProvider)?.let { WasmSymbolMapCompanionLoader.candidatePaths(it, filePath.ifBlank { null }) }.orEmpty()
             }
             var pdbReadyFor by remember(bytes) { mutableStateOf<BinaryProvider?>(null) }
             LaunchedEffect(provider) {
-                val pe = provider as? PeBinaryProvider
                 // Marked ready however the loop ends, or the editor would wait on this forever.
                 try {
-                    if (pe != null && pdbCandidates.isNotEmpty()) loadPdbCompanion(pe, pdbCandidates, host)
+                    if (pdbCandidates.isNotEmpty()) loadPdbCompanion(provider, pdbCandidates, host)
+                    if (symbolMapCandidates.isNotEmpty()) loadSymbolMapCompanion(provider as WasmBinaryProvider, symbolMapCandidates, host)
                 } finally {
                     pdbReadyFor = provider
                 }
@@ -437,11 +448,26 @@ private class ShownEditor(
     val bindings: BrowserProviderBindings,
 )
 
+/** Reads [candidates] in order through the extension host and attaches the first symbol map that fits. */
+private suspend fun loadSymbolMapCompanion(provider: WasmBinaryProvider, candidates: List<String>, host: Host) {
+    for (path in candidates) {
+        val bytes = try {
+            host.readBinaryFile(path).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            continue
+        }
+        if (bytes.size > WasmSymbolMapCompanionLoader.MAX_AUTOMATIC_SYMBOL_MAP_SIZE) continue
+        if (WasmSymbolMapCompanionLoader.attach(provider, path, bytes)) break
+    }
+}
+
 /**
  * Reads [candidates] in order through the extension host and attaches the first matching PDB.
  * A missing file is answered with a failure at once; only a slow disk waits.
  */
-private suspend fun loadPdbCompanion(pe: PeBinaryProvider, candidates: List<String>, host: Host) {
+private suspend fun loadPdbCompanion(provider: BinaryProvider, candidates: List<String>, host: Host) {
     for (path in candidates) {
         val pdbBytes = try {
             host.readBinaryFile(path).await()
@@ -450,6 +476,11 @@ private suspend fun loadPdbCompanion(pe: PeBinaryProvider, candidates: List<Stri
         } catch (_: Throwable) {
             continue
         }
-        if (PdbCompanionLoader.attach(pe, path, pdbBytes) == PdbMatch.Matches) break
+        val match = when (provider) {
+            is PeBinaryProvider -> PdbCompanionLoader.attach(provider, path, pdbBytes)
+            is WasmBinaryProvider -> provider.webcil?.let { PdbCompanionLoader.attach(it, pdbBytes) }
+            else -> null
+        }
+        if (match == PdbMatch.Matches) break
     }
 }

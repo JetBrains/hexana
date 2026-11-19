@@ -54,7 +54,8 @@ fun fileTypeDescription(
     binaryProvider: BinaryProvider,
     fileName: String? = null,
 ): String = when (binaryProvider) {
-    is WasmBinaryProvider -> "Core Wasm"
+    // A Blazor WebAssembly assembly: what the user cares about is the .NET assembly, not the wrapper.
+    is WasmBinaryProvider -> if (binaryProvider.webcil != null) "Core Wasm (.NET Webcil)" else "Core Wasm"
     is WasmComponentBinaryProvider -> "Component Model"
     is PeBinaryProvider -> binaryProvider.nativeFormat.displayName + if (binaryProvider.isManaged) " (.NET)" else ""
     is NativeBinaryProvider -> binaryProvider.nativeFormat.displayName

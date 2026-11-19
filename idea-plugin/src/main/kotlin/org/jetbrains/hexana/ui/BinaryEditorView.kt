@@ -86,6 +86,7 @@ import org.jetbrains.hexana.mcp.scripting.ScriptTabBinding
 import org.jetbrains.hexana.ui.panel.ProviderTabContent
 import org.jetbrains.hexana.ui.panel.displayName
 import org.jetbrains.hexana.shared.CLR_IL_TAB_NAME
+import org.jetbrains.hexana.shared.WasmSymbolMapCompanionLoader
 import org.jetbrains.hexana.shared.DEX_SMALI_TAB_NAME
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
 import org.jetbrains.hexana.shared.NativeDebugTabData
@@ -492,6 +493,19 @@ internal fun BinaryEditorView(
                         PdbCompanionLoader.load(pe, JVM_FILE_SYSTEM)
                     } catch (e: Exception) {
                         HexanaLog.LOG.warn("Failed to load the PDB of ${pe.sourcePath}", e)
+                    }
+                }
+            }
+            // Wasm companions, also attached before the tabs are built: a Blazor WebAssembly assembly's
+            // Portable PDB (published next to it, fingerprinted separately), and the Emscripten symbol
+            // map that names a stripped module's functions (`dotnet.native.js.symbols`).
+            (binaryProvider as? WasmBinaryVirtualFileProvider)?.let { wasm ->
+                withContext(Dispatchers.IO) {
+                    try {
+                        wasm.webcil?.let { PdbCompanionLoader.load(it, wasm.file.path, JVM_FILE_SYSTEM) }
+                        WasmSymbolMapCompanionLoader.load(wasm, wasm.file.path, JVM_FILE_SYSTEM)
+                    } catch (e: Exception) {
+                        HexanaLog.LOG.warn("Failed to load the companions of ${wasm.file.path}", e)
                     }
                 }
             }
@@ -1504,7 +1518,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
             // Must be remembered inside composable lambdas; each lambda remembers
             // its own instance. Cross-tab signaling only works when the caller
             // supplies non-null values (BinaryEditorView always does).
-            listOf(
+            webcilIlPanels(state) + listOf(
                 Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
                 Panel("Wat") { WasmPanelWat(this, state, wasmByteOffsetNavFlow ?: remember { MutableStateFlow(null) }) },
                 Panel("WAT (virtualized)") {
@@ -1569,7 +1583,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
     }
     is WasmBinaryProvider -> {
         if (canProvideWasmModule()) {
-            listOf(
+            webcilIlPanels(state) + listOf(
                 Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
                 Panel("WAT (virtualized)") {
                     val live = (liveProviderProvider?.invoke() as? WasmBinaryProvider) ?: this
@@ -2219,6 +2233,7 @@ private fun BinaryProvider.discoverHardcodedPanelNames(fileName: String): List<S
     is WasmBinaryVirtualFileProvider -> {
         if (canProvideWasmModule()) {
             buildList {
+                if (webcil != null) add(CLR_IL_TAB_NAME)
                 add("Dominators")
                 add("Wat")
                 add("WAT (virtualized)")
@@ -2234,6 +2249,7 @@ private fun BinaryProvider.discoverHardcodedPanelNames(fileName: String): List<S
     is WasmBinaryProvider -> {
         if (canProvideWasmModule()) {
             buildList {
+                if (webcil != null) add(CLR_IL_TAB_NAME)
                 add("Dominators")
                 add("WAT (virtualized)")
                 add("Type Graph")
@@ -2247,6 +2263,10 @@ private fun BinaryProvider.discoverHardcodedPanelNames(fileName: String): List<S
     }
     else -> emptyList()
 }
+
+/** The IL view of a Blazor WebAssembly assembly; detection reads only imports and data segment headers. */
+private fun WasmBinaryProvider.webcilIlPanels(state: HexViewStateHolder): List<Panel> =
+    webcil?.let { clrIlPanels(it, state) }.orEmpty()
 
 /**
  * Cheaply discovers which DWARF panels will be available. Both the section list and the grouping

@@ -87,6 +87,15 @@ internal fun wrapForJs(value: Any?): dynamic {
         is MachOBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapMachOBinaryProvider(obj, value) }
         is FatMachOBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapFatMachOBinaryProvider(obj, value) }
         is PeBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapPeBinaryProvider(obj, value) }
+        // A Blazor WebAssembly assembly, reached through a Wasm provider's `webcil`; the same names the JVM exposes.
+        is WebcilAssembly -> {
+            defineLazyProp(obj, "image") { value.image }
+            defineLazyProp(obj, "clrMetadata") { value.clrMetadata }
+            defineLazyProp(obj, "debugEntries") { value.debugEntries }
+            defineLazyProp(obj, "pdbReference") { value.pdbReference }
+            defineLazyProp(obj, "portablePdb") { value.portablePdb }
+            defineLazyProp(obj, "sizeAnalysis") { value.sizeAnalysis }
+        }
         is CoffBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapCoffBinaryProvider(obj, value) }
         is ArchiveBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapArchiveBinaryProvider(obj, value) }
         is ZipBinaryProvider -> wrapBinaryProvider(obj, value).also { wrapZipBinaryProvider(obj, value) }
@@ -277,6 +286,8 @@ private fun wrapWasmBinaryProvider(obj: dynamic, p: WasmBinaryProvider) {
     defineLazyProp(obj, "exports") { p.exports }
     defineLazyProp(obj, "data") { p.data }
     defineLazyProp(obj, "nameSection") { p.nameSection }
+    defineLazyProp(obj, "symbolMapPath") { p.symbolMapPath }
+    defineLazyProp(obj, "webcil") { p.webcil }
     defineLazyProp(obj, "codeRecords") { p.codeRecords }
     defineLazyProp(obj, "functions") { p.functions }
 }
