@@ -693,12 +693,13 @@ private fun enrichComponentNestedComponentsTab(
     file: VirtualFile,
     project: Project,
 ): TableTabDescriptor {
-    val section = provider.wasmModule?.componentSection ?: return tab
+    val components = provider.nestedComponents
     return TableTabDescriptor(
         name = tab.name,
         columns = tab.columns,
         rowCount = tab.rowCount,
         rowClickAction = { rowIndex ->
+            val section = components.getOrNull(rowIndex)?.section ?: return@TableTabDescriptor
             openNestedComponentBinary(
                 project, file, provider.bytes, rowIndex,
                 isComponent = true,

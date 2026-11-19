@@ -372,12 +372,13 @@ private fun enrichComponentNestedComponentsTab(
     fileName: String,
     host: Host,
 ): TableTabDescriptor {
-    val section = provider.wasmModule?.componentSection ?: return tab
+    val components = provider.nestedComponents
     return TableTabDescriptor(
         name = tab.name,
         columns = tab.columns,
         rowCount = tab.rowCount,
         rowClickAction = { rowIndex ->
+            val section = components.getOrNull(rowIndex)?.section ?: return@TableTabDescriptor
             val componentBytes = provider.submoduleBytes(section.contentOffset, section.contentSize)
                 ?: return@TableTabDescriptor
             host.openModule(

@@ -1429,16 +1429,45 @@ open class WasmComponentBinaryProvider(private val sharedBytes: CommonByteBuffer
         problems.sortedBy { it.byteOffset }
     }
 
+    /**
+     * Every nested component that parses, in definition order. Enumerated from the raw section
+     * list, not `componentSection`: the parser keeps only the LAST component section there, and a
+     * composed component (e.g. composed.wasm) keeps its code in several.
+     *
+     * Each entry records its index in the component index space, which edges and exports refer
+     * to (`instantiate component N`). That space also counts component imports and component
+     * aliases, in section order, and definitions that fail to parse, so it can differ from the
+     * list position.
+     *
+     * The payloads are views over [bytes], not copies: for a memory-mapped file, copying every
+     * nested component would put another file's worth of bytes on the heap.
+     */
     val nestedComponents: List<NestedComponentData> by lazy {
-        val componentSection = wasmModule?.componentSection ?: return@lazy emptyList()
-        // Single duplicate for the whole sequence: parseNestedComponent + position + get
-        // must share one cursor.
+        val module = wasmModule ?: return@lazy emptyList()
         val buf = bytes
-        val component = with(componentSection) { buf.parseNestedComponent() } ?: return@lazy emptyList()
-        buf.position(componentSection.contentOffset)
-        val nestedBytes = ByteArray(componentSection.contentSize)
-        buf.get(nestedBytes, 0, componentSection.contentSize)
-        listOf(NestedComponentData(component, nestedBytes.toCommonByteBuffer()))
+        var componentIndex = 0
+        buildList {
+            for (section in module.sections) {
+                when (section) {
+                    is WasmComponentImportSection -> componentIndex +=
+                        with(section) { buf.scanPartial().first }.count { it.externDescription is ComponentExternComponent }
+                    is WasmAliasSection -> componentIndex +=
+                        with(section) { buf.scanAliasesPartial().first }
+                            .count { it is ComponentAlias && it.componentSort is ComponentSort.Component }
+                    is WasmComponentSection -> nestedComponentData(buf, section, componentIndex++)?.let(::add)
+                    else -> {}
+                }
+            }
+        }
+    }
+
+    private fun nestedComponentData(buf: CommonByteBuffer, section: WasmComponentSection, componentIndex: Int): NestedComponentData? {
+        if (section.contentSize <= 0 || !buf.containsRange(section.contentOffset, section.contentSize)) return null
+        val view = buf.slice(section.contentOffset, section.contentSize)
+        // Parse through a duplicate so the kept view's cursor is untouched.
+        val component = (WasmParser().parse(view.duplicate().position(0)) as? WasmParseSuccess)
+            ?.wasmModule as? WasmComponent ?: return null
+        return NestedComponentData(component, view, section, componentIndex)
     }
 
     val types: List<ComponentDefType> by lazy {
@@ -1465,7 +1494,19 @@ open class WasmComponentBinaryProvider(private val sharedBytes: CommonByteBuffer
     }
 }
 
-class NestedComponentData(val component: WasmComponent, val buffer: CommonByteBuffer)
+/**
+ * A parsed nested component, a view of its own bytes, the section of the outer component it
+ * came from, and its index in the outer component's component index space.
+ */
+class NestedComponentData(
+    val component: WasmComponent,
+    private val view: CommonByteBuffer,
+    val section: WasmComponentSection,
+    val componentIndex: Int,
+) {
+    /** A fresh cursor over the component's bytes per call; callers position it themselves. */
+    val buffer: CommonByteBuffer get() = view.duplicate()
+}
 
 fun buildComponentTypeIndex(sections: List<WasmSection>, buffer: CommonByteBuffer): List<ComponentDefType> {
     return buildComponentTypeIndex(

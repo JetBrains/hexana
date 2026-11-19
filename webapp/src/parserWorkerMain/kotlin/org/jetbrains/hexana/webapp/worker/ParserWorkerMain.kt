@@ -1221,15 +1221,15 @@ private fun componentGraph(provider: WasmComponentBinaryProvider): ParserWorkerC
             size = item.contentSize,
         )
     }
-    val componentSection = provider.wasmModule?.componentSection
-    provider.nestedComponents.forEachIndexed { index, _ ->
+    provider.nestedComponents.forEachIndexed { index, nested ->
+        // Edges name components by their component index space index, not the list position.
         nodes += ParserWorkerComponentGraphNode(
-            "component:$index",
+            "component:${nested.componentIndex}",
             "nested_component",
-            "component $index",
+            "component ${nested.componentIndex}",
             "${provider.nestedComponentExports(index).size} exports",
-            offset = componentSection?.contentOffset,
-            size = componentSection?.contentSize,
+            offset = nested.section.contentOffset,
+            size = nested.section.contentSize,
         )
     }
     provider.coreInstances.forEachIndexed { index, instance ->

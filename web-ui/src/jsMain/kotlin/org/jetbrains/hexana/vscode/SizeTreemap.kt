@@ -90,7 +90,9 @@ internal fun SizeTreemapCanvas(
                 ctx.font = "11px sans-serif"
                 ctx.asDynamic().textBaseline = "top"
                 for (lr in rects) {
-                    if (lr.depth > 1) continue
+                    // Deeper leaves (inside large nested modules/components) only get a label when roomy,
+                    // so dense levels such as individual functions stay unlabelled.
+                    if (lr.depth > 1 && (lr.bounds.w < MIN_DEEP_LABEL_WIDTH || lr.bounds.h < MIN_DEEP_LABEL_HEIGHT)) continue
                     if (lr.node.children.isNotEmpty()) continue
                     drawNodeLabel(ctx, lr, fgColor)
                 }
@@ -149,6 +151,8 @@ private const val MIN_CLICKABLE_SIZE = 4f
 private const val MIN_LABEL_WIDTH = 24f
 private const val MIN_LABEL_HEIGHT = 14f
 private const val LABEL_PADDING = 3f
+private const val MIN_DEEP_LABEL_WIDTH = 80f
+private const val MIN_DEEP_LABEL_HEIGHT = 18f
 
 // -----------------------------------------------------------------------
 // Label drawing
@@ -164,9 +168,12 @@ private fun drawNodeLabel(ctx: CanvasRenderingContext2D, lr: LayoutRect, fgColor
     val metrics = ctx.measureText(name)
     val label = if (metrics.width > maxWidth) {
         // Try showing just the numeric suffix for repeated elements.
-        val lastSpace = name.trimEnd().lastIndexOf(' ')
-        if (lastSpace >= 0) {
-            val suffix = name.substring(0, 1) + "#" + name.substring(lastSpace + 1)
+        val trimmed = name.trimEnd()
+        val lastSpace = trimmed.lastIndexOf(' ')
+        val number = if (lastSpace >= 0) trimmed.substring(lastSpace + 1) else ""
+        // Only a numeric suffix ("func 453" -> "f#453"); "Custom: .debug_line" must not become "C#.debug_line".
+        if (number.isNotEmpty() && number.all(Char::isDigit)) {
+            val suffix = name.substring(0, 1) + "#" + number
             val suffixMetrics = ctx.measureText(suffix)
             if (suffixMetrics.width <= maxWidth) suffix else return
         } else return

@@ -111,10 +111,8 @@ private fun componentModulesTab(provider: WasmComponentBinaryProvider): TableTab
 }
 
 private fun componentNestedComponentsTab(provider: WasmComponentBinaryProvider): TableTabDescriptor? {
-    if (provider.nestedComponents.isEmpty()) return null
-    // The parser tracks a single nested-component section; its content offset
-    // labels the one row this tab currently has.
-    val section = provider.wasmModule?.componentSection ?: return null
+    val components = provider.nestedComponents
+    if (components.isEmpty()) return null
 
     return TableTabDescriptor(
         name = "Components",
@@ -122,11 +120,11 @@ private fun componentNestedComponentsTab(provider: WasmComponentBinaryProvider):
             ColumnDescriptor(
                 name = "Data",
                 widthBehavior = ColumnWidth.Fill(),
-            ) {
-                CellValue("component:@${section.contentOffset.toHexString()}")
+            ) { index ->
+                CellValue("component:@${components[index].section.contentOffset.toHexString()}")
             },
         ),
-        rowCount = provider.nestedComponents.size,
+        rowCount = components.size,
         defaultSortColumn = TableTabDescriptor.ID_COLUMN,
     )
 }

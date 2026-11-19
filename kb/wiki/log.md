@@ -203,3 +203,8 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-12 — `entities/third-party-notices` — HEXANA-33 Part B: shared notices generator, per-artifact verification, `license/third_party` layout.
 - 2026-11-12 — `sources/third-party-fixture-provenance` — HEXANA-33 part B area D: fixture provenance/licence notices, Nordic-licensed ELF removed, legacy Exceptions.md replaced by a link.
 - 2026-11-13 — `entities/leak-guard` — new: clean-machine build findings, leak guard design (private TeamCity/Patronus check plus generic GitHub Action).
+- 2026-11-16 — `entities/top-size-tab` — new: Top tab inlines nested modules/components of at least 10% of the file, groups small leftovers, rebases nested offsets.
+- 2026-11-16 — `entities/top-size-tab` — treemap depth depends on size (nodes of 1% or more go deeper, cap 8); hosts label roomy deep leaves.
+- 2026-11-16 — `entities/top-size-tab` — reworked: nesting under the parent instead of flattening, mapped-slice cursor fix, Components tab lists all nested components.
+- 2026-11-16 — `entities/top-size-tab` — deep treemap levels draw only children of 1% or more (rest folded); numeric-only label shortening.
+- 2026-11-16 — `entities/top-size-tab` — review follow-ups: nested component views not copies, component index space index for graph IDs; deep-treemap perf claim measured and declined.
