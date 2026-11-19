@@ -18,6 +18,7 @@ import {
     scriptOpenOversizeReason,
     toWebviewBytes,
 } from "./scriptBinaryRead";
+import {DirectoryFileSystem, directoryListing, directoryListingFailure, listDirectory} from "./directoryListing";
 import {
     HttpReplaySendMessage,
     HttpRequestFileMessage,
@@ -1323,6 +1324,13 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                     message.path as string,
                     webviewPanel,
                 );
+            } else if (message.type === "list-directory") {
+                void this.listDirectoryForWebview(
+                    message.requestId as string,
+                    message.path as string,
+                    Array.isArray(message.hashNames) ? (message.hashNames as string[]) : [],
+                    webviewPanel,
+                );
             } else if (message.type === "read-byte-range") {
                 void this.readByteRange(document, message, webviewPanel);
             } else if (message.type === "search-bytes") {
@@ -2621,6 +2629,32 @@ export class WasmEditorProvider implements vscode.CustomReadonlyEditorProvider<W
                 requestId: message.requestId,
                 error: fileReadFailureReason(err),
             });
+        }
+    }
+
+    /**
+     * Answers `list-directory` with exactly one `directory-listing`: what sits next to the open file,
+     * for companion files (fingerprinted PDBs, symbol maps) and the Blazor App tab.
+     */
+    private async listDirectoryForWebview(
+        requestId: string,
+        dirPath: string,
+        hashNames: string[],
+        webviewPanel: vscode.WebviewPanel,
+    ): Promise<void> {
+        try {
+            const fs: DirectoryFileSystem = {
+                readDirectory: async (dir) => (await vscode.workspace.fs.readDirectory(vscode.Uri.file(dir))).map(([name, type]) => [name, type]),
+                stat: async (path) => {
+                    const stat = await vscode.workspace.fs.stat(vscode.Uri.file(path));
+                    return {type: stat.type, size: stat.size};
+                },
+                readFile: async (path) => vscode.workspace.fs.readFile(vscode.Uri.file(path)),
+            };
+            const entries = await listDirectory(fs, dirPath, hashNames);
+            void webviewPanel.webview.postMessage(directoryListing(requestId, dirPath, entries));
+        } catch (err) {
+            void webviewPanel.webview.postMessage(directoryListingFailure(requestId, dirPath, fileReadFailureReason(err)));
         }
     }
 

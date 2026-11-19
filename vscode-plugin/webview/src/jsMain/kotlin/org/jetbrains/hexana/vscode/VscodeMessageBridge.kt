@@ -743,6 +743,33 @@ internal val byteRangeReads = HostRequests("read-byte-range", 30_000) { data ->
     messageBytesOrNull(data.data) ?: throw RuntimeException("The editor sent no bytes.")
 }
 
+/** Answers to `list-directory`; see the extension host's `directoryListing.ts` for the reply shape. */
+internal val directoryListings = HostRequests("list-directory", 30_000) { data -> decodeDirectoryListing(data) }
+
+internal fun decodeDirectoryListing(data: dynamic): List<HostDirectoryEntry> {
+    val entries = data.entries ?: throw RuntimeException("The editor sent no directory entries.")
+    val count = (entries.length as? Number)?.toInt() ?: 0
+    return (0 until count).mapNotNull { index ->
+        val entry = entries[index] ?: return@mapNotNull null
+        val name = entry.name as? String ?: return@mapNotNull null
+        HostDirectoryEntry(
+            name = name,
+            isFile = entry.isFile == true,
+            isDirectory = entry.isDirectory == true,
+            size = (entry.size as? Number)?.toDouble()?.toLong(),
+            sha256 = entry.sha256 as? String,
+        )
+    }
+}
+
+/** Lists [path] through the extension host, hashing the files in [hashNames]. */
+fun listDirectoryOnHost(path: String, hashNames: List<String>): Promise<List<HostDirectoryEntry>> = directoryListings.request { msg ->
+    msg.path = path
+    val names = js("[]").unsafeCast<dynamic>()
+    for (name in hashNames) names.push(name)
+    msg.hashNames = names
+}
+
 internal val byteSearches = HostRequests("search-bytes", 600_000) { data ->
     (data.offset as? Number)?.toDouble()?.toLong() ?: -1L
 }
@@ -874,6 +901,8 @@ class VscodeHost(override val canRunApk: Boolean = false) : Host {
     override fun readScriptFile(scriptPath: String) = postReadScriptFileToHost(scriptPath)
     override val canOpenBinaryFile: Boolean get() = true
     override fun readBinaryFile(path: String): Promise<ByteArray> = ScriptBinaryReads.request(path)
+    override fun listDirectory(path: String, hashNames: List<String>): Promise<List<HostDirectoryEntry>> =
+        listDirectoryOnHost(path, hashNames)
     override val canReplayHttp: Boolean get() = true
     override fun sendHttpReplay(method: String, url: String, headers: List<HttpHeader>, body: ByteArray) =
         HttpReplaySends.request(method, url, headers, body)
@@ -1071,6 +1100,8 @@ fun VscodeMessageListener(onMessage: (VscodeMessage) -> Unit) {
                 byteRangeReads.complete(data)
             } else if (data != null && data.type == "search-bytes-result") {
                 byteSearches.complete(data)
+            } else if (data != null && data.type == "directory-listing") {
+                directoryListings.complete(data)
             } else if (data != null && data.type != undefined) {
                 val type = data.type as String
                 // A message whose payload we did not expect can fail to

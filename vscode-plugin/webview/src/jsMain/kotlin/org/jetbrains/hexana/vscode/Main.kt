@@ -9,6 +9,12 @@ import org.jetbrains.hexana.io.toCommonByteBuffer
 import org.jetbrains.hexana.providers.*
 import org.jetbrains.hexana.shared.PdbCompanionLoader
 import org.jetbrains.hexana.shared.WasmSymbolMapCompanionLoader
+import org.jetbrains.hexana.shared.blazor.BlazorBootConfig
+import org.jetbrains.hexana.shared.blazor.BlazorBundle
+import org.jetbrains.hexana.shared.blazor.BlazorIntegrity
+import org.jetbrains.hexana.shared.companionFileName
+import org.jetbrains.hexana.shared.companionJoin
+import org.jetbrains.hexana.shared.companionParentDirectory
 import org.jetbrains.hexana.shared.diff.BinaryDiffInput
 import org.jetbrains.hexana.shared.features.ParserRef
 import org.jetbrains.hexana.shared.features.parseFileAssociations
@@ -324,27 +330,49 @@ fun BinaryEditorApp() {
 
             // A PE image's PDB lives next to it. Load it before any tab is built, so the IL view,
             // Methods and Debug Info show its source lines on first paint instead of rebuilding.
+            // The same goes for a Wasm module's companions: a Blazor WebAssembly assembly's Portable PDB
+            // and a stripped Emscripten module's symbol map (`dotnet.native.js.symbols`). Without a
+            // directory listing these are the names derived from the file's own; the effect below lists
+            // the directory and adds the fingerprinted ones a publish writes.
+            val modulePath = filePath.ifBlank { null }
             val pdbCandidates = remember(provider) {
                 when (provider) {
                     is PeBinaryProvider -> PdbCompanionLoader.candidatePaths(provider)
-                    // No directory listing here, so a fingerprinted Blazor PDB is found only under its recorded name.
-                    is WasmBinaryProvider -> provider.webcil?.let { PdbCompanionLoader.candidatePaths(it, filePath.ifBlank { null }) }.orEmpty()
+                    is WasmBinaryProvider -> provider.webcil?.let { PdbCompanionLoader.candidatePaths(it, modulePath) }.orEmpty()
                     else -> emptyList()
                 }
             }
-            // A stripped Emscripten module's symbol map (`dotnet.native.js.symbols`): no directory
-            // listing here, so only the names derived from the module's own name are tried.
             val symbolMapCandidates = remember(provider) {
-                (provider as? WasmBinaryProvider)?.let { WasmSymbolMapCompanionLoader.candidatePaths(it, filePath.ifBlank { null }) }.orEmpty()
+                (provider as? WasmBinaryProvider)?.let { WasmSymbolMapCompanionLoader.candidatePaths(it, modulePath) }.orEmpty()
             }
+            val waitsForCompanions = pdbCandidates.isNotEmpty() || symbolMapCandidates.isNotEmpty()
             var pdbReadyFor by remember(bytes) { mutableStateOf<BinaryProvider?>(null) }
+            // The Blazor WebAssembly app a `_framework` module belongs to. Not waited for: the Blazor
+            // App tab joins the others when it arrives.
+            var blazorBundle by remember(provider) { mutableStateOf<BlazorBundle?>(null) }
             LaunchedEffect(provider) {
+                val wasm = provider as? WasmBinaryProvider
+                val directory = modulePath?.takeIf { wasm != null }?.let(::companionParentDirectory)
+                // One listing serves the fingerprinted companions and the Blazor App tab.
+                val listing = directory?.let { listDirectoryOrNull(host, it) }
+                val siblings = listing.orEmpty().filter { it.isFile }.map { it.name }
                 // Marked ready however the loop ends, or the editor would wait on this forever.
                 try {
-                    if (pdbCandidates.isNotEmpty()) loadPdbCompanion(provider, pdbCandidates, host)
-                    if (symbolMapCandidates.isNotEmpty()) loadSymbolMapCompanion(provider as WasmBinaryProvider, symbolMapCandidates, host)
+                    val pdbs = if (wasm != null && listing != null) {
+                        wasm.webcil?.let { PdbCompanionLoader.candidatePaths(it, modulePath, siblings) }.orEmpty()
+                    } else {
+                        pdbCandidates
+                    }
+                    if (pdbs.isNotEmpty()) loadPdbCompanion(provider, pdbs, host)
+                    if (wasm != null) {
+                        val maps = if (listing != null) WasmSymbolMapCompanionLoader.candidatePaths(wasm, modulePath, siblings) else symbolMapCandidates
+                        if (maps.isNotEmpty()) loadSymbolMapCompanion(wasm, maps, host)
+                    }
                 } finally {
                     pdbReadyFor = provider
+                }
+                if (directory != null && listing != null && modulePath != null) {
+                    blazorBundle = loadBlazorBundle(host, directory, listing, companionFileName(modulePath))
                 }
             }
             // What the editor shows, paired with whether its parser was a fallback. Normally the
@@ -354,7 +382,7 @@ fun BinaryEditorApp() {
             // for these bytes has nothing to fall back to.
             val current = ShownEditor(provider, overrideFailure ?: providerBindings.error, providerBindings)
             val lastShown = remember(bytes) { arrayOfNulls<ShownEditor>(1) }
-            val shown = if (pdbCandidates.isEmpty() || pdbReadyFor === provider) current else lastShown[0]
+            val shown = if (!waitsForCompanions || pdbReadyFor === provider) current else lastShown[0]
             if (shown == null) {
                 Div({ classes("loading") }) {
                     Text("Loading debug symbols…")
@@ -396,6 +424,7 @@ fun BinaryEditorApp() {
                 // The hex view covers the whole of a file the webview holds only the head of,
                 // fetching pages from the host as they scroll into view.
                 hexBytes = pagedBytes,
+                blazorBundle = blazorBundle,
                 coverageOverride = structureFetcher?.coverageOverride,
                 // Each fetch round rebuilds the provider; the selected tab stays.
                 tabStateKey = if (structureFetcher != null) buffer else null,
@@ -447,6 +476,56 @@ private class ShownEditor(
     val failure: String?,
     val bindings: BrowserProviderBindings,
 )
+
+/** The entries of [directory], or null when the host cannot list it. */
+private suspend fun listDirectoryOrNull(host: Host, directory: String): List<HostDirectoryEntry>? = try {
+    host.listDirectory(directory).await()
+} catch (e: CancellationException) {
+    throw e
+} catch (_: Throwable) {
+    null
+}
+
+/**
+ * Reads the Blazor WebAssembly app [currentFileName] belongs to from [directory], whose entries are
+ * [listing]: the first boot manifest, then a second listing in which the extension host hashes every
+ * file the manifest names, so integrity is checked without moving the files across the bus.
+ */
+private suspend fun loadBlazorBundle(
+    host: Host,
+    directory: String,
+    listing: List<HostDirectoryEntry>,
+    currentFileName: String,
+): BlazorBundle? {
+    val files = listing.filter { it.isFile }
+    for (candidate in BlazorBundle.configCandidates(files.map { it.name })) {
+        val size = files.firstOrNull { it.name == candidate }?.size ?: continue
+        if (size > BlazorBundle.MAX_CONFIG_SIZE) continue
+        val text = try {
+            host.readBinaryFile(companionJoin(directory, candidate)).await().decodeToString()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            continue
+        }
+        val config = BlazorBootConfig.parse(text) ?: continue
+        // Not part of this app build: no tab, and nothing hashed for it.
+        if (config.resources.none { it.fileName == currentFileName }) return null
+        val hashed = try {
+            host.listDirectory(directory, config.resources.map { it.fileName }).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            files
+        }
+        val sizes = hashed.mapNotNull { entry -> entry.size?.let { entry.name to it } }.toMap()
+        val hashes = hashed.mapNotNull { entry -> entry.sha256?.let { entry.name to it } }.toMap()
+        return BlazorBundle.assemble(directory, candidate, config, sizes, currentFileName) { resource ->
+            hashes[resource.fileName]?.let { BlazorBundle.integrityOf(resource, it) } ?: BlazorIntegrity.NotChecked
+        }
+    }
+    return null
+}
 
 /** Reads [candidates] in order through the extension host and attaches the first symbol map that fits. */
 private suspend fun loadSymbolMapCompanion(provider: WasmBinaryProvider, candidates: List<String>, host: Host) {

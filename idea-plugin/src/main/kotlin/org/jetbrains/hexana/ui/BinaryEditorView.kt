@@ -87,6 +87,7 @@ import org.jetbrains.hexana.ui.panel.ProviderTabContent
 import org.jetbrains.hexana.ui.panel.displayName
 import org.jetbrains.hexana.shared.CLR_IL_TAB_NAME
 import org.jetbrains.hexana.shared.WasmSymbolMapCompanionLoader
+import org.jetbrains.hexana.shared.blazor.BlazorBundle
 import org.jetbrains.hexana.shared.DEX_SMALI_TAB_NAME
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
 import org.jetbrains.hexana.shared.NativeDebugTabData
@@ -383,8 +384,13 @@ internal fun BinaryEditorView(
         // same inputs as the panels list so it resets on provider change.
         // Shared by the initial tab resolution and the Compatibility tab's refresh, so the
         // two cannot drift on the hooks they hand the descriptors.
+        // The Blazor WebAssembly app a `_framework` module belongs to. Read with the other companions
+        // in the resolution effect below, before any table tab is built; a plain holder rather than
+        // state, because nothing composes from it — the tabs are resolved after it is set.
+        val blazorBundleHolder = remember(binaryProvider) { arrayOfNulls<BlazorBundle>(1) }
         fun buildTableTabsContext(nativeDebugData: NativeDebugTabData?) = TableTabsContext(
             nativeDebugData = nativeDebugData,
+            blazorBundle = blazorBundleHolder[0],
             fileName = fileName,
             // Drives the Compatibility tab. Null for a project with no base path, and the
             // tab is then absent rather than empty.
@@ -504,6 +510,8 @@ internal fun BinaryEditorView(
                     try {
                         wasm.webcil?.let { PdbCompanionLoader.load(it, wasm.file.path, JVM_FILE_SYSTEM) }
                         WasmSymbolMapCompanionLoader.load(wasm, wasm.file.path, JVM_FILE_SYSTEM)
+                        // Hashing the whole bundle for the integrity column is cheap: ~90 ms for a 9 MB app.
+                        blazorBundleHolder[0] = BlazorBundle.load(wasm.file.path, JVM_FILE_SYSTEM, verifyIntegrity = true)
                     } catch (e: Exception) {
                         HexanaLog.LOG.warn("Failed to load the companions of ${wasm.file.path}", e)
                     }
