@@ -12,6 +12,8 @@ import org.jetbrains.hexana.shared.WasmSymbolMapCompanionLoader
 import org.jetbrains.hexana.shared.blazor.BlazorBootConfig
 import org.jetbrains.hexana.shared.blazor.BlazorBundle
 import org.jetbrains.hexana.shared.blazor.BlazorIntegrity
+import org.jetbrains.hexana.shared.blazor.MonoAotAssembly
+import org.jetbrains.hexana.shared.blazor.MonoAotReport
 import org.jetbrains.hexana.shared.companionFileName
 import org.jetbrains.hexana.shared.companionJoin
 import org.jetbrains.hexana.shared.companionParentDirectory
@@ -350,6 +352,7 @@ fun BinaryEditorApp() {
             // The Blazor WebAssembly app a `_framework` module belongs to. Not waited for: the Blazor
             // App tab joins the others when it arrives.
             var blazorBundle by remember(provider) { mutableStateOf<BlazorBundle?>(null) }
+            var monoAot by remember(provider) { mutableStateOf<MonoAotReport?>(null) }
             LaunchedEffect(provider) {
                 val wasm = provider as? WasmBinaryProvider
                 val directory = modulePath?.takeIf { wasm != null }?.let(::companionParentDirectory)
@@ -371,8 +374,10 @@ fun BinaryEditorApp() {
                 } finally {
                     pdbReadyFor = provider
                 }
-                if (directory != null && listing != null && modulePath != null) {
-                    blazorBundle = loadBlazorBundle(host, directory, listing, companionFileName(modulePath))
+                if (wasm != null && directory != null && listing != null && modulePath != null) {
+                    val bundle = loadBlazorBundle(host, directory, listing, companionFileName(modulePath))
+                    blazorBundle = bundle
+                    if (bundle != null) monoAot = loadMonoAotReport(host, wasm, bundle)
                 }
             }
             // What the editor shows, paired with whether its parser was a fallback. Normally the
@@ -425,6 +430,7 @@ fun BinaryEditorApp() {
                 // fetching pages from the host as they scroll into view.
                 hexBytes = pagedBytes,
                 blazorBundle = blazorBundle,
+                monoAot = monoAot,
                 coverageOverride = structureFetcher?.coverageOverride,
                 // Each fetch round rebuilds the provider; the selected tab stays.
                 tabStateKey = if (structureFetcher != null) buffer else null,
@@ -525,6 +531,25 @@ private suspend fun loadBlazorBundle(
         }
     }
     return null
+}
+
+/**
+ * The .NET AOT breakdown of [wasm], the app's runtime module: reads the app's assemblies through the
+ * extension host for their metadata. Nothing is read for an interpreter-only build or without symbol names.
+ */
+private suspend fun loadMonoAotReport(host: Host, wasm: WasmBinaryProvider, bundle: BlazorBundle): MonoAotReport? {
+    val files = MonoAotReport.assembliesToRead(wasm, bundle).takeIf { it.isNotEmpty() } ?: return null
+    val assemblies = files.map { (name, file) ->
+        val bytes = try {
+            host.readBinaryFile(companionJoin(bundle.directory, file)).await()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Throwable) {
+            null
+        }
+        MonoAotAssembly(name, bytes?.let(MonoAotReport::metadataOf))
+    }
+    return MonoAotReport.build(wasm, assemblies)
 }
 
 /** Reads [candidates] in order through the extension host and attaches the first symbol map that fits. */

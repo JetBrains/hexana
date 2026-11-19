@@ -52,8 +52,8 @@ consult-first / write-back rules.
   managed Top tab.
   shared async collection, lazy tabs, entry-editor reuse, and the cross-host "select table row" request.
 - [[entities/blazor-wasm-feasibility]] — Blazor WASM publish anatomy (Webcil-wrapped assemblies,
-  Mono `dotnet.native.wasm` + `.js.symbols`, .NET 10 boot JSON); Webcil → CLR tabs, symbol-map names and the Blazor App tab implemented,
-  what remains (AOT attribution, diff, Top tab).
+  Mono `dotnet.native.wasm` + `.js.symbols`, .NET 10 boot JSON); Webcil → CLR tabs, symbol-map names, the Blazor App tab and the .NET AOT tab implemented,
+  what remains (diff, Top tab, MCP/CLI).
 - [[entities/pdb-support-feasibility]] — what DWARF-parity for Windows PDB means (native line info
   only), the seams, MSF/DBI/C13 work breakdown, matched `sample.exe`/`sample.pdb` fixture, risks.
 - [[entities/pdb-symbols]] — Windows PDB (`debugInfo/pdb`, MSF) and Portable PDB (CLR metadata + `#Pdb`):

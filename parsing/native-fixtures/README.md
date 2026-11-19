@@ -140,7 +140,8 @@ rm -rf bin
 
 Real publish output is not committed; `BlazorPublishOutputTest` (`plugins-shared`) runs over it when
 `HEXANA_BLAZOR_FRAMEWORK_DIR` points at a published `wwwroot/_framework` and `HEXANA_BLAZOR_RUNTIME_NATIVE_DIR` at the
-runtime pack's `runtimes/browser-wasm/native` folder.
+runtime pack's `runtimes/browser-wasm/native` folder, and `HEXANA_BLAZOR_AOT_FRAMEWORK_DIR` at the `_framework` of an AOT
+publish (`-p:RunAOTCompilation=true -p:WasmEmitSymbolMap=true`, `wasm-tools` workload) in its default location.
 
 ### .resources fixture
 

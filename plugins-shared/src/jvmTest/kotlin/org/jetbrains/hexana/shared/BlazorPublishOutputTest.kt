@@ -5,6 +5,9 @@ import org.jetbrains.hexana.providers.WasmBinaryProvider
 import org.jetbrains.hexana.providers.createBinaryProvider
 import org.jetbrains.hexana.shared.blazor.BlazorBundle
 import org.jetbrains.hexana.shared.blazor.BlazorIntegrity
+import org.jetbrains.hexana.shared.blazor.MonoAotGroups
+import org.jetbrains.hexana.shared.blazor.MonoAotReport
+import org.jetbrains.hexana.shared.blazor.monoAotPrologue
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -21,6 +24,9 @@ import kotlin.test.assertTrue
  *   Every `*.wasm` except the runtime must decode as a .NET assembly without diagnostics.
  * - `HEXANA_BLAZOR_RUNTIME_NATIVE_DIR`: the runtime pack's native folder, holding `dotnet.native.wasm` and
  *   `dotnet.native.js.symbols` (`~/.nuget/packages/microsoft.netcore.app.runtime.mono.browser-wasm/<version>/runtimes/browser-wasm/native`).
+ * - `HEXANA_BLAZOR_AOT_FRAMEWORK_DIR`: `bin/Release/<tfm>/publish/wwwroot/_framework` of the same app published with
+ *   `-p:RunAOTCompilation=true -p:WasmEmitSymbolMap=true` (needs the `wasm-tools` workload) into its default
+ *   location, so the symbol map is found in the project's `obj` directory.
  */
 class BlazorPublishOutputTest {
     private fun dir(variable: String): File? = System.getenv(variable)?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory }
@@ -70,6 +76,32 @@ class BlazorPublishOutputTest {
         override fun joinPath(base: String, child: String): String = File(base, child).path
         override fun pathRoot(path: String) = "/"
         override fun regularFileSize(path: String) = File(path).takeIf { it.isFile }?.length()
+    }
+
+    @Test
+    fun `an AOT runtime module splits into the app's assemblies, types and methods`() {
+        val framework = dir("HEXANA_BLAZOR_AOT_FRAMEWORK_DIR") ?: return
+        val file = framework.listFiles { f -> f.name.startsWith("dotnet.native.") && f.name.endsWith(".wasm") }.orEmpty().single()
+        val provider = wasm(file)
+        // Not next to the module: found under the project's obj/<config>/<tfm>/wasm/for-publish.
+        assertTrue(WasmSymbolMapCompanionLoader.load(provider, file.path, fileSystem))
+        assertTrue("/wasm/for-publish/" in provider.symbolMapPath.orEmpty(), provider.symbolMapPath)
+        val bundle = assertNotNull(BlazorBundle.load(file.path, fileSystem, verifyIntegrity = false))
+        val started = System.nanoTime()
+        val report = assertNotNull(MonoAotReport.load(provider, bundle) { name -> fileSystem.readFile(File(framework, name).path) })
+        println("AOT report in ${(System.nanoTime() - started) / 1_000_000} ms: " + monoAotPrologue(report).replace("\n", " | "))
+        assertEquals(emptyList(), report.withoutMetadata)
+
+        val managed = report.root.children.single { it.name == MonoAotGroups.MANAGED }
+        val instances = report.root.children.single { it.name == MonoAotGroups.GENERIC_INSTANCES }
+        // Most of the code is .NET, and nearly all of it resolves to a type.
+        assertTrue(managed.size + instances.size > report.root.size / 2, monoAotPrologue(report))
+        val unresolved = managed.children.sumOf { a -> a.children.filter { it.name == MonoAotGroups.UNRESOLVED }.sumOf { it.size } } +
+            instances.children.filter { it.name == MonoAotGroups.UNRESOLVED }.sumOf { it.size }
+        assertTrue(unresolved * 100 < managed.size + instances.size, "unresolved $unresolved")
+        assertEquals("System.Private.CoreLib", managed.children.first().name)
+        val app = managed.children.single { it.name == "app" }
+        assertTrue(app.children.any { ns -> ns.name == "app.Pages" && ns.children.any { it.name == "Counter" } })
     }
 
     @Test

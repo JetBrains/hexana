@@ -40,8 +40,10 @@ class WasmSymbolMapAttachTest {
         val provider = provider()
         // Index past the function index space.
         assertFalse(provider.attachSymbolMap(WasmSymbolMap.parse("1:a\n3:b"), null))
+        // A build with fewer functions: its last index is not the module's last.
+        assertFalse(provider.attachSymbolMap(WasmSymbolMap.parse("0:foo\n1:a"), null))
         // The import entry disagrees with the import section.
-        assertFalse(provider.attachSymbolMap(WasmSymbolMap.parse("0:bar\n1:a"), null))
+        assertFalse(provider.attachSymbolMap(WasmSymbolMap.parse("0:bar\n1:a\n2:b"), null))
         // Only `minified:original` lines: nothing to name functions with.
         assertFalse(provider.attachSymbolMap(WasmSymbolMap.parse("a:b"), null))
         assertNull(provider.nameSection)

@@ -5,6 +5,7 @@ import org.jetbrains.hexana.providers.BinaryProvider
 import org.jetbrains.hexana.shared.features.WasmRuntimeCompatibility
 import org.jetbrains.hexana.shared.blazor.BlazorBundle
 import org.jetbrains.hexana.shared.blazor.BlazorBundleTableTabsProvider
+import org.jetbrains.hexana.shared.blazor.MonoAotReport
 
 /**
  * Priority level for tab ordering.
@@ -478,6 +479,11 @@ class TableTabsContext(
      * ([BlazorBundle.load]); drives the Blazor App tab.
      */
     val blazorBundle: BlazorBundle? = null,
+    /**
+     * Which .NET code fills an ahead-of-time compiled `dotnet.native.wasm`, built by the host from the
+     * module's symbol map and the app's assemblies ([MonoAotReport]); drives the .NET AOT tab.
+     */
+    val monoAot: MonoAotReport? = null,
 )
 
 object TableTabsProviderRegistry {

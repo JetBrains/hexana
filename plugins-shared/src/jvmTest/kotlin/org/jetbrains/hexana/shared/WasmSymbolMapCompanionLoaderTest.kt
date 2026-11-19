@@ -73,12 +73,31 @@ class WasmSymbolMapCompanionLoaderTest {
     @Test
     fun `a map of another build is skipped for the next candidate`() {
         val dir = dir(
-            "dotnet.native.ab12cd34ef.js.symbols" to "0:other_import\n1:x\n",
+            "dotnet.native.ab12cd34ef.js.symbols" to "0:other_import\n1:x\n2:y\n",
             "dotnet.native.js.symbols" to "0:foo\n1:a\n2:b\n",
         )
         val provider = provider()
         assertTrue(WasmSymbolMapCompanionLoader.load(provider, dir.resolve("dotnet.native.ab12cd34ef.wasm").path, DirFileSystem()))
         assertEquals(dir.resolve("dotnet.native.js.symbols").path, provider.symbolMapPath)
+    }
+
+    @Test
+    fun `the runtime module of a published Blazor app finds its map in the project's obj directory`() {
+        val project = Files.createTempDirectory("hexana-blazor-project").toFile().apply { deleteOnExit() }
+        val framework = project.resolve("bin/Release/net10.0/publish/wwwroot/_framework").apply { mkdirs() }
+        val module = framework.resolve("dotnet.native.ovw7trd9up.wasm").apply { writeBytes(stripped) }
+        project.resolve("obj/Release/net10.0/wasm/for-build").apply { mkdirs() }.resolve("dotnet.native.js.symbols").writeText("0:foo\n1:stale\n")
+        project.resolve("obj/Release/net10.0/wasm/for-publish").apply { mkdirs() }.resolve("dotnet.native.js.symbols").writeText("0:foo\n1:a\n2:b\n")
+
+        assertEquals(
+            listOf("for-publish", "for-build"),
+            WasmSymbolMapCompanionLoader.dotnetBuildCandidates(module.path, DirFileSystem()).map { File(it).parentFile.name },
+        )
+        val provider = provider()
+        assertTrue(WasmSymbolMapCompanionLoader.load(provider, module.path, DirFileSystem()))
+        assertTrue(provider.symbolMapPath!!.endsWith("for-publish/dotnet.native.js.symbols"), provider.symbolMapPath)
+        // Any other module stays out of the project's obj directory.
+        assertEquals(emptyList(), WasmSymbolMapCompanionLoader.dotnetBuildCandidates(framework.resolve("app.abc.wasm").path, DirFileSystem()))
     }
 
     @Test

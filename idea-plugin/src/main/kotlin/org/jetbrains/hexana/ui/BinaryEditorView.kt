@@ -88,6 +88,8 @@ import org.jetbrains.hexana.ui.panel.displayName
 import org.jetbrains.hexana.shared.CLR_IL_TAB_NAME
 import org.jetbrains.hexana.shared.WasmSymbolMapCompanionLoader
 import org.jetbrains.hexana.shared.blazor.BlazorBundle
+import org.jetbrains.hexana.shared.blazor.MonoAotReport
+import org.jetbrains.hexana.shared.companionJoin
 import org.jetbrains.hexana.shared.DEX_SMALI_TAB_NAME
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
 import org.jetbrains.hexana.shared.NativeDebugTabData
@@ -388,9 +390,12 @@ internal fun BinaryEditorView(
         // in the resolution effect below, before any table tab is built; a plain holder rather than
         // state, because nothing composes from it — the tabs are resolved after it is set.
         val blazorBundleHolder = remember(binaryProvider) { arrayOfNulls<BlazorBundle>(1) }
+        // Same for the .NET AOT breakdown of an ahead-of-time compiled `dotnet.native.wasm`.
+        val monoAotHolder = remember(binaryProvider) { arrayOfNulls<MonoAotReport>(1) }
         fun buildTableTabsContext(nativeDebugData: NativeDebugTabData?) = TableTabsContext(
             nativeDebugData = nativeDebugData,
             blazorBundle = blazorBundleHolder[0],
+            monoAot = monoAotHolder[0],
             fileName = fileName,
             // Drives the Compatibility tab. Null for a project with no base path, and the
             // tab is then absent rather than empty.
@@ -511,7 +516,13 @@ internal fun BinaryEditorView(
                         wasm.webcil?.let { PdbCompanionLoader.load(it, wasm.file.path, JVM_FILE_SYSTEM) }
                         WasmSymbolMapCompanionLoader.load(wasm, wasm.file.path, JVM_FILE_SYSTEM)
                         // Hashing the whole bundle for the integrity column is cheap: ~90 ms for a 9 MB app.
-                        blazorBundleHolder[0] = BlazorBundle.load(wasm.file.path, JVM_FILE_SYSTEM, verifyIntegrity = true)
+                        val bundle = BlazorBundle.load(wasm.file.path, JVM_FILE_SYSTEM, verifyIntegrity = true)
+                        blazorBundleHolder[0] = bundle
+                        // Reads the app's assemblies only for an AOT runtime module with a symbol map: their
+                        // metadata splits its code into namespaces, types and methods (~0.4 s for the template app).
+                        monoAotHolder[0] = bundle?.let {
+                            MonoAotReport.load(wasm, it) { name -> JVM_FILE_SYSTEM.readFile(companionJoin(it.directory, name)) }
+                        }
                     } catch (e: Exception) {
                         HexanaLog.LOG.warn("Failed to load the companions of ${wasm.file.path}", e)
                     }

@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.vscode
 
 import org.jetbrains.hexana.shared.blazor.BlazorBundle
+import org.jetbrains.hexana.shared.blazor.MonoAotReport
 import org.jetbrains.hexana.shared.PROBLEMS_TAB_NAME
 import org.jetbrains.hexana.shared.isPartialView
 import org.jetbrains.hexana.shared.largeFileNotice
@@ -189,6 +190,8 @@ fun BinaryEditorContent(
     hexBytes: HexBytes? = null,
     /** The Blazor WebAssembly app [provider] belongs to, when the host read its directory. */
     blazorBundle: BlazorBundle? = null,
+    /** The .NET AOT breakdown of [provider], when it is an AOT compiled `dotnet.native.wasm`. */
+    monoAot: MonoAotReport? = null,
     /**
      * What the tabs cover while the host is still fetching the structures [provider] reads past
      * its head ([StructureBytesFetcher.coverageOverride]); `null` leaves it to the provider.
@@ -542,6 +545,7 @@ fun BinaryEditorContent(
                 sslKeyLogGeneration = sslKeyLogGeneration,
                 runtimeCompatibility = runtimeCompatibility,
                 blazorBundle = blazorBundle,
+                monoAot = monoAot,
                 onConfigureRuntimes = if (host.canEditRuntimeTargets) {
                     { showRuntimeTargetsDialog = true }
                 } else {

@@ -129,3 +129,15 @@ download (about 2 MB Brotli for the template app), the three ICU shards, `Global
 and which file is open. In the edited copy the changed file's row is tinted and reads `differs from the manifest`, the
 deleted one `file missing`, and both are named above the table. A `.wasm` that is not in the manifest gets no tab.
 
+### 14.16 .NET AOT tab
+**Steps:** With the `wasm-tools` workload installed, `dotnet publish -c Release -p:RunAOTCompilation=true
+-p:WasmEmitSymbolMap=true` a `dotnet new blazorwasm` app (default output location) and open
+`bin/Release/<tfm>/publish/wwwroot/_framework/dotnet.native.*.wasm`. Open **.NET AOT**; expand Managed code (AOT) →
+`app` → `app.Pages` → `Counter`. Then open the `dotnet.native.*.wasm` of a publish without AOT.
+**Expected:** The module is ~13 MB and its functions carry names (the map was found under `obj/…/wasm/for-publish/`).
+**.NET AOT** reads "Ahead-of-time compiled .NET app: 10.0 MB of code in a 13.4 MB module" and lists, largest first,
+Managed code (AOT) (~47%), Generic instances (~25%), Mono runtime and other native code, ICU, Wrappers and trampolines,
+Native libraries. Under managed code System.Private.CoreLib comes first; `Counter` lists
+`void BuildRenderTree(RenderTreeBuilder __builder)` and `void IncrementCount()`; selecting a method highlights its code.
+The treemap shows the same tree. The interpreter-only module has no **.NET AOT** tab.
+
