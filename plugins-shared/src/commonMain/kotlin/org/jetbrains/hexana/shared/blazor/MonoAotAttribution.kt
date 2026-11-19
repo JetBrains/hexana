@@ -79,15 +79,39 @@ object MonoAotAttribution {
      * The size tree of [functions] (every function with code, named), resolving managed code against
      * [assemblies]. Assemblies without metadata still get their code, under [MonoAotGroups.UNRESOLVED] types.
      */
-    fun attribute(functions: List<MonoAotFunction>, assemblies: List<MonoAotAssembly>): BinarySizeNode {
-        val owners = assemblies.map { AssemblyTypes(it) }
+    fun attribute(functions: List<MonoAotFunction>, assemblies: List<MonoAotAssembly>): BinarySizeNode =
+        Attribution(assemblies).apply { functions.forEach(::add) }.result()
+
+    /**
+     * [attribute] for a single-threaded host (the VS Code webview): calls [pause] every [batch] functions
+     * so the work does not hold the UI thread for its whole duration.
+     */
+    suspend fun attribute(
+        functions: List<MonoAotFunction>,
+        assemblies: List<MonoAotAssembly>,
+        batch: Int,
+        pause: suspend () -> Unit,
+    ): BinarySizeNode {
+        val attribution = Attribution(assemblies)
+        pause()
+        functions.forEachIndexed { index, function ->
+            attribution.add(function)
+            if ((index + 1) % batch == 0) pause()
+        }
+        return attribution.result()
+    }
+
+    /** One attribution in progress: the indexes built once, the trees filled one function at a time. */
+    private class Attribution(assemblies: List<MonoAotAssembly>) {
+        private val owners = assemblies.map { AssemblyTypes(it) }
         // Prefixes nest (`Microsoft_AspNetCore_Components` and `…_Components_Web`): longest first.
-        val byPrefix = owners.sortedByDescending { it.prefix.length }
-        val index = TypeIndex(owners)
-        val managed = Tree()
-        val instances = Tree()
-        val other = Tree()
-        for (function in functions) {
+        private val byPrefix = owners.sortedByDescending { it.prefix.length }
+        private val index = TypeIndex(owners)
+        private val managed = Tree()
+        private val instances = Tree()
+        private val other = Tree()
+
+        fun add(function: MonoAotFunction) {
             val name = function.name.removePrefix(UNBOX_TRAMPOLINE)
             val emitters = byPrefix.filter { name.startsWith(it.prefix + "_") }
             if (emitters.isNotEmpty()) {
@@ -103,12 +127,13 @@ object MonoAotAttribution {
                     if (hit != null) break
                 }
                 val rest = name.substring(emitter.prefix.length + 1)
+                val found = hit
                 when {
                     isWrapper(rest) -> other.add(listOf(MonoAotGroups.WRAPPERS, emitter.name), function, function.name)
-                    hit != null -> {
-                        val owned = hit.owner === emitter
-                        val group = if (owned) listOf(emitter.name) else listOf(emitter.name, MonoAotGroups.from(hit.owner.name))
-                        managed.add(group + labelled(hit.labels(generic = !owned), function), function, null)
+                    found != null -> {
+                        val owned = found.owner === emitter
+                        val group = if (owned) listOf(emitter.name) else listOf(emitter.name, MonoAotGroups.from(found.owner.name))
+                        managed.add(group + labelled(found.labels(generic = !owned), function), function, null)
                     }
                     else -> managed.add(listOf(emitter.name, MonoAotGroups.UNRESOLVED), function, rest)
                 }
@@ -125,12 +150,15 @@ object MonoAotAttribution {
                 other.add(listOf(nativeGroup(function.name)), function, function.name)
             }
         }
-        val children = buildList {
-            managed.toNode(MonoAotGroups.MANAGED)?.let(::add)
-            instances.toNode(MonoAotGroups.GENERIC_INSTANCES)?.let(::add)
-            other.root.children.values.mapNotNull { it.toNode() }.forEach(::add)
-        }.sortedByDescending { it.size }
-        return BinarySizeNode("AOT", children.sumOf { it.size }, offset = 0, children = children)
+
+        fun result(): BinarySizeNode {
+            val children = buildList {
+                managed.toNode(MonoAotGroups.MANAGED)?.let(::add)
+                instances.toNode(MonoAotGroups.GENERIC_INSTANCES)?.let(::add)
+                other.root.children.values.mapNotNull { it.toNode() }.forEach(::add)
+            }.sortedByDescending { it.size }
+            return BinarySizeNode("AOT", children.sumOf { it.size }, offset = 0, children = children)
+        }
     }
 
     private fun labelled(labels: List<String>, function: MonoAotFunction): List<String> =
@@ -271,10 +299,23 @@ class MonoAotReport(
     val withoutMetadata: List<String>,
 ) {
     companion object {
-        /** Assemblies a Blazor app's manifest lists, by assembly name (`System.Text.Json`), with their files. */
+        /** Largest assembly read for its metadata; System.Private.CoreLib is ~1.6 MB. */
+        const val MAX_ASSEMBLY_FILE_SIZE: Long = 64L * 1024 * 1024
+
+        /**
+         * Assemblies a Blazor app's manifest lists, by assembly name (`System.Text.Json`), with their files.
+         * The manifest is input, not trust: only entries that name a plain file the directory listing found
+         * ([BlazorBundleFile.size] is set from the listing, so `../` names never have one) and that fit
+         * [MAX_ASSEMBLY_FILE_SIZE] are returned, so opening a module never reads outside its `_framework`
+         * directory or loads a huge file.
+         */
         fun assemblyFiles(bundle: BlazorBundle): List<Pair<String, String>> = bundle.files
             .filter { it.resource.kind in setOf(BlazorResourceKind.CoreAssembly, BlazorResourceKind.Assembly, BlazorResourceKind.LazyAssembly) }
+            .filter { file -> file.size?.let { it <= MAX_ASSEMBLY_FILE_SIZE } == true && isPlainFileName(file.resource.fileName) }
             .map { it.resource.virtualPath.removeSuffix(".wasm").removeSuffix(".dll") to it.resource.fileName }
+
+        private fun isPlainFileName(name: String): Boolean =
+            name.isNotEmpty() && name != "." && name != ".." && '/' !in name && '\\' !in name && ':' !in name
 
         /** The named defined functions of [provider], with their code ranges; empty without names. */
         fun functionsOf(provider: WasmBinaryProvider): List<MonoAotFunction> {
@@ -313,6 +354,21 @@ class MonoAotReport(
                 withoutMetadata = assemblies.filter { it.metadata == null }.map { it.name },
             )
         }
+
+        /** [build] that pauses between batches of functions; see the suspending [MonoAotAttribution.attribute]. */
+        suspend fun build(provider: WasmBinaryProvider, assemblies: List<MonoAotAssembly>, pause: suspend () -> Unit): MonoAotReport? {
+            val functions = functionsOf(provider)
+            pause()
+            if (!MonoAotAttribution.isAotModule(functions.map { it.name }, assemblies.map { it.name })) return null
+            return MonoAotReport(
+                root = MonoAotAttribution.attribute(functions, assemblies, batch = PAUSE_BATCH, pause = pause),
+                moduleSize = provider.bytes.size,
+                withoutMetadata = assemblies.filter { it.metadata == null }.map { it.name },
+            )
+        }
+
+        /** Functions attributed between pauses: ~2,000 is a few milliseconds of work on the JVM. */
+        private const val PAUSE_BATCH = 2_000
 
         /** [assembliesToRead], [read] each one (null when unreadable), [build]: for hosts that read files synchronously. */
         fun load(provider: WasmBinaryProvider, bundle: BlazorBundle, read: (fileName: String) -> ByteArray?): MonoAotReport? {

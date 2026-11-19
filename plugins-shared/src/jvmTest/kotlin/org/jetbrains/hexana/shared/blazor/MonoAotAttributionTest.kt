@@ -111,4 +111,46 @@ class MonoAotAttributionTest {
         assertEquals(report.root.children.size, tab.rowCount)
         assertNotNull(tab.treemapData)
     }
+
+    @Test
+    fun `only plain listed files of a sane size are read for metadata`() {
+        val integrity = "sha256-AA=="
+        val config = assertNotNull(
+            BlazorBootConfig.parse(
+                """{"mainAssemblyName":"app","resources":{
+                  "wasmNative":[{"name":"dotnet.native.abcdefghij.wasm","hash":"$integrity"}],
+                  "assembly":[
+                    {"virtualPath":"app.wasm","name":"app.abcdefghij.wasm","hash":"$integrity"},
+                    {"virtualPath":"evil.wasm","name":"../../secrets.wasm","hash":"$integrity"},
+                    {"virtualPath":"win.wasm","name":"..\\\\win.wasm","hash":"$integrity"},
+                    {"virtualPath":"huge.wasm","name":"huge.abcdefghij.wasm","hash":"$integrity"},
+                    {"virtualPath":"gone.wasm","name":"gone.abcdefghij.wasm","hash":"$integrity"}
+                  ]}}""",
+            ),
+        )
+        // What a directory listing could contain: names only, never paths.
+        val sizes = mapOf(
+            "dotnet.native.abcdefghij.wasm" to 100L,
+            "app.abcdefghij.wasm" to 100L,
+            "huge.abcdefghij.wasm" to MonoAotReport.MAX_ASSEMBLY_FILE_SIZE + 1,
+            // A crafted assemble() caller could still pass a path-like key; the name check stops it too.
+            "../../secrets.wasm" to 10L,
+        )
+        val bundle = assertNotNull(
+            BlazorBundle.assemble("/fw", "dotnet.js", config, sizes, "dotnet.native.abcdefghij.wasm") { BlazorIntegrity.NotChecked },
+        )
+        assertEquals(listOf("app" to "app.abcdefghij.wasm"), MonoAotReport.assemblyFiles(bundle))
+    }
+
+    @Test
+    fun `the pausing variant builds the same tree and hands control back`() = kotlinx.coroutines.test.runTest {
+        var pauses = 0
+        val paused = MonoAotAttribution.attribute(functions, assemblies, batch = 3) { pauses++ }
+        val plain = MonoAotAttribution.attribute(functions, assemblies)
+        fun BinarySizeNode.dump(): String = "$name=$size" + children.joinToString(",", "[", "]") { it.dump() }
+        assertEquals(plain.dump(), paused.dump())
+        // Once before the work, then after every 3 of the 12 functions.
+        assertEquals(1 + functions.size / 3, pauses)
+    }
 }
+

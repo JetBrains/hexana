@@ -544,8 +544,11 @@ fun BinaryEditorContent(
                 scriptExecution = scriptExecution,
                 sslKeyLogGeneration = sslKeyLogGeneration,
                 runtimeCompatibility = runtimeCompatibility,
-                blazorBundle = blazorBundle,
-                monoAot = monoAot,
+                // Both describe the module as the host read it from disk: its integrity against the
+                // manifest, its functions' offsets and the symbol-map names attached to [provider]. A
+                // provider rebuilt from edited bytes has none of that, so its tabs go without them.
+                blazorBundle = blazorBundle.takeIf { liveProvider === provider },
+                monoAot = monoAot.takeIf { liveProvider === provider },
                 onConfigureRuntimes = if (host.canEditRuntimeTargets) {
                     { showRuntimeTargetsDialog = true }
                 } else {

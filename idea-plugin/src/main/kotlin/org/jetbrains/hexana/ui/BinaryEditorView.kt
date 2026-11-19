@@ -54,6 +54,8 @@ import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.openapi.vfs.toNioPathOrNull
+import com.intellij.testFramework.LightVirtualFile
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -510,13 +512,16 @@ internal fun BinaryEditorView(
             // Wasm companions, also attached before the tabs are built: a Blazor WebAssembly assembly's
             // Portable PDB (published next to it, fingerprinted separately), and the Emscripten symbol
             // map that names a stripped module's functions (`dotnet.native.js.symbols`).
-            (binaryProvider as? WasmBinaryVirtualFileProvider)?.let { wasm ->
+            // Only for a file on the local disk: the companion loaders read through `java.io.File`, and an
+            // archive entry's path (`app.zip!/_framework/…`) would send the `obj` search up past the archive.
+            (binaryProvider as? WasmBinaryVirtualFileProvider)?.takeIf { it.file !is LightVirtualFile }?.let { wasm ->
+                val localPath = wasm.file.toNioPathOrNull()?.toString() ?: return@let
                 withContext(Dispatchers.IO) {
                     try {
-                        wasm.webcil?.let { PdbCompanionLoader.load(it, wasm.file.path, JVM_FILE_SYSTEM) }
-                        WasmSymbolMapCompanionLoader.load(wasm, wasm.file.path, JVM_FILE_SYSTEM)
+                        wasm.webcil?.let { PdbCompanionLoader.load(it, localPath, JVM_FILE_SYSTEM) }
+                        WasmSymbolMapCompanionLoader.load(wasm, localPath, JVM_FILE_SYSTEM)
                         // Hashing the whole bundle for the integrity column is cheap: ~90 ms for a 9 MB app.
-                        val bundle = BlazorBundle.load(wasm.file.path, JVM_FILE_SYSTEM, verifyIntegrity = true)
+                        val bundle = BlazorBundle.load(localPath, JVM_FILE_SYSTEM, verifyIntegrity = true)
                         blazorBundleHolder[0] = bundle
                         // Reads the app's assemblies only for an AOT runtime module with a symbol map: their
                         // metadata splits its code into namespaces, types and methods (~0.4 s for the template app).
@@ -524,7 +529,7 @@ internal fun BinaryEditorView(
                             MonoAotReport.load(wasm, it) { name -> JVM_FILE_SYSTEM.readFile(companionJoin(it.directory, name)) }
                         }
                     } catch (e: Exception) {
-                        HexanaLog.LOG.warn("Failed to load the companions of ${wasm.file.path}", e)
+                        HexanaLog.LOG.warn("Failed to load the companions of $localPath", e)
                     }
                 }
             }

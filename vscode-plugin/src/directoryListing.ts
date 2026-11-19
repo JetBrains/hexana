@@ -15,8 +15,44 @@ const FILE_TYPE_DIRECTORY = 2;
 /** Cap on the entries listed: a `_framework` directory holds a few hundred. */
 export const MAX_LISTED_ENTRIES = 5000;
 
-/** Cap on a file hashed for the webview; `dotnet.native.wasm` is ~3 MB. */
+/** Cap on a file hashed for the webview; `dotnet.native.wasm` is ~3 MB, ~14 MB compiled ahead of time. */
 export const MAX_HASHED_FILE_BYTES = 64 * 1024 * 1024;
+
+/**
+ * Cap on all bytes hashed for one request. The names to hash come from a boot manifest, which is input:
+ * a crafted one could name every large file in the directory. A real app is ~10 MB (~20 MB with AOT).
+ */
+export const MAX_HASHED_TOTAL_BYTES = 256 * 1024 * 1024;
+
+/** File system operations in flight at once: enough to overlap I/O, few enough to bound memory. */
+export const MAX_CONCURRENT_OPERATIONS = 8;
+
+/** The caps [listDirectory] applies; the defaults are the production values, tests pass smaller ones. */
+export interface DirectoryListingLimits {
+    readonly maxHashedFileBytes: number;
+    readonly maxHashedTotalBytes: number;
+    readonly maxConcurrentOperations: number;
+}
+
+export const DEFAULT_LISTING_LIMITS: DirectoryListingLimits = {
+    maxHashedFileBytes: MAX_HASHED_FILE_BYTES,
+    maxHashedTotalBytes: MAX_HASHED_TOTAL_BYTES,
+    maxConcurrentOperations: MAX_CONCURRENT_OPERATIONS,
+};
+
+/** [work] for every item, at most [limit] at a time; results in item order. */
+async function mapBounded<T, R>(items: readonly T[], limit: number, work: (item: T) => Promise<R>): Promise<R[]> {
+    const results = new Array<R>(items.length);
+    let next = 0;
+    const workers = Array.from({length: Math.min(limit, items.length)}, async () => {
+        while (next < items.length) {
+            const index = next++;
+            results[index] = await work(items[index]);
+        }
+    });
+    await Promise.all(workers);
+    return results;
+}
 
 /** The slice of `vscode.workspace.fs` this needs, over plain paths. */
 export interface DirectoryFileSystem {
@@ -50,39 +86,51 @@ function joinPath(dir: string, name: string): string {
 
 /**
  * Lists [dir]: every entry's name and kind, the size of each file, and the SHA-256 of each file named
- * in [hashNames] that is no larger than [MAX_HASHED_FILE_BYTES]. A file that cannot be read keeps its
- * entry, without the size or hash.
+ * in [hashNames] that is no larger than [MAX_HASHED_FILE_BYTES], until [MAX_HASHED_TOTAL_BYTES] have been
+ * hashed. At most [MAX_CONCURRENT_OPERATIONS] stats or reads run at once. A file that cannot be read keeps
+ * its entry, without the size or hash; so does one past the budget, which the webview shows as not checked.
  */
 export async function listDirectory(
     fs: DirectoryFileSystem,
     dir: string,
     hashNames: readonly string[] = [],
+    limits: DirectoryListingLimits = DEFAULT_LISTING_LIMITS,
 ): Promise<DirectoryListingEntry[]> {
     const listed = (await fs.readDirectory(dir)).slice(0, MAX_LISTED_ENTRIES);
     const toHash = new Set(hashNames);
-    return Promise.all(listed.map(async ([name, listedType]): Promise<DirectoryListingEntry> => {
-        const path = joinPath(dir, name);
+    const entries = await mapBounded(listed, limits.maxConcurrentOperations, async ([name, listedType]) => {
         let type = listedType;
         let size: number | undefined;
         try {
             // Follows links, which readDirectory reports as such: a linked file is a file.
-            const stat = await fs.stat(path);
+            const stat = await fs.stat(joinPath(dir, name));
             type = stat.type;
             if ((type & FILE_TYPE_FILE) !== 0) size = stat.size;
         } catch {
             // Unreadable: listed with what readDirectory said.
         }
-        const isFile = (type & FILE_TYPE_FILE) !== 0;
-        let sha256: string | undefined;
-        if (isFile && toHash.has(name) && size !== undefined && size <= MAX_HASHED_FILE_BYTES) {
-            try {
-                sha256 = createHash("sha256").update(await fs.readFile(path)).digest("base64");
-            } catch {
-                // Left unhashed; the webview reports it as not checked.
-            }
+        return {name, isFile: (type & FILE_TYPE_FILE) !== 0, isDirectory: (type & FILE_TYPE_DIRECTORY) !== 0, size};
+    });
+
+    // The budget is reserved by stat size before any read starts, so concurrent reads cannot overrun it.
+    let budget = limits.maxHashedTotalBytes;
+    const hashable = entries.filter((e) => {
+        if (!e.isFile || !toHash.has(e.name) || e.size === undefined || e.size > limits.maxHashedFileBytes || e.size > budget) return false;
+        budget -= e.size;
+        return true;
+    });
+    const hashes = new Map<string, string>();
+    await mapBounded(hashable, limits.maxConcurrentOperations, async (entry) => {
+        try {
+            const bytes = await fs.readFile(joinPath(dir, entry.name));
+            // The file can grow between the stat and the read; only what was reserved is hashed.
+            if (bytes.byteLength !== entry.size) return;
+            hashes.set(entry.name, createHash("sha256").update(bytes).digest("base64"));
+        } catch {
+            // Left unhashed; the webview reports it as not checked.
         }
-        return {name, isFile, isDirectory: (type & FILE_TYPE_DIRECTORY) !== 0, size, sha256};
-    }));
+    });
+    return entries.map((e) => ({...e, sha256: hashes.get(e.name)}));
 }
 
 export function directoryListing(requestId: string, path: string, entries: DirectoryListingEntry[]): DirectoryListingMessage {

@@ -5,6 +5,7 @@ import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -65,5 +66,18 @@ class WebcilAssemblyTest {
             children.forEach { it.check() }
         }
         text.check()
+    }
+
+    @Test
+    fun `the Webcil sniff rejects malformed section sizes instead of throwing`() {
+        val header = byteArrayOf(0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00)
+        // A custom section declaring Int.MAX_VALUE bytes: the next section offset would wrap negative.
+        val huge = header + byteArrayOf(0x00, 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0xFF.toByte(), 0x07, 0x00)
+        assertFalse(WebcilAssembly.isWebcilModule(huge.toCommonByteBuffer()))
+        // Past the end by one byte.
+        assertFalse(WebcilAssembly.isWebcilModule((header + byteArrayOf(0x01, 0x05, 0x00)).toCommonByteBuffer()))
+        // Truncated LEB.
+        assertFalse(WebcilAssembly.isWebcilModule((header + byteArrayOf(0x01, 0x80.toByte())).toCommonByteBuffer()))
+        assertTrue(WebcilAssembly.isWebcilModule(file("sample-clr.webcil.wasm").readBytes().toCommonByteBuffer()))
     }
 }
