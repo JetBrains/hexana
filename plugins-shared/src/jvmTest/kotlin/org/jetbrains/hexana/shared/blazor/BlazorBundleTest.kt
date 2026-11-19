@@ -63,7 +63,7 @@ class BlazorBundleTest {
     fun `finds the manifest among the dotnet scripts`() {
         assertEquals(
             listOf("blazor.boot.json", "dotnet.js", "dotnet.ghi789.js"),
-            BlazorBundle.configCandidates(listOf("dotnet.native.ab.js", "dotnet.ghi789.js", "dotnet.runtime.cd.js", "dotnet.js", "blazor.boot.json")),
+            BlazorBundle.configCandidates(listOf("dotnet.native.ab.js", "dotnet.native.js", "dotnet.ghi789.js", "dotnet.runtime.cd.js", "dotnet.runtime.js", "dotnet.js", "blazor.boot.json")),
         )
     }
 
