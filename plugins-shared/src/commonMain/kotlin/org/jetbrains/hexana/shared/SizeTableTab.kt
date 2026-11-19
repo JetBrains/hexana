@@ -77,8 +77,20 @@ private class SizeRow(val name: String, val node: BinarySizeNode, val scope: Siz
  */
 private fun sizeTab(provider: BinaryProvider): TableTabDescriptor? {
     val root = provider.sizeAnalysis ?: return null
+    return sizeTreeTab("Top", root, null, provider as? WasmBinaryProvider)
+}
+
+internal fun sizeTreeTab(name: String, root: BinarySizeNode, prologueText: String? = null): TableTabDescriptor? =
+    sizeTreeTab(name, root, prologueText, null)
+
+private fun sizeTreeTab(
+    name: String,
+    root: BinarySizeNode,
+    prologueText: String?,
+    wasm: WasmBinaryProvider?,
+): TableTabDescriptor? {
     val moduleSize = root.size
-    val rootScope = SizeScope(base = 0, wasm = provider as? WasmBinaryProvider)
+    val rootScope = SizeScope(base = 0, wasm = wasm)
 
     val topRows = labeledRows(root.children, rootScope)
     if (topRows.isEmpty()) return null
@@ -123,7 +135,7 @@ private fun sizeTab(provider: BinaryProvider): TableTabDescriptor? {
     }
 
     return TableTabDescriptor(
-        name = "Top",
+        name = name,
         columns = columnsFor(topRows),
         rowCount = topRows.size,
         defaultSortColumn = 1,
@@ -131,6 +143,7 @@ private fun sizeTab(provider: BinaryProvider): TableTabDescriptor? {
         rowSelectionProvider = { index -> selectionFor(topRows[index]) },
         childrenProvider = { index -> childRowsFor(topRows[index]) },
         treemapData = buildTreemapData(root, topRows),
+        prologueText = prologueText,
     )
 }
 

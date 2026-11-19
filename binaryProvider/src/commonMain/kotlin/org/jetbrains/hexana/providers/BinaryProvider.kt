@@ -1763,12 +1763,13 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
      * Uses the `funcIndex:name` entries of [map] (Emscripten / Binaryen `--emit-symbol-map`, e.g.
      * .NET's `dotnet.native.js.symbols`) as function names. Hosts call this with a map found next to
      * the module, before building the tabs. Rejected — returns false and changes nothing — when the
-     * map cannot belong to this module: an index past the function index space, or import entries
-     * that disagree with the import section's field names (a map of another build).
+     * map cannot belong to this module: its last index is not the module's last function (Emscripten
+     * names every function, so a map of another build of the same code almost always differs in
+     * count), or its import entries disagree with the import section's field names.
      */
     fun attachSymbolMap(map: WasmSymbolMap, path: String?): Boolean {
         if (map.byIndex.isEmpty() || wasmModule == null) return false
-        if (map.byIndex.keys.any { it < 0 || it >= functionIndexSpaceSize }) return false
+        if (map.byIndex.keys.any { it < 0 } || map.byIndex.keys.max() != functionIndexSpaceSize - 1) return false
         val importNames = imports.filter { it.type is WasmTypeIndexExternalType }.map { it.name }
         val checked = importNames.indices.mapNotNull { index -> map.byIndex[index]?.let { it == importNames[index] } }
         // Emscripten names an import after its field; most of them must agree.

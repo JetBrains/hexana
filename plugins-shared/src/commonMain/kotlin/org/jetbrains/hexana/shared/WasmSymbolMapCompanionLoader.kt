@@ -60,7 +60,8 @@ object WasmSymbolMapCompanionLoader {
         // Listing the directory only pays off for a module that still needs names.
         if (candidatePaths(provider, binaryPath).isEmpty()) return false
         val siblings = fs.listEntries(companionParentDirectory(binaryPath)).filter { it.isFile }.map { it.name }
-        for (path in candidatePaths(provider, binaryPath, siblings)) {
+        val candidates = candidatePaths(provider, binaryPath, siblings) + dotnetBuildCandidates(binaryPath, fs)
+        for (path in candidates.distinct()) {
             if (!fs.fileExists(path)) continue
             val size = fs.regularFileSize(path) ?: continue
             if (size > MAX_AUTOMATIC_SYMBOL_MAP_SIZE) continue
@@ -68,5 +69,46 @@ object WasmSymbolMapCompanionLoader {
             if (attach(provider, path, bytes)) return true
         }
         return false
+    }
+
+    private const val DOTNET_RUNTIME_MODULE = "dotnet.native"
+
+    /** How far up from a published `_framework` the project directory may be: `bin/<config>/<tfm>/publish/wwwroot/_framework`. */
+    private const val MAX_PROJECT_DEPTH = 7
+
+    /**
+     * Where the .NET SDK leaves the symbol map of a Blazor WebAssembly app's `dotnet.native.wasm`:
+     * `dotnet publish` with `WasmEmitSymbolMap` writes `dotnet.native.js.symbols` to
+     * `obj/<config>/<tfm>/wasm/for-publish/` (`for-build/` for `dotnet build`) and does not copy it next to
+     * the published module. So for that module only, the directories above it are searched for a project's
+     * `obj` directory. [attach] rejects a map of another build: an AOT build's function count changes with
+     * every code change.
+     */
+    fun dotnetBuildCandidates(binaryPath: String, fs: FileSystem): List<String> {
+        val fileName = companionFileName(binaryPath)
+        val stem = fileName.substringBeforeLast('.', missingDelimiterValue = fileName)
+        if (stem != DOTNET_RUNTIME_MODULE && stem.substringBeforeLast('.', "") != DOTNET_RUNTIME_MODULE) return emptyList()
+        val found = mutableListOf<String>()
+        var directory = companionParentDirectory(binaryPath)
+        repeat(MAX_PROJECT_DEPTH) {
+            val entries = fs.listEntries(directory)
+            if (entries.any { it.isDirectory && it.name == "obj" }) {
+                val obj = companionJoin(directory, "obj")
+                for (config in fs.listEntries(obj).filter { it.isDirectory }) {
+                    val configDir = companionJoin(obj, config.name)
+                    for (tfm in fs.listEntries(configDir).filter { it.isDirectory }) {
+                        val wasm = companionJoin(companionJoin(configDir, tfm.name), "wasm")
+                        for (flavor in listOf("for-publish", "for-build")) {
+                            found += companionJoin(companionJoin(wasm, flavor), "$DOTNET_RUNTIME_MODULE$SUFFIX")
+                        }
+                    }
+                }
+                return found
+            }
+            val parent = companionParentDirectory(directory)
+            if (parent == directory || parent.isEmpty()) return found
+            directory = parent
+        }
+        return found
     }
 }

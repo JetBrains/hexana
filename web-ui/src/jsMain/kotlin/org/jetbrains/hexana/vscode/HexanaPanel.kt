@@ -1,6 +1,7 @@
 package org.jetbrains.hexana.vscode
 
 import org.jetbrains.hexana.shared.blazor.BlazorBundle
+import org.jetbrains.hexana.shared.blazor.MonoAotReport
 import androidx.compose.runtime.*
 import kotlinx.browser.window
 import org.jetbrains.compose.web.css.*
@@ -100,6 +101,8 @@ fun HexanaPanel(
     runtimeCompatibility: WasmRuntimeCompatibility? = null,
     /** The Blazor WebAssembly app the file belongs to, read by the host; drives the Blazor App tab. */
     blazorBundle: BlazorBundle? = null,
+    /** The .NET AOT breakdown of an ahead-of-time compiled runtime module, built by the host. */
+    monoAot: MonoAotReport? = null,
     /** Opened by the "Configure runtimes…" action; `null` hides the action. */
     onConfigureRuntimes: (() -> Unit)? = null,
     /**
@@ -177,7 +180,7 @@ fun HexanaPanel(
     // -----------------------------------------------------------------------
     val tabs = remember(
         provider, fileName, extraTabs, scriptTabs.size, sbomLocator,
-        capabilities.sbomVulnerabilityCheck, sslKeyLogGeneration, runtimeCompatibility, blazorBundle,
+        capabilities.sbomVulnerabilityCheck, sslKeyLogGeneration, runtimeCompatibility, blazorBundle, monoAot,
     ) {
         buildList {
             // Summary is always first
@@ -200,6 +203,7 @@ fun HexanaPanel(
                     fileName = fileName,
                     runtimeCompatibility = runtimeCompatibility,
                     blazorBundle = blazorBundle,
+                    monoAot = monoAot,
                     openUrl = { url -> host.openUrl(url) },
                     openRuntimeSettings = onConfigureRuntimes,
                     problemNavigator = problemNavigator(provider, selection, onSelectTab = onActiveTabChange) { funcIdx ->

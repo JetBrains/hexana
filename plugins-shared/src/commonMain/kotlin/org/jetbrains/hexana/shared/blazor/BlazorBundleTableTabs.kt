@@ -11,8 +11,10 @@ import org.jetbrains.hexana.shared.TableTabsContext
 import org.jetbrains.hexana.shared.TableTabsProvider
 import org.jetbrains.hexana.shared.col
 import org.jetbrains.hexana.shared.formatSizeLong
+import org.jetbrains.hexana.shared.sizeTreeTab
 
 const val BLAZOR_APP_TAB_NAME: String = "Blazor App"
+const val DOTNET_AOT_TAB_NAME: String = ".NET AOT"
 
 /** Files a browser fetches while the app starts; the rest load on demand (or never, for PDBs). */
 private val STARTUP_KINDS = setOf(
@@ -31,15 +33,26 @@ private val STARTUP_KINDS = setOf(
 class BlazorBundleTableTabsProvider : TableTabsProvider {
     override fun tableTabs(provider: BinaryProvider): List<TableTabDescriptor> = emptyList()
 
-    override fun tableTabs(provider: BinaryProvider, context: TableTabsContext): List<TableTabDescriptor> =
-        listOfNotNull(singleTab(BLAZOR_APP_TAB_NAME, provider, context))
 
-    override fun availableTabNames(provider: BinaryProvider, context: TableTabsContext): Pair<List<String>, List<String>> =
-        (if (provider is WasmBinaryProvider && context.blazorBundle != null) listOf(BLAZOR_APP_TAB_NAME) else emptyList()) to emptyList()
+    override fun tableTabs(provider: BinaryProvider, context: TableTabsContext): List<TableTabDescriptor> =
+        availableTabNames(provider, context).first.mapNotNull { singleTab(it, provider, context) }
+
+    override fun availableTabNames(provider: BinaryProvider, context: TableTabsContext): Pair<List<String>, List<String>> {
+        if (provider !is WasmBinaryProvider) return emptyList<String>() to emptyList()
+        val names = listOfNotNull(
+            DOTNET_AOT_TAB_NAME.takeIf { context.monoAot != null },
+            BLAZOR_APP_TAB_NAME.takeIf { context.blazorBundle != null },
+        )
+        return names to emptyList()
+    }
 
     override fun singleTab(name: String, provider: BinaryProvider, context: TableTabsContext): TableTabDescriptor? {
-        if (name != BLAZOR_APP_TAB_NAME || provider !is WasmBinaryProvider) return null
-        return blazorBundleTab(context.blazorBundle ?: return null)
+        if (provider !is WasmBinaryProvider) return null
+        return when (name) {
+            BLAZOR_APP_TAB_NAME -> context.blazorBundle?.let(::blazorBundleTab)
+            DOTNET_AOT_TAB_NAME -> context.monoAot?.let { sizeTreeTab(DOTNET_AOT_TAB_NAME, it.root, monoAotPrologue(it)) }
+            else -> null
+        }
     }
 }
 
@@ -142,3 +155,25 @@ internal fun blazorBundlePrologue(bundle: BlazorBundle): String = buildString {
         file.integrity.label.takeIf { it.isNotEmpty() }?.let { append(", integrity ").append(it) }
     }
 }.trimEnd()
+
+/** The summary above the .NET AOT tree: how much of the code is .NET, and what the rest is. */
+internal fun monoAotPrologue(report: MonoAotReport): String = buildString {
+    val root = report.root
+    val code = root.size.toLong()
+    fun share(size: Int): String = "${formatSizeLong(size.toLong())} (${(size * 1000L / code.coerceAtLeast(1)).let { "${it / 10}.${it % 10}" }}%)"
+    append("Ahead-of-time compiled .NET app: ").append(formatSizeLong(code)).append(" of code in a ")
+        .append(formatSizeLong(report.moduleSize.toLong())).append(" module\n")
+    val groups = root.children.associateBy { it.name }
+    val dotnet = listOfNotNull(groups[MonoAotGroups.MANAGED], groups[MonoAotGroups.GENERIC_INSTANCES], groups[MonoAotGroups.WRAPPERS])
+    append(dotnet.joinToString(" · ") { "${it.name} ${share(it.size)}" }).append('\n')
+    val native = root.children.filter { it !in dotnet }
+    if (native.isNotEmpty()) append(native.joinToString(" · ") { "${it.name} ${share(it.size)}" }).append('\n')
+    groups[MonoAotGroups.MANAGED]?.children?.take(3)?.takeIf { it.isNotEmpty() }?.let { top ->
+        append("Largest: ").append(top.joinToString(", ") { "${it.name} ${formatSizeLong(it.size.toLong())}" }).append('\n')
+    }
+    if (report.withoutMetadata.isNotEmpty()) {
+        append("No metadata for ").append(report.withoutMetadata.joinToString())
+            .append(": their code is listed by symbol name only\n")
+    }
+}.trimEnd()
+
