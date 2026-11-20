@@ -357,7 +357,7 @@ Required environment variables:
 
 Optional environment variables:
 
-- `PUBLIC_REPO_BASE_BRANCH`: defaults to `main`.
+- `PUBLIC_REPO_BASE_BRANCH`: defaults to `master`.
 - `PUBLICATION_MODE`: defaults to `production`. Use `test-nightly` only for publication into a non-production GitHub
   repository such as a personal nightly test repo.
 - `PRODUCTION_PUBLIC_REPO_SLUG`: defaults to `JetBrains/hexana` and is used by publication-mode guards.
@@ -455,7 +455,7 @@ Real PR example:
 ```bash
 GH_TOKEN=... \
 PUBLIC_REPO_SLUG=owner/repo \
-PUBLIC_REPO_BASE_BRANCH=main \
+PUBLIC_REPO_BASE_BRANCH=master \
 PLUGIN_NAME=hexana \
 PLUGIN_VERSION=1.2.3 \
 GENERATED_PUBLIC_DIR=mcp/out/teamcity/public-marketplace \
@@ -495,7 +495,7 @@ Recommended TeamCity environment:
 - `env.GH_TOKEN`: password parameter.
 - `env.PUBLIC_REPO_SLUG`: public repository slug.
 - `env.HEXANA_LEAK_GUARD_INTERNAL_NAMES`: internal names the leak guards reject.
-- `env.PUBLIC_REPO_BASE_BRANCH`: `main`.
+- `env.PUBLIC_REPO_BASE_BRANCH`: `master`.
 - `env.PLUGIN_NAME`: `hexana`.
 - `env.PLUGIN_VERSION`: release or build version.
 - `env.GENERATED_PUBLIC_DIR`: path to the generated public marketplace bundle.
