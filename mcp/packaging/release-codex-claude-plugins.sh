@@ -2061,7 +2061,7 @@ main() {
   export PLUGIN_NAME="${PLUGIN_NAME:-hexana}"
   export PLUGIN_VERSION="${PLUGIN_VERSION:-$mcp_version}"
   export GENERATED_PUBLIC_DIR="${GENERATED_PUBLIC_DIR:-mcp/out/teamcity/public-marketplace}"
-  export PUBLIC_REPO_BASE_BRANCH="${PUBLIC_REPO_BASE_BRANCH:-main}"
+  export PUBLIC_REPO_BASE_BRANCH="${PUBLIC_REPO_BASE_BRANCH:-master}"
   export AUTO_MERGE="$(to_bool "${AUTO_MERGE:-false}" "AUTO_MERGE")"
   export DRY_RUN="$(to_bool "${DRY_RUN:-false}" "DRY_RUN")"
   export PUBLICATION_MODE="${PUBLICATION_MODE:-production}"
