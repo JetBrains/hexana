@@ -22,6 +22,7 @@ Open any `.wasm`, `.elf`, `.exe`, `.so`, `.o`, `.dll`, `.dylib`, `.jar`, `.zip`,
 |--------|-----------|
 | **WebAssembly** | `.wasm` — core modules, component model binaries, and generic Wasm files |
 | **Native binaries** | ELF, Mach-O, PE/COFF (`.elf`, `.exe`, `.so`, `.o`, `.dll`, `.dylib`, `.a`, etc.) |
+| **.NET** | Managed `.dll` / `.exe` and Blazor WebAssembly `.wasm` assemblies (Webcil): types, methods, IL, Portable PDBs, assembly diff; Blazor apps also get their boot manifest (sizes, integrity) and the AOT code breakdown of `dotnet.native.wasm` |
 | **Java** | `.class` files and `.dex` (Android Dalvik) |
 | **Archives** | `.jar`, `.zip`, `.war`, `.apk` (including ZIP64) |
 | **Protocol Buffers** | `.desc` / `.protoset` compiled descriptor sets |

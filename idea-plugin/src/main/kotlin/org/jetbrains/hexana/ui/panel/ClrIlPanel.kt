@@ -37,7 +37,7 @@ import org.jetbrains.hexana.document.format.ChunkId
 import org.jetbrains.hexana.document.format.ChunkTree
 import org.jetbrains.hexana.document.format.RenderTokenKind
 import org.jetbrains.hexana.io.CommonByteBuffer
-import org.jetbrains.hexana.providers.PeBinaryProvider
+import org.jetbrains.hexana.providers.ClrAssemblySource
 import org.jetbrains.hexana.providers.pe.clr.ClrMetadata
 import org.jetbrains.hexana.shared.CLR_IL_TAB_NAME
 import org.jetbrains.hexana.shared.ClrIlRow
@@ -56,11 +56,11 @@ import org.jetbrains.jewel.ui.component.CircularProgressIndicator
 import org.jetbrains.jewel.ui.component.Text
 
 /**
- * The IL disassembly tab for .NET assemblies: one foldable section per type, whose body is the
+ * The IL disassembly tab for .NET assemblies (managed PE files and Blazor WebAssembly Webcil modules): one foldable section per type, whose body is the
  * type rendered as IL. Mirrors [dexSmaliPanels]: nothing is decoded until the tab is opened, and
  * IL only for the types that are expanded.
  */
-internal fun clrIlPanels(provider: PeBinaryProvider, state: HexViewStateHolder): List<Panel> =
+internal fun clrIlPanels(provider: ClrAssemblySource, state: HexViewStateHolder): List<Panel> =
     listOf(Panel(CLR_IL_TAB_NAME) { ClrIlTab(provider, state) })
 
 /**
@@ -86,7 +86,7 @@ private class ClrIlModel(
 }
 
 @Composable
-private fun ClrIlTab(provider: PeBinaryProvider, state: HexViewStateHolder) {
+private fun ClrIlTab(provider: ClrAssemblySource, state: HexViewStateHolder) {
     var model by remember(provider) { mutableStateOf<Result<ClrIlModel>?>(null) }
     LaunchedEffect(provider) {
         model = withContext(Dispatchers.IO) {
@@ -127,7 +127,7 @@ private fun ClrIlTab(provider: PeBinaryProvider, state: HexViewStateHolder) {
     ClrIlContent(ready, state)
 }
 
-private fun buildClrIlModel(provider: PeBinaryProvider): ClrIlModel {
+private fun buildClrIlModel(provider: ClrAssemblySource): ClrIlModel {
     val metadata = provider.clrMetadata ?: error("no readable CLR metadata")
     val types = clrIlTypes(metadata)
     return ClrIlModel(

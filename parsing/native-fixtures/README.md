@@ -36,6 +36,7 @@ Expected outputs include:
 - `test-data/pe/sample-clr-review-base.dll`, `sample-clr-review-head.dll` (see below; not built by the Docker image)
 - `test-data/pe/sample-clr-portable.exe` + `sample-clr-portable.pdb` (see below; not built by the Docker image)
 - `test-data/pe/sample-clr-embedded.exe` (see below; not built by the Docker image)
+- `test-data/pe/sample-clr*.webcil.wasm`, `sample-clr.webcil` (see below; not built by the Docker image)
 - `test-data/manifest.txt`
 
 When LLVM inspection tools are available, the build also writes `*.llvm-readobj.txt` reference dumps next to the generated binaries.
@@ -116,6 +117,32 @@ csc -nologo -deterministic -optimize- -debug:embedded -pathmap:"$PWD"=/src/clr,"
 dotnet run --project pdb -- "$T/sample-clr-portable.pdb" > "$T/sample-clr-portable.pdb.dump.txt"
 dotnet run --project pdb -- "$T/sample-clr-embedded.exe" > "$T/sample-clr-embedded.exe.dump.txt"
 ```
+
+### Webcil (Blazor WebAssembly) fixtures
+
+`test-data/pe/sample-clr.webcil.wasm`, `sample-clr-portable.webcil.wasm` and `sample-clr-embedded.webcil.wasm` are
+the three `sample-clr*.exe` assemblies converted to Webcil, the container a Blazor WebAssembly publish ships
+assemblies in, by the .NET SDK's own `WebcilConverter` (the same code `dotnet publish` runs). They are wrapped in
+the Wasm module the SDK emits; `sample-clr.webcil` is the bare `WbIL` payload. Because the input is the PE fixtures,
+`WebcilParserTest`, `WebcilAssemblyTest` and `WebcilTableTabsTest` check them against the PE decode, and the portable
+one matches `sample-clr-portable.pdb`. `sample-clr-v2.webcil.wasm` is the head side of `WebcilDiffTest`, which
+expects the Webcil pair to diff exactly like the PE pair. Rebuild them after the PE fixtures change (the converter comes from the
+`microsoft.net.sdk.webassembly.pack` NuGet package; pass `-p:WebAssemblySdkPack=<dir>` for another version):
+
+```bash
+cd parsing/native-fixtures/src/clr/webcil
+T=../../../test-data/pe
+for f in sample-clr sample-clr-v2 sample-clr-portable sample-clr-embedded; do
+  dotnet run -- "$T/$f.exe" "$T/$f.webcil.wasm"
+done
+dotnet run -- "$T/sample-clr.exe" "$T/sample-clr.webcil" --bare
+rm -rf bin
+```
+
+Real publish output is not committed; `BlazorPublishOutputTest` (`plugins-shared`) runs over it when
+`HEXANA_BLAZOR_FRAMEWORK_DIR` points at a published `wwwroot/_framework` and `HEXANA_BLAZOR_RUNTIME_NATIVE_DIR` at the
+runtime pack's `runtimes/browser-wasm/native` folder, and `HEXANA_BLAZOR_AOT_FRAMEWORK_DIR` at the `_framework` of an AOT
+publish (`-p:RunAOTCompilation=true -p:WasmEmitSymbolMap=true`, `wasm-tools` workload) in its default location.
 
 ### .resources fixture
 

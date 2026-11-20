@@ -8,6 +8,9 @@ import org.jetbrains.hexana.io.CommonByteBuffer
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormat
 import org.jetbrains.hexana.parsing.common.NativeBinaryFormatDetector
 import org.jetbrains.hexana.providers.BinaryProviderType
+import org.jetbrains.hexana.providers.ClrAssemblySource
+import org.jetbrains.hexana.providers.WasmBinaryProvider
+import org.jetbrains.hexana.providers.WebcilAssembly
 import org.jetbrains.hexana.providers.PeBinaryProvider
 import org.jetbrains.hexana.providers.nativeOrGenericBinaryProvider
 import org.jetbrains.hexana.providers.pe.clr.ClrMetadata
@@ -24,6 +27,7 @@ import org.jetbrains.hexana.shared.clrIlTypeHeaderRows
 import org.jetbrains.hexana.shared.clrIlTypeRows
 import org.jetbrains.hexana.shared.clrIlTypes
 import org.jetbrains.hexana.shared.formatSize
+import org.jetbrains.hexana.wasm.analysis.BinarySizeNode
 import org.jetbrains.hexana.wasm.analysis.diff.DiffClass
 import org.jetbrains.hexana.wasm.analysis.diff.line.LineDiff
 import org.jetbrains.hexana.wasm.analysis.diff.line.LineOpKind
@@ -37,19 +41,20 @@ import org.jetbrains.hexana.wasm.analysis.diff.line.LineOpKind
  * changes the raw IL of methods that did not change at all. Those count as identical, and the
  * Methods tab reports how many there were.
  *
- * Accepts a pair only when both sides are managed; a managed and a native PE go to
- * [NativeDiffProvider].
+ * Accepts a pair only when both sides are .NET assemblies — managed PE files or Blazor WebAssembly
+ * Webcil modules, in any combination (two builds of a Blazor app, or a `.dll` and the `.wasm` it was
+ * published as); a managed and a native PE go to [NativeDiffProvider]. Registered ahead of the Wasm
+ * module diff, which would otherwise take a Webcil pair and compare two copies of the same wrapper.
  */
 class ClrDiffProvider : BinaryDiffProvider {
     override fun accepts(input: BinaryDiffInput): Boolean =
-        input.leftType == BinaryProviderType.Generic && input.rightType == BinaryProviderType.Generic &&
-            isManagedPe(input.left) && isManagedPe(input.right)
+        isManagedAssembly(input.left, input.leftType) && isManagedAssembly(input.right, input.rightType)
 
     override fun session(input: BinaryDiffInput, host: BinaryDiffHost): BinaryDiffSession {
         val assemblies = ClrAssemblyDiff(input)
         return BinaryDiffSession(
             tabs = listOf(
-                DiffTab("Size Impact", "Comparing binaries…") { nativeSizeTab(input) },
+                DiffTab("Size Impact", "Comparing binaries…") { nativeSizeTab(input, ::managedSizeAnalysis) },
                 DiffTab("Types", "Comparing types…") { ctx -> clrTypesTab(input, assemblies, ctx) },
                 DiffTab("Methods", "Comparing IL…") { ctx -> clrMethodsTab(input, assemblies, ctx) },
             ),
@@ -62,6 +67,28 @@ class ClrDiffProvider : BinaryDiffProvider {
 internal fun isManagedPe(bytes: CommonByteBuffer): Boolean {
     if (NativeBinaryFormatDetector.detect(bytes.duplicate()) !is NativeBinaryFormat.Pe) return false
     return (nativeOrGenericBinaryProvider(bytes.duplicate()) as? PeBinaryProvider)?.isManaged == true
+}
+
+/** A managed PE or a Webcil wrapper module, by header sniff alone. */
+private fun isManagedAssembly(bytes: CommonByteBuffer, type: BinaryProviderType): Boolean = when (type) {
+    BinaryProviderType.Generic -> isManagedPe(bytes)
+    BinaryProviderType.Wasm -> WebcilAssembly.isWebcilModule(bytes.duplicate())
+    BinaryProviderType.WasmComponent -> false
+}
+
+/** The .NET assembly in [bytes], whichever container holds it; null for anything else. */
+internal fun managedAssemblyOf(bytes: CommonByteBuffer): ClrAssemblySource? =
+    if (WebcilAssembly.isWebcilModule(bytes.duplicate())) {
+        WasmBinaryProvider(bytes.duplicate()).webcil
+    } else {
+        (nativeOrGenericBinaryProvider(bytes.duplicate()) as? PeBinaryProvider)?.takeIf { it.isManaged }
+    }
+
+/** The managed size tree of one side: sections, then methods, IL, metadata and resources. */
+private fun managedSizeAnalysis(bytes: CommonByteBuffer): BinarySizeNode? = when (val assembly = managedAssemblyOf(bytes)) {
+    is PeBinaryProvider -> assembly.sizeAnalysis
+    is WebcilAssembly -> assembly.sizeAnalysis
+    else -> null
 }
 
 // ---------------------------------------------------------------------------
@@ -158,9 +185,9 @@ internal class ClrAssemblyDiff(private val input: BinaryDiffInput) {
     }
 
     private fun side(bytes: CommonByteBuffer): ClrSide? {
-        val provider = nativeOrGenericBinaryProvider(bytes.duplicate()) as? PeBinaryProvider ?: return null
-        val metadata = provider.clrMetadata ?: return null
-        return ClrSide(provider.bytes, metadata)
+        val assembly = managedAssemblyOf(bytes) ?: return null
+        val metadata = assembly.clrMetadata ?: return null
+        return ClrSide(assembly.bytes, metadata)
     }
 }
 

@@ -1,5 +1,7 @@
 package org.jetbrains.hexana.vscode
 
+import org.jetbrains.hexana.shared.blazor.BlazorBundle
+import org.jetbrains.hexana.shared.blazor.MonoAotReport
 import org.jetbrains.hexana.shared.PROBLEMS_TAB_NAME
 import org.jetbrains.hexana.shared.isPartialView
 import org.jetbrains.hexana.shared.largeFileNotice
@@ -102,7 +104,7 @@ class DiffPayload(
  * [provider] is optional but worth passing: for a DEX it is a
  * [DexBinaryProvider] that has already parsed the file, so handing it over
  * avoids decoding the string table a second time. A .NET assembly gets its IL tab only from a
- * [PeBinaryProvider]. The DWARF tabs need it outright - they read
+ * [PeBinaryProvider], or a [WasmBinaryProvider] holding a Blazor WebAssembly (Webcil) assembly. The DWARF tabs need it outright - they read
  * custom sections off an already-parsed wasm module and are skipped without one.
  */
 fun computeExtraTabs(
@@ -133,6 +135,11 @@ fun computeExtraTabs(
     // shared with the provider's table tabs.
     if (provider is PeBinaryProvider && provider.isManaged) {
         return provider.clrMetadata?.let { clrIlExtraTabs(it, provider.bytes, provider.portablePdb) }.orEmpty()
+    }
+    // A Blazor WebAssembly assembly: the IL view comes first, then whatever DWARF tabs the wrapper has (none so far).
+    (provider as? WasmBinaryProvider)?.webcil?.let { assembly ->
+        val il = assembly.clrMetadata?.let { clrIlExtraTabs(it, assembly.bytes, assembly.portablePdb) }.orEmpty()
+        return il + dwarfExtraTabs(provider)
     }
     return dwarfExtraTabs(provider ?: return emptyList())
 }
@@ -181,6 +188,10 @@ fun BinaryEditorContent(
      * fetch bytes beyond [provider]'s head ([PagedHexBytes]); `null` shows the provider's bytes.
      */
     hexBytes: HexBytes? = null,
+    /** The Blazor WebAssembly app [provider] belongs to, when the host read its directory. */
+    blazorBundle: BlazorBundle? = null,
+    /** The .NET AOT breakdown of [provider], when it is an AOT compiled `dotnet.native.wasm`. */
+    monoAot: MonoAotReport? = null,
     /**
      * What the tabs cover while the host is still fetching the structures [provider] reads past
      * its head ([StructureBytesFetcher.coverageOverride]); `null` leaves it to the provider.
@@ -533,6 +544,11 @@ fun BinaryEditorContent(
                 scriptExecution = scriptExecution,
                 sslKeyLogGeneration = sslKeyLogGeneration,
                 runtimeCompatibility = runtimeCompatibility,
+                // Both describe the module as the host read it from disk: its integrity against the
+                // manifest, its functions' offsets and the symbol-map names attached to [provider]. A
+                // provider rebuilt from edited bytes has none of that, so its tabs go without them.
+                blazorBundle = blazorBundle.takeIf { liveProvider === provider },
+                monoAot = monoAot.takeIf { liveProvider === provider },
                 onConfigureRuntimes = if (host.canEditRuntimeTargets) {
                     { showRuntimeTargetsDialog = true }
                 } else {

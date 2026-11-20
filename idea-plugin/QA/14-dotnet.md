@@ -97,3 +97,56 @@ PDB: status `does not match`, "Not loaded: the image expects the other kind of P
 **Steps:** Copy `sample-clr.exe`, truncate the copy to 3,400 bytes, and open it.
 **Expected:** The file opens; tabs that need missing data are empty or absent, **Top** shows `.text` with only the
 bytes present. No exception in `idea.log`.
+
+### 14.13 Blazor WebAssembly (Webcil)
+**Steps:** Open `parsing/native-fixtures/test-data/pe/sample-clr.webcil.wasm` and open **.NET**, **Types** and
+**IL Disassembly** (expand `Hexana.Sample.Greeter`). Then open `sample-clr-portable.webcil.wasm` (its
+`sample-clr-portable.pdb` is next to it) and `sample-clr-embedded.webcil.wasm`. Optionally `dotnet publish` a
+`dotnet new blazorwasm` app and open a few `wwwroot/_framework/*.wasm` files, including `System.Private.CoreLib.*.wasm`.
+**Expected:** The file type reads `Core Wasm (.NET Webcil)`. The .NET tabs come before **Data**/**Exports**; **.NET**
+shows `Container: Webcil 0.0 in a Wasm wrapper (browser-wasm)` and assembly `sample-clr`, with no Platform row.
+**Types** matches `sample-clr.exe`. Clicking an IL instruction selects bytes inside the wrapper's data segment.
+Both PDB samples show `.line 19,19 : 9,38 '/src/clr/Sample.cs'` in the `Greeter` constructor. Published assemblies
+all open with types and methods; `dotnet.native.*.wasm` stays a plain Wasm module.
+
+### 14.14 Symbol map names for `dotnet.native.wasm`
+**Steps:** Copy `dotnet.native.wasm` and `dotnet.native.js.symbols` from
+`~/.nuget/packages/microsoft.netcore.app.runtime.mono.browser-wasm/<version>/runtimes/browser-wasm/native/` into one
+directory and open the `.wasm`; open **Functions** and **WAT (virtualized)**. Then put a symbol map of a different
+build (or an edited copy with `0:wrong_name` on every import line) beside it and reopen.
+**Expected:** Functions carry Mono names (`mono_wasm_load_runtime`, `mono_runtime_invoke`, …) instead of bare indices. The
+mismatching map is ignored and the functions stay unnamed.
+
+### 14.15 Blazor App tab
+**Steps:** `dotnet publish -c Release` a `dotnet new blazorwasm` app and open
+`bin/…/publish/wwwroot/_framework/System.Private.CoreLib.*.wasm`, then `dotnet.native.*.wasm`. Open **Blazor App**.
+Then copy the `_framework` directory, change one byte of the app's own `app.*.wasm` copy, delete one `System.*.wasm`,
+and open the changed file.
+**Expected:** The tab lists every manifest file (runtime first, then core assemblies and assemblies by download size,
+ICU data, JS modules) with Size, Brotli and Gzip columns; Integrity reads `matches` for all. The text above says the
+manifest is `dotnet.<hash>.js (embedded, .NET 10+)` (or `blazor.boot.json (.NET 8/9)` for a .NET 9 app), the startup
+download (about 2 MB Brotli for the template app), the three ICU shards, `Globalization sharded, trimmed, debugging off`,
+and which file is open. In the edited copy the changed file's row is tinted and reads `differs from the manifest`, the
+deleted one `file missing`, and both are named above the table. A `.wasm` that is not in the manifest gets no tab.
+
+### 14.16 .NET AOT tab
+**Steps:** With the `wasm-tools` workload installed, `dotnet publish -c Release -p:RunAOTCompilation=true
+-p:WasmEmitSymbolMap=true` a `dotnet new blazorwasm` app (default output location) and open
+`bin/Release/<tfm>/publish/wwwroot/_framework/dotnet.native.*.wasm`. Open **.NET AOT**; expand Managed code (AOT) →
+`app` → `app.Pages` → `Counter`. Then open the `dotnet.native.*.wasm` of a publish without AOT.
+**Expected:** The module is ~13 MB and its functions carry names (the map was found under `obj/…/wasm/for-publish/`).
+**.NET AOT** reads "Ahead-of-time compiled .NET app: 10.0 MB of code in a 13.4 MB module" and lists, largest first,
+Managed code (AOT) (~47%), Generic instances (~25%), Mono runtime and other native code, ICU, Wrappers and trampolines,
+Native libraries. Under managed code System.Private.CoreLib comes first; `Counter` lists
+`void BuildRenderTree(RenderTreeBuilder __builder)` and `void IncrementCount()`; selecting a method highlights its code.
+The treemap shows the same tree. The interpreter-only module has no **.NET AOT** tab.
+
+### 14.17 Comparing Blazor WebAssembly builds
+**Steps:** Select `parsing/native-fixtures/test-data/pe/sample-clr.webcil.wasm` and `sample-clr-v2.webcil.wasm` and run
+**Compare Binaries With…**; open **Methods** and select `Hexana.Sample.Greeter::string Greet(string name)`. Then compare
+`sample-clr.exe` with `sample-clr.webcil.wasm`, and two plain `.wasm` modules.
+**Expected:** The Webcil pair shows **Size Impact**, **Types** and **Methods** (not Entities/Dispatch), with the same rows
+as comparing `sample-clr.exe` with `sample-clr-v2.exe`; the selected method's IL is side by side, `", "` removed and
+`", dear "` added. The `.exe`/`.wasm` pair of the same assembly reports no type or method changes. Plain modules still
+get the Wasm module diff.
+

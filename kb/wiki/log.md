@@ -208,3 +208,9 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-16 — `entities/top-size-tab` — reworked: nesting under the parent instead of flattening, mapped-slice cursor fix, Components tab lists all nested components.
 - 2026-11-16 — `entities/top-size-tab` — deep treemap levels draw only children of 1% or more (rest folded); numeric-only label shortening.
 - 2026-11-16 — `entities/top-size-tab` — review follow-ups: nested component views not copies, component index space index for graph IDs; deep-treemap perf claim measured and declined.
+- 2026-11-16 — `entities/blazor-wasm-feasibility` — new: Blazor WASM/Webcil artifact anatomy from a real .NET 10 publish, current Hexana behaviour, work breakdown.
+- 2026-11-16 — `entities/blazor-wasm-feasibility` — steps 1–2 implemented: Webcil → CLR tabs/IL/PDB, symbol-map function names; `entities/clr-metadata` links it.
+- 2026-11-16 — `entities/blazor-wasm-feasibility` — step 3: Blazor App tab (boot manifest, sizes, SRI integrity), VS Code `list-directory` host message, `ContentDigest.sha256`.
+- 2026-11-16 — `entities/blazor-wasm-feasibility` — step 4: .NET AOT tab (Mono AOT symbol attribution), obj/ symbol-map discovery, stricter symbol-map check, shared `sizeTreeTab`.
+- 2026-11-16 — `entities/blazor-wasm-feasibility` — step 5: Webcil (and PE↔Webcil) assembly diff through `ClrDiffProvider`, registered ahead of the module diff.
+- 2026-11-17 — `entities/blazor-wasm-feasibility` — review fixes: sniff overflow, local-path companions, manifest-name containment and size cap, webview yielding, stale reparse data, bounded listing/hashing.

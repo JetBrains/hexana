@@ -56,6 +56,7 @@ import org.jetbrains.hexana.providers.pe.clr.ClrReadyToRunImage
 import org.jetbrains.hexana.providers.pe.clr.ClrPortablePdb
 import org.jetbrains.hexana.providers.pe.clr.ClrReadyToRunParser
 import kotlin.concurrent.Volatile
+import org.jetbrains.hexana.providers.format.WasmSymbolMap
 import org.jetbrains.hexana.tar.TarEntry
 import org.jetbrains.hexana.tar.TarParser
 import org.jetbrains.hexana.zip.ZipEntry
@@ -808,7 +809,7 @@ class PeBinaryProvider(
     sharedBytes: CommonByteBuffer,
     override val nativeFormat: NativeBinaryFormat.Pe,
     sourcePath: String? = null,
-) : NativeBinaryProvider(sharedBytes, sourcePath) {
+) : NativeBinaryProvider(sharedBytes, sourcePath), ClrAssemblySource {
 
     val dosHeader: PeDosHeader? by lazy { PeParser.parseDosHeader(bytes) }
 
@@ -917,7 +918,7 @@ class PeBinaryProvider(
         get() = attachment?.symbols ?: embeddedPortablePdb?.let { PeDebugSymbols.Embedded(it) }
 
     /** Sequence points of managed methods, from an attached or embedded Portable PDB. */
-    val portablePdb: ClrPortablePdb?
+    override val portablePdb: ClrPortablePdb?
         get() = when (val symbols = debugSymbols) {
             is PeDebugSymbols.File -> (symbols.symbols as? PortablePdbBinaryProvider)?.metadata?.portablePdb
             is PeDebugSymbols.Embedded -> symbols.pdb
@@ -929,11 +930,13 @@ class PeBinaryProvider(
         get() = attachment?.sourceLocations?.value
 
     /** Managed (.NET) metadata; null for native images without a CLR runtime header. */
-    val clrMetadata: ClrMetadata? by lazy {
+    override val clrMetadata: ClrMetadata? by lazy {
         val o = optionalHeader ?: return@lazy null
         val s = sections ?: return@lazy null
         ClrMetadataParser.parse(bytes, o, s)
     }
+
+    override val clrMachine: Int? get() = coffHeader?.machine
 
     /** Cheap check that does not decode metadata: true when the image declares a CLR runtime header. */
     val isManaged: Boolean by lazy { optionalHeader?.let(ClrMetadataParser::hasClrHeader) == true }
@@ -1711,7 +1714,20 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
         }
     }
 
-    val nameSection: WasmNameSection? by lazy {
+    /**
+     * The .NET assembly inside a Blazor WebAssembly (Webcil) wrapper module, or null for any other
+     * module. Detection reads only the import list and the data segment headers; metadata is decoded
+     * when [WebcilAssembly.clrMetadata] is first read.
+     */
+    val webcil: WebcilAssembly? by lazy {
+        try {
+            WebcilAssembly.locate(bytes, imports) { data }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private val parsedNameSection: WasmNameSection? by lazy {
         if (wasmModule == null) return@lazy null
         with (wasmModule) {
             val customSection = getCustomSectionByName("name") ?: return@lazy null
@@ -1719,6 +1735,64 @@ open class WasmBinaryProvider(private val sharedBytes: CommonByteBuffer) : Binar
                 bytes.parseAsNameSection()
             }
         }
+    }
+
+    @Volatile
+    private var symbolMapOverlay: WasmNameSection? = null
+
+    /**
+     * The module's `name` section, with function names from an attached symbol map
+     * ([attachSymbolMap]) filling the indices it does not name. Everything that names functions —
+     * tables, WAT, structure view, scripts, MCP — reads this, so an attached map reaches all of them.
+     */
+    val nameSection: WasmNameSection? get() = symbolMapOverlay ?: parsedNameSection
+
+    /** Where the attached symbol map came from, for the UI to say so; null when none is attached. */
+    @Volatile
+    var symbolMapPath: String? = null
+        private set
+
+    /** Imported plus defined functions: the size of the function index space. */
+    val functionIndexSpaceSize: Int by lazy {
+        val importedFunctions = imports.count { it.type is WasmTypeIndexExternalType }
+        val section = wasmModule?.functionSection ?: return@lazy importedFunctions
+        importedFunctions + (readUleb32(bytes, section.contentOffset) ?: 0)
+    }
+
+    /**
+     * Uses the `funcIndex:name` entries of [map] (Emscripten / Binaryen `--emit-symbol-map`, e.g.
+     * .NET's `dotnet.native.js.symbols`) as function names. Hosts call this with a map found next to
+     * the module, before building the tabs. Rejected — returns false and changes nothing — when the
+     * map cannot belong to this module: its last index is not the module's last function (Emscripten
+     * names every function, so a map of another build of the same code almost always differs in
+     * count), or its import entries disagree with the import section's field names.
+     */
+    fun attachSymbolMap(map: WasmSymbolMap, path: String?): Boolean {
+        if (map.byIndex.isEmpty() || wasmModule == null) return false
+        if (map.byIndex.keys.any { it < 0 } || map.byIndex.keys.max() != functionIndexSpaceSize - 1) return false
+        val importNames = imports.filter { it.type is WasmTypeIndexExternalType }.map { it.name }
+        val checked = importNames.indices.mapNotNull { index -> map.byIndex[index]?.let { it == importNames[index] } }
+        // Emscripten names an import after its field; most of them must agree.
+        if (checked.isNotEmpty() && checked.count { it } * 2 < checked.size) return false
+        val parsed = parsedNameSection
+        val own = parsed?.functionSubsection?.namemap.orEmpty()
+        val merged = map.byIndex.filterKeys { it !in own } + own
+        symbolMapOverlay = WasmNameSection(
+            moduleSubsection = parsed?.moduleSubsection,
+            functionSubsection = WasmFunctionsNameSection(merged),
+            localsSection = parsed?.localsSection,
+            labelsSection = parsed?.labelsSection,
+            typesSection = parsed?.typesSection,
+            tablesNameSection = parsed?.tablesNameSection,
+            memoriesNameSection = parsed?.memoriesNameSection,
+            globalsNameSection = parsed?.globalsNameSection,
+            elemsNameSection = parsed?.elemsNameSection,
+            dataSegmentsNameSection = parsed?.dataSegmentsNameSection,
+            fieldsNameSection = parsed?.fieldsNameSection,
+            tagsNameSection = parsed?.tagsNameSection,
+        )
+        symbolMapPath = path
+        return true
     }
 
     /**
@@ -2321,3 +2395,17 @@ data class HexanaSourceLocation(
     val line: Int,
     val column: Int,
 )
+
+/** A ULEB128 `u32` at [offset], or null when it runs past the buffer or overflows 32 bits. */
+private fun readUleb32(bytes: CommonByteBuffer, offset: Int): Int? {
+    var result = 0L
+    var shift = 0
+    var position = offset
+    while (position < bytes.size && shift < 35) {
+        val byte = bytes[position++].toInt() and 0xFF
+        result = result or ((byte and 0x7F).toLong() shl shift)
+        if (byte and 0x80 == 0) return result.takeIf { it <= Int.MAX_VALUE }?.toInt()
+        shift += 7
+    }
+    return null
+}

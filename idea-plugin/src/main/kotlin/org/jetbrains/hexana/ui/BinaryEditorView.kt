@@ -54,6 +54,8 @@ import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.openapi.vfs.toNioPathOrNull
+import com.intellij.testFramework.LightVirtualFile
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -86,6 +88,10 @@ import org.jetbrains.hexana.mcp.scripting.ScriptTabBinding
 import org.jetbrains.hexana.ui.panel.ProviderTabContent
 import org.jetbrains.hexana.ui.panel.displayName
 import org.jetbrains.hexana.shared.CLR_IL_TAB_NAME
+import org.jetbrains.hexana.shared.WasmSymbolMapCompanionLoader
+import org.jetbrains.hexana.shared.blazor.BlazorBundle
+import org.jetbrains.hexana.shared.blazor.MonoAotReport
+import org.jetbrains.hexana.shared.companionJoin
 import org.jetbrains.hexana.shared.DEX_SMALI_TAB_NAME
 import org.jetbrains.hexana.shared.GroupedTableTabDescriptor
 import org.jetbrains.hexana.shared.NativeDebugTabData
@@ -382,8 +388,16 @@ internal fun BinaryEditorView(
         // same inputs as the panels list so it resets on provider change.
         // Shared by the initial tab resolution and the Compatibility tab's refresh, so the
         // two cannot drift on the hooks they hand the descriptors.
+        // The Blazor WebAssembly app a `_framework` module belongs to. Read with the other companions
+        // in the resolution effect below, before any table tab is built; a plain holder rather than
+        // state, because nothing composes from it — the tabs are resolved after it is set.
+        val blazorBundleHolder = remember(binaryProvider) { arrayOfNulls<BlazorBundle>(1) }
+        // Same for the .NET AOT breakdown of an ahead-of-time compiled `dotnet.native.wasm`.
+        val monoAotHolder = remember(binaryProvider) { arrayOfNulls<MonoAotReport>(1) }
         fun buildTableTabsContext(nativeDebugData: NativeDebugTabData?) = TableTabsContext(
             nativeDebugData = nativeDebugData,
+            blazorBundle = blazorBundleHolder[0],
+            monoAot = monoAotHolder[0],
             fileName = fileName,
             // Drives the Compatibility tab. Null for a project with no base path, and the
             // tab is then absent rather than empty.
@@ -492,6 +506,30 @@ internal fun BinaryEditorView(
                         PdbCompanionLoader.load(pe, JVM_FILE_SYSTEM)
                     } catch (e: Exception) {
                         HexanaLog.LOG.warn("Failed to load the PDB of ${pe.sourcePath}", e)
+                    }
+                }
+            }
+            // Wasm companions, also attached before the tabs are built: a Blazor WebAssembly assembly's
+            // Portable PDB (published next to it, fingerprinted separately), and the Emscripten symbol
+            // map that names a stripped module's functions (`dotnet.native.js.symbols`).
+            // Only for a file on the local disk: the companion loaders read through `java.io.File`, and an
+            // archive entry's path (`app.zip!/_framework/…`) would send the `obj` search up past the archive.
+            (binaryProvider as? WasmBinaryVirtualFileProvider)?.takeIf { it.file !is LightVirtualFile }?.let { wasm ->
+                val localPath = wasm.file.toNioPathOrNull()?.toString() ?: return@let
+                withContext(Dispatchers.IO) {
+                    try {
+                        wasm.webcil?.let { PdbCompanionLoader.load(it, localPath, JVM_FILE_SYSTEM) }
+                        WasmSymbolMapCompanionLoader.load(wasm, localPath, JVM_FILE_SYSTEM)
+                        // Hashing the whole bundle for the integrity column is cheap: ~90 ms for a 9 MB app.
+                        val bundle = BlazorBundle.load(localPath, JVM_FILE_SYSTEM, verifyIntegrity = true)
+                        blazorBundleHolder[0] = bundle
+                        // Reads the app's assemblies only for an AOT runtime module with a symbol map: their
+                        // metadata splits its code into namespaces, types and methods (~0.4 s for the template app).
+                        monoAotHolder[0] = bundle?.let {
+                            MonoAotReport.load(wasm, it) { name -> JVM_FILE_SYSTEM.readFile(companionJoin(it.directory, name)) }
+                        }
+                    } catch (e: Exception) {
+                        HexanaLog.LOG.warn("Failed to load the companions of $localPath", e)
                     }
                 }
             }
@@ -1504,7 +1542,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
             // Must be remembered inside composable lambdas; each lambda remembers
             // its own instance. Cross-tab signaling only works when the caller
             // supplies non-null values (BinaryEditorView always does).
-            listOf(
+            webcilIlPanels(state) + listOf(
                 Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
                 Panel("Wat") { WasmPanelWat(this, state, wasmByteOffsetNavFlow ?: remember { MutableStateFlow(null) }) },
                 Panel("WAT (virtualized)") {
@@ -1569,7 +1607,7 @@ private fun BinaryProvider.resolveHardcodedPanels(
     }
     is WasmBinaryProvider -> {
         if (canProvideWasmModule()) {
-            listOf(
+            webcilIlPanels(state) + listOf(
                 Panel("Dominators") { WasmPanelDominators(this, state, pathsNav) },
                 Panel("WAT (virtualized)") {
                     val live = (liveProviderProvider?.invoke() as? WasmBinaryProvider) ?: this
@@ -2219,6 +2257,7 @@ private fun BinaryProvider.discoverHardcodedPanelNames(fileName: String): List<S
     is WasmBinaryVirtualFileProvider -> {
         if (canProvideWasmModule()) {
             buildList {
+                if (webcil != null) add(CLR_IL_TAB_NAME)
                 add("Dominators")
                 add("Wat")
                 add("WAT (virtualized)")
@@ -2234,6 +2273,7 @@ private fun BinaryProvider.discoverHardcodedPanelNames(fileName: String): List<S
     is WasmBinaryProvider -> {
         if (canProvideWasmModule()) {
             buildList {
+                if (webcil != null) add(CLR_IL_TAB_NAME)
                 add("Dominators")
                 add("WAT (virtualized)")
                 add("Type Graph")
@@ -2247,6 +2287,10 @@ private fun BinaryProvider.discoverHardcodedPanelNames(fileName: String): List<S
     }
     else -> emptyList()
 }
+
+/** The IL view of a Blazor WebAssembly assembly; detection reads only imports and data segment headers. */
+private fun WasmBinaryProvider.webcilIlPanels(state: HexViewStateHolder): List<Panel> =
+    webcil?.let { clrIlPanels(it, state) }.orEmpty()
 
 /**
  * Cheaply discovers which DWARF panels will be available. Both the section list and the grouping

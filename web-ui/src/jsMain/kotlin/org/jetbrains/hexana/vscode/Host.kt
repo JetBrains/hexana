@@ -176,6 +176,14 @@ interface Host {
      */
     fun readBinaryFile(path: String): Promise<ByteArray> =
         Promise.reject(UnsupportedOperationException("This host cannot read local files."))
+
+    /**
+     * Lists the directory at [path], hashing the files named in [hashNames] (SHA-256, Base64) on the
+     * way. The webview uses it to find companion files with fingerprinted names and to read a Blazor
+     * WebAssembly app's `_framework` directory. Rejects on hosts without file access.
+     */
+    fun listDirectory(path: String, hashNames: List<String> = emptyList()): Promise<List<HostDirectoryEntry>> =
+        Promise.reject(UnsupportedOperationException("This host cannot list local directories."))
     /**
      * Whether the host can send a request replayed from a PCAP and write it
      * as an `.http` file. False in the browser webapp, where CORS would block
@@ -226,3 +234,13 @@ class HttpReplayResponse(
     /** `true` when the server sent more than [body] holds; the rest was not read. */
     val bodyTruncated: Boolean = false,
 )
+
+/** One entry of [Host.listDirectory]. [size] is set for files, [sha256] for the files asked to be hashed. */
+data class HostDirectoryEntry(
+    val name: String,
+    val isFile: Boolean,
+    val isDirectory: Boolean,
+    val size: Long?,
+    val sha256: String?,
+)
+

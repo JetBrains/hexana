@@ -7,7 +7,9 @@ Conventions that came out of the clean-up before the public GitHub release. They
 - No machine-specific absolute path in a text source, test or script. A test that needs a local checkout or toolchain
   reads its location from an environment variable and skips when it is unset:
   `HEXANA_CORPUS_DIR` (spec testsuite corpus), `HEXANA_SAMPLE_COMPONENT_MODEL_DIR` (sample component-model project),
-  `ZEPHYR_SDK_INSTALL_DIR` (Zephyr SDK, for the GDB DAP smoke test).
+  `ZEPHYR_SDK_INSTALL_DIR` (Zephyr SDK, for the GDB DAP smoke test), `HEXANA_BLAZOR_FRAMEWORK_DIR` /
+  `HEXANA_BLAZOR_RUNTIME_NATIVE_DIR` / `HEXANA_BLAZOR_AOT_FRAMEWORK_DIR` (Blazor WebAssembly publish output, runtime pack and
+  an AOT publish, `BlazorPublishOutputTest`).
 - Build scripts under `examples/scripting-playground/build/` default to `$HOME/wasi-sdk` and `wasm-tools` from `PATH`;
   `CLANG` and `LLD` configure `make_fdt.py`.
 - Path-matching tests and KDoc use the generic `/Users/dev/...` placeholder. It is the only `/Users/<name>` form that
