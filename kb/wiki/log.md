@@ -214,3 +214,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-16 — `entities/blazor-wasm-feasibility` — step 4: .NET AOT tab (Mono AOT symbol attribution), obj/ symbol-map discovery, stricter symbol-map check, shared `sizeTreeTab`.
 - 2026-11-16 — `entities/blazor-wasm-feasibility` — step 5: Webcil (and PE↔Webcil) assembly diff through `ClrDiffProvider`, registered ahead of the module diff.
 - 2026-11-17 — `entities/blazor-wasm-feasibility` — review fixes: sniff overflow, local-path companions, manifest-name containment and size cap, webview yielding, stale reparse data, bounded listing/hashing.
+- 2026-11-23 — `sources/webcil-fixture-utf8-corruption` — wrapped Webcil fixtures were UTF-8-mangled; regenerated, detection recipe.
