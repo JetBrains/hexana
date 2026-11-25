@@ -69,9 +69,10 @@ internal class HexanaTreeStructureViewBuilder(
 
     override fun createStructureView(fileEditor: FileEditor?, project: Project): StructureView {
         val structureView = super.createStructureView(fileEditor, project)
-        if (structureView !is com.intellij.ide.structureView.newStructureView.StructureViewComponent) return structureView
-        // Install a tree popup action for running exports directly from the tree node
-        val tree = structureView.tree
+        // Install a tree popup action for running exports directly from the tree node. The tree is
+        // located through the Swing hierarchy rather than via `StructureViewComponent.tree`: that
+        // class is an implementation module not visible to the plugin in every IDE (e.g. Rider).
+        val tree = com.intellij.util.ui.UIUtil.findComponentOfType(structureView.component, javax.swing.JTree::class.java)
         if (tree != null) {
             tree.addMouseListener(object : java.awt.event.MouseAdapter() {
                 override fun mousePressed(e: java.awt.event.MouseEvent) = handlePopup(e)

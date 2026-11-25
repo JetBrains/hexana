@@ -1,7 +1,7 @@
 package org.jetbrains.hexana
 
-import com.intellij.ide.highlighter.JavaClassFileType
 import com.intellij.openapi.fileTypes.FileType
+import com.intellij.openapi.fileTypes.FileTypeManager
 import com.intellij.openapi.fileTypes.FileTypeRegistry
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.util.io.ByteSequence
@@ -126,7 +126,12 @@ class NativeBinaryFileTypeDetector : FileTypeRegistry.FileTypeDetector {
             (b3 == 0xCA && b2 == 0xFE && b1 == 0xBA && (b0 == 0xBE || b0 == 0xBF))
         ) {
             if (file.extension.equals("class", ignoreCase = true)) return null
-            if (ClassFileBinaryProvider.isDefinitelyClass { i -> firstBytes.byteAt(i) }) return JavaClassFileType.INSTANCE
+            // A misnamed `.class` goes to the class-file type when one is registered. It is looked
+            // up by name: `JavaClassFileType` lives in the Java plugin, which Rider and other
+            // non-Java IDEs do not ship, so referencing the class would fail to load there.
+            if (ClassFileBinaryProvider.isDefinitelyClass { i -> firstBytes.byteAt(i) }) {
+                return FileTypeManager.getInstance().findFileTypeByName(JAVA_CLASS_FILE_TYPE_NAME)
+            }
             return MachOFileType.INSTANCE
         }
 
@@ -184,6 +189,9 @@ class NativeBinaryFileTypeDetector : FileTypeRegistry.FileTypeDetector {
     }
 
     private companion object {
+        /** `JavaClassFileType.INSTANCE.name`, registered only when the Java plugin is present. */
+        const val JAVA_CLASS_FILE_TYPE_NAME = "CLASS"
+
         // IMAGE_FILE_MACHINE_* values that mark a real COFF object header. Mirrors
         // NativeBinaryFormatDetector's set (i386, ARM, ARMNT, IA64, AMD64, ARM64).
         val COFF_MACHINE_TYPES = setOf(0x014C, 0x01C0, 0x01C4, 0x0200, 0x8664, 0xAA64)
