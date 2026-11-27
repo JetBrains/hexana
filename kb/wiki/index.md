@@ -11,6 +11,8 @@ consult-first / write-back rules.
   `table`, `row`) and how each host binds it.
 - [[entities/wasm-debugger-attach]] — Run | Attach to Process for wasmtime/WAMR gdbstubs, Node
   inspectors and Chrome DevTools: command-line detection, DWARF from CDP bytecode, detach-on-stop.
+- [[entities/vscode-wasm-debugger-attach-plan]] — VS Code Wasm attach (implemented): `attach` config,
+  `hexana.pickWasmProcess` picker, lldb-dap attach→launch rewrite with detach, CDP attach + bytecode DWARF.
 - [[entities/wasm-runtime-compatibility]] — the Wasm runtime compatibility table: proposal
   detection, `.hexana/runtimes.json`, the runtime-compatibility problems, and the Compatibility tab.
 - [[entities/dwarf-outline-model]] — the shared row model behind the `.debug_*` editor tabs:

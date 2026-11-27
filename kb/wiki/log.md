@@ -216,3 +216,5 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-17 — `entities/blazor-wasm-feasibility` — review fixes: sniff overflow, local-path companions, manifest-name containment and size cap, webview yielding, stale reparse data, bounded listing/hashing.
 - 2026-11-23 — `sources/webcil-fixture-utf8-corruption` — wrapped Webcil fixtures were UTF-8-mangled; regenerated, detection recipe.
 - 2026-11-27 — `entities/wasm-debugger-attach` — attach Hexana Wasm debuggers to running wasmtime/iwasm/node/Chrome via the IDE attach dialog.
+- 2026-11-27 — `entities/vscode-wasm-debugger-attach-plan` — VS Code Wasm attach: current launch-only state and implementation plan (not started).
+- 2026-11-27 — `entities/vscode-wasm-debugger-attach-plan` — implemented VS Code attach; detector moved to plugins-shared.

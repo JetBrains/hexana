@@ -4,6 +4,7 @@ import * as path from "path";
 import * as vscode from "vscode";
 import type * as ExtensionLib from "./extension-lib";
 import { CdpDebugAdapter } from "./CdpDebugAdapter";
+import { registerWasmAttach, resolveAttachConfiguration } from "./WasmAttach";
 import {
     LldbDapProxy,
     resolveLldbDapPath,
@@ -74,6 +75,13 @@ class WasmDebugConfigurationProvider implements vscode.DebugConfigurationProvide
             }
         }
 
+        // Attach configurations are completed after `${command:...}`
+        // substitution (the process picker), in
+        // resolveDebugConfigurationWithSubstitutedVariables.
+        if (config.request === "attach") {
+            return config;
+        }
+
         if (!config.wasmFile) {
             return vscode.window.showInformationMessage(
                 "Cannot debug: no .wasm file specified in the debug configuration.",
@@ -86,6 +94,17 @@ class WasmDebugConfigurationProvider implements vscode.DebugConfigurationProvide
         }
 
         return config;
+    }
+
+    resolveDebugConfigurationWithSubstitutedVariables(
+        folder: vscode.WorkspaceFolder | undefined,
+        config: vscode.DebugConfiguration,
+        _token?: vscode.CancellationToken,
+    ): vscode.ProviderResult<vscode.DebugConfiguration> {
+        if (config.request !== "attach") {
+            return config;
+        }
+        return resolveAttachConfiguration(folder, config);
     }
 }
 
@@ -130,8 +149,10 @@ class WasmDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
     ): vscode.ProviderResult<vscode.DebugAdapterDescriptor> {
         const config = session.configuration;
         const runtime: string = config.runtime || "wasmtime";
+        const attach = config.request === "attach";
 
-        // CDP-based debugging for Node.js and Browser runtimes
+        // CDP-based debugging for Node.js and Browser runtimes. The
+        // adapter handles both `launch` and `attach` requests.
         if (runtime === "nodejs" || runtime === "browser") {
             const adapter = new CdpDebugAdapter(runtime, config);
             return new vscode.DebugAdapterInlineImplementation(adapter);
@@ -156,6 +177,15 @@ class WasmDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
         }
 
         const args: string[] = [];
+
+        // Attach to a gdbstub somebody else started: nothing to launch,
+        // and the proxy detaches on disconnect instead of killing it.
+        if (attach) {
+            const proxy = new LldbDapProxy(lldbDapPath, args, false);
+            proxy.setAttachEndpoint(config.host || "127.0.0.1", Number(config.port));
+            proxy.start();
+            return new vscode.DebugAdapterInlineImplementation(proxy);
+        }
 
         if (runtime === "wasmtime") {
             // Prefer the gdbstub model (wasmtime 44+): wasmtime runs the
@@ -450,6 +480,8 @@ class WasmDebugAdapterTrackerFactory implements vscode.DebugAdapterTrackerFactor
  * @param context the extension context for registering disposables
  */
 export function registerWasmDebugAdapter(context: vscode.ExtensionContext): void {
+    registerWasmAttach(context, DEBUG_TYPE);
+
     context.subscriptions.push(
         vscode.debug.registerDebugConfigurationProvider(
             DEBUG_TYPE,

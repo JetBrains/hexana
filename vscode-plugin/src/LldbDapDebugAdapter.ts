@@ -234,6 +234,26 @@ export class LldbDapProxy implements vscode.DebugAdapter {
     }
 
     /**
+     * gdbstub endpoint of an `attach` session: a runtime the extension did
+     * not start (`wasmtime -g` / `iwasm -g=`). The DAP `attach` request is
+     * forwarded to lldb-dap as the same `launch` + `process connect` the
+     * launched gdbstub sessions use, so the initial-stop handling is shared;
+     * `disconnect` then detaches instead of killing the runtime.
+     */
+    private attachEndpoint: string | undefined;
+    /** seq numbers of `attach` requests forwarded as `launch`, to restore the response command. */
+    private readonly rewrittenAttachSeqs = new Set<number>();
+
+    setAttachEndpoint(host: string, port: number): void {
+        this.attachEndpoint = `${host}:${port}`;
+    }
+
+    /** The gdbstub `host:port` an attach session is connected to. */
+    get attachedEndpoint(): string | undefined {
+        return this.attachEndpoint;
+    }
+
+    /**
      * Called by VS Code to send a DAP message (request) to the
      * debug adapter.
      */
@@ -297,6 +317,10 @@ export class LldbDapProxy implements vscode.DebugAdapter {
                     `from '${sourcePath}' to basename '${baseName}'`,
                 );
             }
+        }
+
+        if (this.attachEndpoint && msg.type === "request") {
+            rewriteAttachRequest(msg, this.attachEndpoint, this.rewrittenAttachSeqs);
         }
 
         // For WAMR sessions, mark that we expect the initial
@@ -424,6 +448,12 @@ export class LldbDapProxy implements vscode.DebugAdapter {
      * See: https://docs.wasmtime.dev/examples-debugging-native-debugger.html
      */
     private handleLldbDapMessage(msg: DapMessage): void {
+        if (
+            msg.type === "response" &&
+            this.rewrittenAttachSeqs.delete(msg.request_seq as number)
+        ) {
+            msg.command = "attach";
+        }
         // Swallow responses to internally-injected requests
         // (e.g. continue after WAMR initial-stop check) so
         // VS Code doesn't see unexpected responses.
@@ -1506,5 +1536,35 @@ def __lldb_init_module(debugger, internal_dict):
         return scriptPath;
     } catch {
         return undefined;
+    }
+}
+
+/**
+ * Rewrites the DAP requests of a gdbstub `attach` session for lldb-dap
+ * (exported for unit tests):
+ *
+ * - `attach` becomes the `launch` + `process connect --plugin wasm` the
+ *   launched gdbstub sessions send, with `stopOnEntry` so the proxy's
+ *   initial-stop check runs. Its seq goes into [rewrittenSeqs] so the
+ *   response can be renamed back.
+ * - `disconnect` gets `terminateDebuggee: false`, so lldb-dap detaches and
+ *   the runtime keeps running.
+ */
+export function rewriteAttachRequest(
+    msg: DapMessage,
+    endpoint: string,
+    rewrittenSeqs: Set<number>,
+): void {
+    if (msg.command === "attach") {
+        const args = (msg.arguments || {}) as Record<string, unknown>;
+        args.launchCommands = [`process connect --plugin wasm connect://${endpoint}`];
+        args.stopOnEntry = true;
+        msg.arguments = args;
+        msg.command = "launch";
+        rewrittenSeqs.add(msg.seq as number);
+    } else if (msg.command === "disconnect") {
+        const args = (msg.arguments || {}) as Record<string, unknown>;
+        args.terminateDebuggee = false;
+        msg.arguments = args;
     }
 }

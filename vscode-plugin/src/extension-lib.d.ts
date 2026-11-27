@@ -330,6 +330,25 @@ export function decodeWasmStackValueHex(hex: string, typeDisplay: string): strin
 /** Extracts the hex payload from LLDB `process plugin packet send` output. */
 export function parseRawPacketOutput(lines: string[]): string | null;
 
+// ── WasmAttach ──────────────────────────────────────────────────────
+
+/**
+ * A running process a `wasm` debug session can attach to (shared with the
+ * IntelliJ Attach to Process dialog). `host` is null for browsers (always
+ * loopback); a browser `port` of 0 means it is in
+ * `<userDataDir>/DevToolsActivePort`.
+ */
+export interface JsWasmAttachTarget {
+    readonly runtime: "wasmtime" | "wamr" | "nodejs" | "browser";
+    readonly host: string | null;
+    readonly port: number;
+    readonly userDataDir: string | null;
+    readonly wasmPath: string | null;
+}
+
+/** Recognizes a Wasm debug target from a full process command line; null when there is none. */
+export function detectAttachTarget(commandLine: string): JsWasmAttachTarget | null;
+
 // ── ShellUtils ──────────────────────────────────────────────────────
 
 /**

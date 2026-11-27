@@ -5,8 +5,9 @@ platform's **Run | Attach to Process…** dialog (any IntelliJ-based IDE, includ
 
 ## Where the code lives
 
-- `idea-plugin/.../run/attach/WasmAttachTarget.kt`: pure command-line detection
-  (`detectWasmAttachTarget(executableName, args)`), tested in `WasmAttachTargetTest`.
+- `plugins-shared/.../shared/WasmAttachTarget.kt`: pure command-line detection
+  (`detectWasmAttachTarget(executableName, args)`), shared with VS Code and tested in commonTest
+  `WasmAttachTargetTest`. IntelliJ-only plumbing is tested in `WasmAttachDebuggerProviderTest`.
 - `idea-plugin/.../run/attach/WasmAttachDebuggerProvider.kt`: the
   `xdebugger.attachDebuggerProvider` (local host only). It builds the starter and starts the session
   with `startAttachedDebugSession` (`DebugSessionStartCompat.kt`: session builder on 261+,
@@ -45,6 +46,8 @@ a stub serves one client. Wildcard listen addresses map to `127.0.0.1`.
 - CDP sessions use a `DetachedTargetProcessHandler` stand-in, and stopping only closes the WebSocket.
 
 ## Open points
+
+- VS Code attach: see [[entities/vscode-wasm-debugger-attach-plan]].
 
 - No end-to-end UI test yet. Coverage is the detection unit tests, plus the existing debug-process tests
   for the launch path.

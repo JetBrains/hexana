@@ -259,6 +259,8 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
     private tempUserDataDir: string | undefined;
     /** Whether the adapter has been disposed. */
     private disposed = false;
+    /** True for an `attach` session: the target is not owned by the adapter. */
+    private attached = false;
     /** Thread ID used in DAP (single-threaded). */
     private readonly THREAD_ID = 1;
     /** Tracks whether we've sent the initialized event. */
@@ -321,6 +323,10 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
 
             case "launch":
                 await this.handleLaunch(msg);
+                break;
+
+            case "attach":
+                await this.handleAttach(msg);
                 break;
 
             case "configurationDone":
@@ -423,39 +429,7 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
             // Parse the wasm binary to find function body offsets before
             // launching, so we can set breakpoints via urlRegex before
             // the wasm script is loaded by V8.
-            const wasmFile = this.config.wasmFile;
-            if (wasmFile && fs.existsSync(wasmFile)) {
-                const wasmBuf = fs.readFileSync(wasmFile);
-                this.wasmFunctionOffsets = parseWasmFunctionOffsets(wasmBuf);
-                this.log.appendLine(
-                    `[Hexana CDP] Parsed ${this.wasmFunctionOffsets.length} function offset(s) from ${wasmFile}`,
-                );
-
-                // Try to create a DWARF-based source location resolver
-                if (extensionLib) {
-                    try {
-                        const wasmInt8 = new Int8Array(wasmBuf.buffer, wasmBuf.byteOffset, wasmBuf.byteLength);
-                        this.sourceLocationResolver = extensionLib.SourceLocationResolver.create(wasmInt8) ?? undefined;
-                        if (this.sourceLocationResolver) {
-                            const files = this.sourceLocationResolver.knownSourceFiles();
-                            this.log.appendLine(
-                                `[Hexana CDP] DWARF source location resolver created with ${files.length} source file(s): ${files.join(", ")}`,
-                            );
-                        } else {
-                            this.log.appendLine("[Hexana CDP] No DWARF line info found in wasm binary");
-                        }
-                    } catch (e) {
-                        this.log.appendLine(`[Hexana CDP] Failed to create source location resolver: ${e}`);
-                    }
-
-                    try {
-                        const wasmInt8 = new Int8Array(wasmBuf.buffer, wasmBuf.byteOffset, wasmBuf.byteLength);
-                        this.disassembly = extensionLib.createWasmDisassembly(wasmInt8) ?? undefined;
-                    } catch (e) {
-                        this.log.appendLine(`[Hexana CDP] Failed to create disassembly index: ${e}`);
-                    }
-                }
-            }
+            this.loadLocalModule();
 
             const wsUrl = this.runtime === "nodejs"
                 ? await this.launchNodeJs()
@@ -466,6 +440,100 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
         } catch (e) {
             this.sendDapResponse(msg, false, `Launch failed: ${e}`);
         }
+    }
+
+    /**
+     * Attaches to a Node.js inspector or a browser DevTools endpoint the
+     * extension did not start. `wsUrl` is resolved by the configuration
+     * provider (`resolveCdpAttachWebSocketUrl`). Nothing is spawned, so
+     * disconnecting only closes the WebSocket and the target keeps running.
+     */
+    private async handleAttach(msg: any): Promise<void> {
+        try {
+            this.attached = true;
+            this.loadLocalModule();
+            const wsUrl = this.config.wsUrl as string | undefined;
+            if (!wsUrl) {
+                throw new Error("no inspector WebSocket URL was resolved for this target");
+            }
+            await this.connectCdp(wsUrl);
+            this.sendDapResponse(msg, true);
+        } catch (e) {
+            this.sendDapResponse(msg, false, `Attach failed: ${e}`);
+        }
+    }
+
+    /** Indexes the configured local `wasmFile`, when there is one. */
+    private loadLocalModule(): void {
+        const wasmFile = this.config.wasmFile as string | undefined;
+        if (wasmFile && fs.existsSync(wasmFile)) {
+            this.loadModuleBytes(fs.readFileSync(wasmFile), wasmFile);
+        }
+    }
+
+    /**
+     * Builds the function offsets, the DWARF source location resolver and
+     * the disassembly index from a module's bytes.
+     */
+    private loadModuleBytes(wasmBuf: Buffer, origin: string): void {
+        this.wasmFunctionOffsets = parseWasmFunctionOffsets(wasmBuf);
+        this.log.appendLine(
+            `[Hexana CDP] Parsed ${this.wasmFunctionOffsets.length} function offset(s) from ${origin}`,
+        );
+        if (!extensionLib) return;
+        const wasmInt8 = new Int8Array(wasmBuf.buffer, wasmBuf.byteOffset, wasmBuf.byteLength);
+        try {
+            this.sourceLocationResolver = extensionLib.SourceLocationResolver.create(wasmInt8) ?? undefined;
+            if (this.sourceLocationResolver) {
+                const files = this.sourceLocationResolver.knownSourceFiles();
+                this.log.appendLine(
+                    `[Hexana CDP] DWARF source location resolver created with ${files.length} source file(s): ${files.join(", ")}`,
+                );
+            } else {
+                this.log.appendLine("[Hexana CDP] No DWARF line info found in wasm binary");
+            }
+        } catch (e) {
+            this.log.appendLine(`[Hexana CDP] Failed to create source location resolver: ${e}`);
+        }
+        try {
+            this.disassembly = extensionLib.createWasmDisassembly(wasmInt8) ?? undefined;
+        } catch (e) {
+            this.log.appendLine(`[Hexana CDP] Failed to create disassembly index: ${e}`);
+        }
+    }
+
+    /** The scriptId whose bytes were read by [loadDebugInfoFromTargetIfNeeded]. */
+    private debugInfoFromTargetScriptId: string | undefined;
+    private debugInfoFromTarget: Promise<void> | undefined;
+
+    /**
+     * An attached session without a local `wasmFile` reads the module from
+     * the target: `Debugger.getScriptSource` returns a wasm script's bytes as
+     * base64 `bytecode`. Uses the first wasm script, like breakpoint
+     * registration. Mirrors IntelliJ's `CdpDebugProcess.loadDebugInfoFromTargetIfNeeded`.
+     */
+    private loadDebugInfoFromTargetIfNeeded(): Promise<void> {
+        if (!this.attached || this.config.wasmFile || this.debugInfoFromTargetScriptId) {
+            return Promise.resolve();
+        }
+        const scriptId = this.wasmScriptId;
+        if (!scriptId) return Promise.resolve();
+        if (!this.debugInfoFromTarget) {
+            this.debugInfoFromTarget = (async () => {
+                try {
+                    const result = await this.cdpSend("Debugger.getScriptSource", { scriptId });
+                    const bytecode = result?.bytecode as string | undefined;
+                    if (bytecode) {
+                        this.loadModuleBytes(Buffer.from(bytecode, "base64"), `target script ${scriptId}`);
+                    }
+                } catch (e) {
+                    this.log.appendLine(`[Hexana CDP] Failed to read wasm module bytes from the target: ${e}`);
+                }
+                // Recorded even without DWARF, so the module is read once.
+                this.debugInfoFromTargetScriptId = scriptId;
+            })();
+        }
+        return this.debugInfoFromTarget;
     }
 
     private launchNodeJs(): Promise<string> {
@@ -766,6 +834,10 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
 
         await this.cdpSend("Runtime.enable");
         await this.cdpSend("Debugger.enable");
+
+        // Debugger.enable replays scriptParsed for modules the target had
+        // already compiled, so an attached session can read their DWARF now.
+        await this.loadDebugInfoFromTargetIfNeeded();
 
         // Set an instrumentation breakpoint so V8 pauses BEFORE
         // executing any newly compiled script — including wasm modules.
@@ -1198,6 +1270,7 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
         // Wait for the CDP connection to be established — setBreakpoints
         // may arrive from VS Code before handleLaunch finishes connecting.
         await this.cdpReady;
+        await this.loadDebugInfoFromTargetIfNeeded();
 
         // When the wasm script is already loaded, query V8 for the
         // precise set of valid breakpoint byte offsets.

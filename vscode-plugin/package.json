@@ -68,6 +68,10 @@
     },
     "commands": [
       {
+        "command": "hexana.pickWasmProcess",
+        "title": "Hexana: Pick WebAssembly Process to Attach"
+      },
+      {
         "command": "hexana.mcp.updateServer",
         "title": "Hexana MCP: Update Server"
       },
@@ -121,6 +125,10 @@
       "commandPalette": [
         {
           "command": "hexana.compareFiles"
+        },
+        {
+          "command": "hexana.pickWasmProcess",
+          "when": "false"
         }
       ]
     },
@@ -172,6 +180,41 @@
                 "description": "Extra runtime CLI options (e.g. wasmtime flags)."
               }
             }
+          },
+          "attach": {
+            "properties": {
+              "processId": {
+                "type": "string",
+                "default": "${command:hexana.pickWasmProcess}",
+                "description": "Process to attach to; its debug endpoint and module are read from its command line. Usually ${command:hexana.pickWasmProcess}."
+              },
+              "runtime": {
+                "type": "string",
+                "enum": ["wasmtime", "wamr", "nodejs", "browser"],
+                "description": "Runtime of the target. Filled in from processId when set."
+              },
+              "host": {
+                "type": "string",
+                "default": "127.0.0.1",
+                "description": "Host of the wasmtime/WAMR gdbstub or the Node.js inspector."
+              },
+              "port": {
+                "type": "number",
+                "description": "Port of the gdbstub (wasmtime -g / iwasm -g=), the Node.js inspector (default 9229), or the browser's --remote-debugging-port."
+              },
+              "userDataDir": {
+                "type": "string",
+                "description": "Browser profile directory; its DevToolsActivePort file gives the port of a browser started with --remote-debugging-port=0."
+              },
+              "wsUrl": {
+                "type": "string",
+                "description": "CDP WebSocket debugger URL; skips endpoint discovery for nodejs/browser."
+              },
+              "wasmFile": {
+                "type": "string",
+                "description": "Optional local copy of the running module, for DWARF and disassembly. Without it, Node.js/Chrome sessions read the module from the target."
+              }
+            }
           }
         },
         "configurationSnippets": [
@@ -217,6 +260,50 @@
               "name": "Debug Wasm (Chrome)",
               "wasmFile": "${workspaceFolder}/${1:path/to/module.wasm}",
               "runtime": "browser"
+            }
+          },
+          {
+            "label": "WebAssembly: Attach to Process",
+            "description": "Attach to a running wasmtime/WAMR gdbstub, Node.js inspector or Chrome DevTools endpoint.",
+            "body": {
+              "type": "wasm",
+              "request": "attach",
+              "name": "Attach to Wasm Process",
+              "processId": "^\"\\${command:hexana.pickWasmProcess}\""
+            }
+          },
+          {
+            "label": "WebAssembly: Attach to Wasmtime/WAMR gdbstub",
+            "description": "Attach to a runtime started with wasmtime -g <host:port> or iwasm -g=<host:port>.",
+            "body": {
+              "type": "wasm",
+              "request": "attach",
+              "name": "Attach to Wasm gdbstub",
+              "runtime": "${1|wasmtime,wamr|}",
+              "host": "127.0.0.1",
+              "port": 1234
+            }
+          },
+          {
+            "label": "WebAssembly: Attach to Node.js (CDP)",
+            "description": "Attach to Node.js started with --inspect.",
+            "body": {
+              "type": "wasm",
+              "request": "attach",
+              "name": "Attach to Wasm in Node.js",
+              "runtime": "nodejs",
+              "port": 9229
+            }
+          },
+          {
+            "label": "WebAssembly: Attach to Chrome (CDP)",
+            "description": "Attach to Chrome started with --remote-debugging-port.",
+            "body": {
+              "type": "wasm",
+              "request": "attach",
+              "name": "Attach to Wasm in Chrome",
+              "runtime": "browser",
+              "port": 9222
             }
           }
         ]

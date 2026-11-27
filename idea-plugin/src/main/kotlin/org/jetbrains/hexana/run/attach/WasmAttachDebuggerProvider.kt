@@ -34,6 +34,10 @@ import org.jetbrains.hexana.run.WasmRuntimeSettings
 import org.jetbrains.hexana.run.WasmtimeGdbDebugProcess
 import org.jetbrains.hexana.run.startAttachedDebugSession
 import org.jetbrains.hexana.shared.CdpSourceLocationResolver
+import org.jetbrains.hexana.shared.WasmAttachRuntime
+import org.jetbrains.hexana.shared.WasmAttachTarget
+import org.jetbrains.hexana.shared.detectWasmAttachTarget
+import org.jetbrains.hexana.shared.gdbStubEndpoint
 import java.io.File
 
 /**
@@ -65,7 +69,7 @@ class WasmAttachDebuggerProvider : XAttachDebuggerProvider {
 
     /** A gdbstub serves one debugger; hide endpoints a running session already holds. */
     private fun isGdbStubInUse(project: Project, target: WasmAttachTarget.GdbStub): Boolean {
-        val endpoint = "${target.host}:${target.port}"
+        val endpoint = target.gdbStubEndpoint
         return XDebuggerManager.getInstance(project).debugSessions.any { session ->
             when (val process = session.debugProcess) {
                 is WasmtimeGdbDebugProcess -> process.debugEndpoint == endpoint
@@ -89,7 +93,7 @@ private class WasmAttachDebugger(private val target: WasmAttachTarget) : XAttach
 
     override fun getDebuggerDisplayName(): String = when (target) {
         is WasmAttachTarget.GdbStub -> {
-            val runtime = if (target.engine == WasmEngine.WAMR) "WAMR" else "Wasmtime"
+            val runtime = if (target.runtime == WasmAttachRuntime.WAMR) "WAMR" else "Wasmtime"
             "Hexana WebAssembly ($runtime gdbstub ${target.host}:${target.port})"
         }
         is WasmAttachTarget.NodeInspector -> "Hexana WebAssembly (Node.js inspector ${target.host}:${target.port})"
@@ -158,7 +162,7 @@ private class WasmAttachDebugger(private val target: WasmAttachTarget) : XAttach
                 exePath = lldbExe
                 withParentEnvironmentType(GeneralCommandLine.ParentEnvironmentType.CONSOLE)
             }
-            LOG.info("Starting LLDB to attach to ${target.engine.displayName} gdbstub at ${target.host}:${target.port}")
+            LOG.info("Starting LLDB to attach to ${target.runtime.id} gdbstub at ${target.host}:${target.port}")
 
             val lldbHandler = MostlySilentOSProcessHandler(lldbCommandLine)
             val lldb = LldbCommunicator(lldbHandler)
@@ -174,7 +178,7 @@ private class WasmAttachDebugger(private val target: WasmAttachTarget) : XAttach
 
             // No runtime handler: the runtime belongs to whoever started it,
             // and the debug process detaches from it on stop.
-            val process = if (target.engine == WasmEngine.WAMR) {
+            val process = if (target.runtime == WasmAttachRuntime.WAMR) {
                 WamrDebugProcess(
                     session, console, lldbHandler, null, lldb,
                     debugHost = target.host,

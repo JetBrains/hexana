@@ -1,15 +1,26 @@
-package org.jetbrains.hexana.run.attach
+package org.jetbrains.hexana.shared
 
-import org.jetbrains.hexana.run.WasmEngine
+/**
+ * The runtime behind a [WasmAttachTarget]. [id] is the runtime identifier
+ * VS Code debug configurations use (`"runtime": "wamr"`).
+ */
+enum class WasmAttachRuntime(val id: String) {
+    WASMTIME("wasmtime"),
+    WAMR("wamr"),
+    NODE_JS("nodejs"),
+    BROWSER("browser"),
+}
 
 /**
  * A running process Hexana's Wasm debuggers can attach to, recognized from
  * its command line. Detection is purely syntactic: it reads the debug
  * endpoint the process was started with and never connects to it.
  */
-internal sealed class WasmAttachTarget {
+sealed class WasmAttachTarget {
     /** Path of the module the process runs, as written on its command line; null when unknown. */
     abstract val wasmPath: String?
+
+    abstract val runtime: WasmAttachRuntime
 
     /**
      * A gdbstub served by the runtime itself: `wasmtime run -g <host>:<port>`
@@ -17,7 +28,7 @@ internal sealed class WasmAttachTarget {
      * `process connect --plugin wasm`.
      */
     data class GdbStub(
-        val engine: WasmEngine,
+        override val runtime: WasmAttachRuntime,
         val host: String,
         val port: Int,
         override val wasmPath: String?,
@@ -28,7 +39,9 @@ internal sealed class WasmAttachTarget {
         val host: String,
         val port: Int,
         override val wasmPath: String?,
-    ) : WasmAttachTarget()
+    ) : WasmAttachTarget() {
+        override val runtime: WasmAttachRuntime get() = WasmAttachRuntime.NODE_JS
+    }
 
     /**
      * A Chromium-based browser started with `--remote-debugging-port`. A zero
@@ -39,7 +52,9 @@ internal sealed class WasmAttachTarget {
         val port: Int,
         val userDataDir: String?,
         override val wasmPath: String?,
-    ) : WasmAttachTarget()
+    ) : WasmAttachTarget() {
+        override val runtime: WasmAttachRuntime get() = WasmAttachRuntime.BROWSER
+    }
 }
 
 /**
@@ -48,7 +63,7 @@ internal sealed class WasmAttachTarget {
  * Hexana can reach (including endpoints on an OS-chosen port that is not
  * discoverable from outside, such as `node --inspect=0`).
  */
-internal fun detectWasmAttachTarget(executableName: String, args: List<String>): WasmAttachTarget? {
+fun detectWasmAttachTarget(executableName: String, args: List<String>): WasmAttachTarget? {
     val name = executableName.substringAfterLast('/').substringAfterLast('\\')
         .removeSuffix(".exe").lowercase()
     return when (name) {
@@ -58,6 +73,21 @@ internal fun detectWasmAttachTarget(executableName: String, args: List<String>):
         else -> detectChrome(args)
     }
 }
+
+/**
+ * Detects a target from a full process command line (executable first), as
+ * printed by `ps` or `Win32_Process.CommandLine`. Quoting that survived the
+ * listing is honored; a listing that dropped it can split paths with spaces.
+ */
+fun detectWasmAttachTargetFromCommandLine(commandLine: String): WasmAttachTarget? {
+    val tokens = splitOptions(commandLine)
+    val executable = tokens.firstOrNull() ?: return null
+    return detectWasmAttachTarget(executable, tokens.drop(1))
+}
+
+/** The `host:port` a gdbstub target is reached at; null for CDP targets. */
+val WasmAttachTarget.gdbStubEndpoint: String?
+    get() = (this as? WasmAttachTarget.GdbStub)?.let { "${it.host}:${it.port}" }
 
 private fun detectWasmtime(args: List<String>): WasmAttachTarget? {
     for ((index, arg) in args.withIndex()) {
@@ -71,7 +101,7 @@ private fun detectWasmtime(args: List<String>): WasmAttachTarget? {
         } ?: continue
         val (host, port) = parseHostPort(address, defaultHost = LOOPBACK) ?: return null
         if (port == 0) return null
-        return WasmAttachTarget.GdbStub(WasmEngine.WASMTIME, host, port, firstWasmModule(args))
+        return WasmAttachTarget.GdbStub(WasmAttachRuntime.WASMTIME, host, port, firstWasmModule(args))
     }
     return null
 }
@@ -82,7 +112,7 @@ private fun detectIwasm(args: List<String>): WasmAttachTarget? {
         if (!arg.startsWith("-g=")) continue
         val (host, port) = parseHostPort(arg.removePrefix("-g="), defaultHost = LOOPBACK) ?: return null
         if (port == 0) return null
-        return WasmAttachTarget.GdbStub(WasmEngine.WAMR, host, port, firstWasmModule(args))
+        return WasmAttachTarget.GdbStub(WasmAttachRuntime.WAMR, host, port, firstWasmModule(args))
     }
     return null
 }
@@ -158,7 +188,7 @@ private fun detectChrome(args: List<String>): WasmAttachTarget? {
  * addresses are mapped to loopback, since that is where a local client
  * reaches them.
  */
-internal fun parseHostPort(value: String, defaultHost: String): Pair<String, Int>? {
+fun parseHostPort(value: String, defaultHost: String): Pair<String, Int>? {
     val trimmed = value.trim()
     if (trimmed.isEmpty()) return null
     val (rawHost, rawPort) = when {
@@ -189,4 +219,4 @@ private val WASM_EXTENSIONS = listOf(".wasm", ".cwasm")
 private const val LOOPBACK = "127.0.0.1"
 
 /** Port Node.js listens on when an inspect flag carries no explicit port. */
-internal const val NODE_DEFAULT_INSPECT_PORT = 9229
+const val NODE_DEFAULT_INSPECT_PORT = 9229
