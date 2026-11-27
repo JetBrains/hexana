@@ -28,7 +28,8 @@ class WamrDebugProcess(
     session: XDebugSession,
     console: ExecutionConsole,
     lldbProcessHandler: ProcessHandler,
-    private val iwasmProcessHandler: ProcessHandler,
+    /** The runtime serving the gdbstub; null when the session attached to a process the IDE did not start. */
+    private val iwasmProcessHandler: ProcessHandler?,
     lldb: LldbCommunicator?,
     private val debugHost: String,
     private val debugPort: Int,
@@ -266,11 +267,20 @@ class WamrDebugProcess(
 
     override fun stop() {
         super.stop()
-        // Also terminate the iwasm process
-        if (!iwasmProcessHandler.isProcessTerminated) {
-            iwasmProcessHandler.destroyProcess()
+        // An attached session leaves the runtime running; LLDB detached from it.
+        val runtime = iwasmProcessHandler ?: return
+        if (!runtime.isProcessTerminated) {
+            runtime.destroyProcess()
         }
     }
+
+    /** Attached sessions own no runtime process, so stopping them detaches. */
+    override val detachOnStop: Boolean
+        get() = iwasmProcessHandler == null
+
+    /** The `host:port` of the gdbstub this session is connected to. */
+    internal val debugEndpoint: String
+        get() = "$debugHost:$debugPort"
 
     companion object {
         private val LOG = Logger.getInstance(WamrDebugProcess::class.java)

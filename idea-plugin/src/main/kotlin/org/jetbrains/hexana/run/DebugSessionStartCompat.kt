@@ -46,3 +46,40 @@ private fun startWithLegacyApi(
     XDebuggerManager.getInstance(environment.project)
         .startSession(environment, starter)
         .runContentDescriptor
+
+/**
+ * Starts and shows an XDebug session that has no run configuration behind
+ * it, such as one created by Run | Attach to Process. Uses the same
+ * builder/legacy split as [startDebugSessionForRunner]. Must run on the EDT.
+ */
+internal fun startAttachedDebugSession(
+    project: com.intellij.openapi.project.Project,
+    sessionName: String,
+    starter: XDebugProcessStarter,
+) {
+    if (ApplicationInfo.getInstance().build.baselineVersion >= 261) {
+        startAttachedWithSessionBuilder(project, sessionName, starter)
+    } else {
+        startAttachedWithLegacyApi(project, sessionName, starter)
+    }
+}
+
+private fun startAttachedWithSessionBuilder(
+    project: com.intellij.openapi.project.Project,
+    sessionName: String,
+    starter: XDebugProcessStarter,
+) {
+    XDebuggerManager.getInstance(project)
+        .newSessionBuilder(starter)
+        .sessionName(sessionName)
+        .startSession()
+}
+
+@Suppress("DEPRECATION")
+private fun startAttachedWithLegacyApi(
+    project: com.intellij.openapi.project.Project,
+    sessionName: String,
+    starter: XDebugProcessStarter,
+) {
+    XDebuggerManager.getInstance(project).startSessionAndShowTab(sessionName, null, starter)
+}

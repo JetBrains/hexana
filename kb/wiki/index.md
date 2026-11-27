@@ -9,6 +9,8 @@ consult-first / write-back rules.
   `@Remote` refs, and why run/debug UI tests resolve `RunContentManager` through the Hexana plugin.
 - [[entities/hexana-scripting-api]] — the custom script tab surface (`binary`, `print`,
   `table`, `row`) and how each host binds it.
+- [[entities/wasm-debugger-attach]] — Run | Attach to Process for wasmtime/WAMR gdbstubs, Node
+  inspectors and Chrome DevTools: command-line detection, DWARF from CDP bytecode, detach-on-stop.
 - [[entities/wasm-runtime-compatibility]] — the Wasm runtime compatibility table: proposal
   detection, `.hexana/runtimes.json`, the runtime-compatibility problems, and the Compatibility tab.
 - [[entities/dwarf-outline-model]] — the shared row model behind the `.debug_*` editor tabs:

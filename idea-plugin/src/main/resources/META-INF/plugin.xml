@@ -45,6 +45,7 @@
         <p><b>Debugging</b></p>
         <ul>
           <li>Line breakpoints in WASM run configurations under Node.js and browsers, wasmtime 44+ (its built-in gdbstub), and WAMR (debug-interpreter builds)</li>
+          <li><b>Run | Attach to Process</b> for already running wasmtime (<code>-g</code>) and WAMR (<code>iwasm -g=</code>) gdbstubs, Node.js started with <code>--inspect</code>, and Chrome started with <code>--remote-debugging-port</code>; ending the session detaches and leaves the process running</li>
           <li><b>Wasm</b> debugger tab: the paused function disassembled to WAT with the exact current instruction highlighted, per-instruction Step Over / Step Into, and the operand stack (live values where the runtime serves them, statically reconstructed origins otherwise)</li>
           <li>Conditional breakpoints, inlined call frames, and variables stored in linear memory, all resolved through DWARF</li>
           <li>Managed wasi-sdk installation: WASM debugging needs an LLDB with the wasm process plugin, and the WebAssembly settings page downloads and verifies one, shared across projects and JetBrains IDEs</li>
@@ -420,6 +421,8 @@
         <runConfigurationProducer implementation="org.jetbrains.hexana.run.HexanaScriptRunConfigurationProducer"/>
         <programRunner implementation="org.jetbrains.hexana.run.WasmDebugRunner"/>
         <programRunner implementation="org.jetbrains.hexana.run.CdpDebugRunner"/>
+        <!-- Run | Attach to Process: wasmtime/WAMR gdbstubs, Node.js inspectors, Chrome DevTools. -->
+        <xdebugger.attachDebuggerProvider implementation="org.jetbrains.hexana.run.attach.WasmAttachDebuggerProvider"/>
         <xdebugger.breakpointType implementation="org.jetbrains.hexana.run.WasmLineBreakpointType"/>
         <xdebugger.breakpointType implementation="org.jetbrains.hexana.breakpoints.HexanaBinaryBreakpointType"/>
 

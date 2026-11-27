@@ -22,6 +22,7 @@ import com.intellij.xdebugger.frame.*
 import com.sun.net.httpserver.HttpServer
 import com.intellij.openapi.application.ApplicationManager
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
@@ -383,6 +384,10 @@ internal class CdpDebugProcess(
         // Enable CDP domains
         cdp.send("Runtime.enable")
         cdp.send("Debugger.enable")
+
+        // Debugger.enable replays scriptParsed for modules the target had
+        // already compiled, so an attached session can read their DWARF now.
+        loadDebugInfoFromTargetIfNeeded()
 
         // Set an instrumentation breakpoint so V8 pauses BEFORE
         // executing any newly compiled script — including wasm modules.
@@ -1046,6 +1051,7 @@ internal class CdpDebugProcess(
         line: Int,
     ) {
         try {
+            loadDebugInfoFromTargetIfNeeded()
             val condition = breakpoint.conditionExpression?.expression?.takeUnless { it.isBlank() }
 
             // If a wasm script is already known, use scriptId-based
@@ -1301,6 +1307,42 @@ internal class CdpDebugProcess(
             if (condition != null) put("condition", condition)
         }
         return cdp.send("Debugger.setBreakpointByUrl", params)
+    }
+
+    private val debugInfoFromTargetMutex = kotlinx.coroutines.sync.Mutex()
+
+    @Volatile
+    private var debugInfoFromTargetScriptId: String? = null
+
+    /**
+     * Without a local module path (a session attached to a process the IDE
+     * did not launch) the DWARF resolvers are built from the bytes of the
+     * first wasm module V8 compiled, which `Debugger.getScriptSource` returns
+     * as base64 `bytecode`. Launched sessions keep using the local file.
+     */
+    private suspend fun loadDebugInfoFromTargetIfNeeded() {
+        if (wasmFilePath != null || debugInfoFromTargetScriptId != null) return
+        debugInfoFromTargetMutex.withLock {
+            if (debugInfoFromTargetScriptId != null) return
+            val scriptId = findWasmScriptId() ?: return
+            try {
+                val result = cdp.send("Debugger.getScriptSource", mapOf("scriptId" to scriptId))
+                val bytecode = result["bytecode"] as? String ?: return
+                val bytes = java.util.Base64.getDecoder().decode(bytecode)
+                sourceLocationResolver = sourceLocationResolver ?: CdpSourceLocationResolver.create(bytes)
+                dwarfVariableResolver = dwarfVariableResolver ?: WasmDwarfVariableResolver.create(bytes)
+                LOG.info(
+                    "CDP: loaded debug info from target module scriptId=$scriptId " +
+                        "(${bytes.size} bytes, dwarf=${sourceLocationResolver != null})"
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                LOG.warn("CDP: failed to read wasm module bytes from the target", e)
+            }
+            // Recorded even when the module has no DWARF, so it is read once.
+            debugInfoFromTargetScriptId = scriptId
+        }
     }
 
     /**

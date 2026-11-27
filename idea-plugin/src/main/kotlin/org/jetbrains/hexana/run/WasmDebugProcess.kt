@@ -123,16 +123,16 @@ open class WasmDebugProcess(
         }
 
         override fun destroyProcessImpl() {
-            processHandler.destroyProcess()
+            if (detachOnStop) detachFromDebuggee() else processHandler.destroyProcess()
             notifyProcessTerminated(0)
         }
 
         override fun detachProcessImpl() {
-            processHandler.detachProcess()
+            if (detachOnStop) detachFromDebuggee() else processHandler.detachProcess()
             notifyProcessDetached()
         }
 
-        override fun detachIsDefault(): Boolean = processHandler.detachIsDefault()
+        override fun detachIsDefault(): Boolean = detachOnStop || processHandler.detachIsDefault()
 
         override fun getProcessInput() = processHandler.processInput
 
@@ -1051,9 +1051,36 @@ open class WasmDebugProcess(
         LOG.debug("stop() called, eventLoopThread=${eventLoopThread?.name}, processTerminated=${processHandler.isProcessTerminated}")
         endBinaryBreakpointSession()
         eventLoopThread?.interrupt()
-        lldb?.destroy()
-        processHandler.destroyProcess()
+        if (detachOnStop) {
+            detachFromDebuggee()
+        } else {
+            lldb?.destroy()
+            processHandler.destroyProcess()
+        }
         com.intellij.openapi.util.Disposer.dispose(consoleDisposable)
+    }
+
+    /**
+     * True for sessions attached to a process the IDE did not launch: ending
+     * the session detaches LLDB from the debuggee instead of killing it.
+     */
+    protected open val detachOnStop: Boolean = false
+
+    private val detached = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * Detaches LLDB and lets it quit on its own. Killing LLDB at once could
+     * drop the gdbstub connection before the detach packet is sent, so the
+     * LLDB process is only destroyed if it is still alive after a grace period.
+     */
+    private fun detachFromDebuggee() {
+        if (!detached.compareAndSet(false, true)) return
+        lldb?.destroy(detach = true)
+        com.intellij.util.concurrency.AppExecutorUtil.getAppScheduledExecutorService().schedule(
+            { if (!processHandler.isProcessTerminated) processHandler.destroyProcess() },
+            DETACH_GRACE_PERIOD_MS,
+            java.util.concurrent.TimeUnit.MILLISECONDS,
+        )
     }
 
     /** Starts the background event loop that watches for LLDB stop events. */
@@ -1908,6 +1935,9 @@ open class WasmDebugProcess(
 
     companion object {
         private val LOG = Logger.getInstance(WasmDebugProcess::class.java)
+
+        /** How long LLDB may take to detach and quit before it is destroyed. */
+        private const val DETACH_GRACE_PERIOD_MS = 3_000L
 
         /**
          * LLDB command that advances the program counter past the

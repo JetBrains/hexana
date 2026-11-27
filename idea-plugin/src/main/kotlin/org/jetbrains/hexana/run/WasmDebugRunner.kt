@@ -183,20 +183,6 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
     )
 
     /**
-     * Process handler for long-lived, mostly silent debug processes
-     * (the wasmtime gdbstub waiting for a debugger, the interactive
-     * LLDB). Uses the blocking reader the platform recommends to avoid
-     * "Process hasn't generated any output for a long time" warnings
-     * and the busy-poll CPU cost behind them.
-     */
-    private class MostlySilentOSProcessHandler(
-        commandLine: GeneralCommandLine,
-    ) : OSProcessHandler(commandLine) {
-        override fun readerOptions(): BaseOutputReader.Options =
-            BaseOutputReader.Options.forMostlySilentProcess()
-    }
-
-    /**
      * Result holder for the blocking preparatory work for a Wasmtime
      * gdbstub debug session.
      */
@@ -715,7 +701,7 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
          * command name absent from PATH. Informational only; the session
          * start proceeds and fails with the usual platform error.
          */
-        private fun notifyIfLldbMissing(project: Project, lldbExe: String) {
+        internal fun notifyIfLldbMissing(project: Project, lldbExe: String) {
             if (isLldbCommandMissing(lldbExe)) {
                 WasiSdkOffer.showLldbMissingNotification(project)
             }
@@ -807,4 +793,18 @@ class WasmDebugRunner : GenericProgramRunner<RunnerSettings>() {
         internal fun allocateFreePort(): Int =
             ServerSocket(0).use { it.localPort }
     }
+}
+
+/**
+ * Process handler for long-lived, mostly silent debug processes
+ * (the wasmtime gdbstub waiting for a debugger, the interactive
+ * LLDB). Uses the blocking reader the platform recommends to avoid
+ * "Process hasn't generated any output for a long time" warnings
+ * and the busy-poll CPU cost behind them.
+ */
+internal class MostlySilentOSProcessHandler(
+    commandLine: GeneralCommandLine,
+) : OSProcessHandler(commandLine) {
+    override fun readerOptions(): BaseOutputReader.Options =
+        BaseOutputReader.Options.forMostlySilentProcess()
 }

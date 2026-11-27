@@ -38,7 +38,8 @@ class WasmtimeGdbDebugProcess(
     session: XDebugSession,
     console: ExecutionConsole,
     lldbProcessHandler: ProcessHandler,
-    private val wasmtimeProcessHandler: ProcessHandler,
+    /** The runtime serving the gdbstub; null when the session attached to a process the IDE did not start. */
+    private val wasmtimeProcessHandler: ProcessHandler?,
     lldb: LldbCommunicator?,
     private val debugHost: String,
     private val debugPort: Int,
@@ -257,10 +258,20 @@ class WasmtimeGdbDebugProcess(
 
     override fun stop() {
         super.stop()
-        if (!wasmtimeProcessHandler.isProcessTerminated) {
-            wasmtimeProcessHandler.destroyProcess()
+        // An attached session leaves the runtime running; LLDB detached from it.
+        val runtime = wasmtimeProcessHandler ?: return
+        if (!runtime.isProcessTerminated) {
+            runtime.destroyProcess()
         }
     }
+
+    /** Attached sessions own no runtime process, so stopping them detaches. */
+    override val detachOnStop: Boolean
+        get() = wasmtimeProcessHandler == null
+
+    /** The `host:port` of the gdbstub this session is connected to. */
+    internal val debugEndpoint: String
+        get() = "$debugHost:$debugPort"
 
     companion object {
         private val LOG = Logger.getInstance(WasmtimeGdbDebugProcess::class.java)

@@ -819,10 +819,23 @@ class LldbCommunicator(private val processHandler: OSProcessHandler) {
         }
     }
 
-    fun destroy() {
-        LOG.debug("LLDB destroy() called, debuggeeExited=$debuggeeExited, isRunning=$isRunning")
+    /**
+     * Ends the LLDB session. By default the debuggee is killed; with [detach]
+     * it is detached instead, so a process the IDE attached to keeps running.
+     */
+    fun destroy(detach: Boolean = false) {
+        LOG.debug("LLDB destroy(detach=$detach) called, debuggeeExited=$debuggeeExited, isRunning=$isRunning")
         try {
-            writer.write("process kill")
+            if (detach) {
+                // `process detach` needs a stopped process.
+                if (isRunning) {
+                    writer.write("process interrupt")
+                    writer.newLine()
+                }
+                writer.write("process detach")
+            } else {
+                writer.write("process kill")
+            }
             writer.newLine()
             writer.write("quit")
             writer.newLine()
