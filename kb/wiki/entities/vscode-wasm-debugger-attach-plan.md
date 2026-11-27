@@ -58,5 +58,9 @@ IntelliJ's side is in [[entities/wasm-debugger-attach]]. Both hosts use one shar
   wasi-sdk LLDB was SIGKILLed on launch in the agent sandbox. Still open: whether lldb-dap's
   initial stop for a `launch` + `process connect` on an already-waiting stub matches the
   launched flow, and whether wasmtime/WAMR keep running after `terminateDebuggee: false`.
-- Pitfalls shared with IntelliJ: OS-chosen ports aren't discoverable; macOS `ps` drops argument
-  quoting; Chrome navigation ends the CDP session (existing `executionContextDestroyed` handling).
+- The former pitfalls (OS-chosen ports, lost quoting, Chrome navigation) are resolved in both hosts;
+  see [[entities/wasm-debugger-attach]] for the design. They were verified live on macOS:
+  - `wasmtime -g 127.0.0.1:0` with a module under `my wasm/`: the port came from `lsof` and the spaced
+    path was resolved;
+  - `node --inspect=127.0.0.1:0`: the port and ws URL were discovered;
+  - headless Chrome emits `executionContextsCleared` on navigation.

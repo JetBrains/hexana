@@ -218,3 +218,4 @@ Append one line per write-back: date, page, what changed.
 - 2026-11-27 — `entities/wasm-debugger-attach` — attach Hexana Wasm debuggers to running wasmtime/iwasm/node/Chrome via the IDE attach dialog.
 - 2026-11-27 — `entities/vscode-wasm-debugger-attach-plan` — VS Code Wasm attach: current launch-only state and implementation plan (not started).
 - 2026-11-27 — `entities/vscode-wasm-debugger-attach-plan` — implemented VS Code attach; detector moved to plugins-shared.
+- 2026-11-27 — `entities/wasm-debugger-attach` — OS-chosen port discovery (ListeningPorts), exact argv / Windows tokenizing / path candidates, CDP navigation handling.

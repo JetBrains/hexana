@@ -20,7 +20,21 @@ sealed class WasmAttachTarget {
     /** Path of the module the process runs, as written on its command line; null when unknown. */
     abstract val wasmPath: String?
 
+    /**
+     * Where the module may be, longest first. A process listing that dropped
+     * argument quoting (macOS `ps`) splits `/my dir/app.wasm` into `/my` and
+     * `dir/app.wasm`; the candidates rejoin the words before [wasmPath], so a
+     * host takes the first one that exists. Always ends with [wasmPath].
+     */
+    abstract val wasmPathCandidates: List<String>
+
     abstract val runtime: WasmAttachRuntime
+
+    /**
+     * The endpoint's port is 0: the process let the OS choose it, so the host
+     * finds it among the process's listening sockets ([ListeningPorts]).
+     */
+    abstract val needsPortDiscovery: Boolean
 
     /**
      * A gdbstub served by the runtime itself: `wasmtime run -g <host>:<port>`
@@ -32,36 +46,44 @@ sealed class WasmAttachTarget {
         val host: String,
         val port: Int,
         override val wasmPath: String?,
-    ) : WasmAttachTarget()
+        override val wasmPathCandidates: List<String> = listOfNotNull(wasmPath),
+    ) : WasmAttachTarget() {
+        override val needsPortDiscovery: Boolean get() = port == 0
+    }
 
     /** A Node.js process started with `--inspect`, `--inspect-brk` or `--inspect-wait`. */
     data class NodeInspector(
         val host: String,
         val port: Int,
         override val wasmPath: String?,
+        override val wasmPathCandidates: List<String> = listOfNotNull(wasmPath),
     ) : WasmAttachTarget() {
         override val runtime: WasmAttachRuntime get() = WasmAttachRuntime.NODE_JS
+        override val needsPortDiscovery: Boolean get() = port == 0
     }
 
     /**
      * A Chromium-based browser started with `--remote-debugging-port`. A zero
-     * [port] means the browser chose one, which it writes to
-     * `<userDataDir>/DevToolsActivePort`.
+     * [port] means the browser chose one: it writes it to
+     * `<userDataDir>/DevToolsActivePort`, and it is also among the browser's
+     * listening sockets.
      */
     data class ChromeDevTools(
         val port: Int,
         val userDataDir: String?,
         override val wasmPath: String?,
+        override val wasmPathCandidates: List<String> = listOfNotNull(wasmPath),
     ) : WasmAttachTarget() {
         override val runtime: WasmAttachRuntime get() = WasmAttachRuntime.BROWSER
+        override val needsPortDiscovery: Boolean get() = port == 0
     }
 }
 
 /**
  * Recognizes a Wasm debug target from a process's executable name and
- * argument list. Returns null for processes that serve no debug endpoint
- * Hexana can reach (including endpoints on an OS-chosen port that is not
- * discoverable from outside, such as `node --inspect=0`).
+ * argument list. Returns null for processes that serve no debug endpoint.
+ * An endpoint on an OS-chosen port (`node --inspect=0`) is returned with
+ * port 0 and [WasmAttachTarget.needsPortDiscovery].
  */
 fun detectWasmAttachTarget(executableName: String, args: List<String>): WasmAttachTarget? {
     val name = executableName.substringAfterLast('/').substringAfterLast('\\')
@@ -76,13 +98,88 @@ fun detectWasmAttachTarget(executableName: String, args: List<String>): WasmAtta
 
 /**
  * Detects a target from a full process command line (executable first), as
- * printed by `ps` or `Win32_Process.CommandLine`. Quoting that survived the
- * listing is honored; a listing that dropped it can split paths with spaces.
+ * printed by `ps` or `Win32_Process.CommandLine`. [executable], when known,
+ * is taken verbatim from the start of the line. [windows] selects Windows
+ * tokenizing ([splitWindowsCommandLine]), where `\` is a path separator, not
+ * an escape. Quoting that survived the listing is honored; a listing that
+ * dropped it splits paths with spaces (see [WasmAttachTarget.wasmPathCandidates]).
  */
-fun detectWasmAttachTargetFromCommandLine(commandLine: String): WasmAttachTarget? {
-    val tokens = splitOptions(commandLine)
-    val executable = tokens.firstOrNull() ?: return null
-    return detectWasmAttachTarget(executable, tokens.drop(1))
+fun detectWasmAttachTargetFromCommandLine(
+    commandLine: String,
+    windows: Boolean = false,
+    executable: String? = null,
+): WasmAttachTarget? {
+    val split: (String) -> List<String> = if (windows) ::splitWindowsCommandLine else ::splitOptions
+    // A known executable path (macOS `ps -o comm`) may contain spaces the
+    // joined command line cannot show; cut it off instead of tokenizing it.
+    if (!executable.isNullOrEmpty() && commandLine.startsWith(executable)) {
+        val rest = commandLine.substring(executable.length)
+        if (rest.isEmpty() || rest[0].isWhitespace()) return detectWasmAttachTarget(executable, split(rest))
+    }
+    val tokens = split(commandLine)
+    val first = tokens.firstOrNull() ?: return null
+    return detectWasmAttachTarget(first, tokens.drop(1))
+}
+
+/**
+ * Splits a Windows command line the way `CommandLineToArgvW` does:
+ * whitespace separates arguments outside double quotes, `""` inside quotes
+ * is a literal quote, and backslashes are literal unless they precede a
+ * quote (2n backslashes + `"` → n backslashes and a quote toggle;
+ * 2n+1 → n backslashes and a literal quote).
+ */
+fun splitWindowsCommandLine(commandLine: String): List<String> {
+    val result = mutableListOf<String>()
+    val current = StringBuilder()
+    var inQuotes = false
+    var hasToken = false
+    var i = 0
+    while (i < commandLine.length) {
+        val ch = commandLine[i]
+        when {
+            ch == '\\' -> {
+                var slashes = 0
+                while (i < commandLine.length && commandLine[i] == '\\') {
+                    slashes++
+                    i++
+                }
+                if (i < commandLine.length && commandLine[i] == '"') {
+                    repeat(slashes / 2) { current.append('\\') }
+                    if (slashes % 2 == 1) {
+                        current.append('"')
+                        i++
+                    }
+                } else {
+                    repeat(slashes) { current.append('\\') }
+                }
+                hasToken = true
+                continue
+            }
+            ch == '"' -> {
+                if (inQuotes && i + 1 < commandLine.length && commandLine[i + 1] == '"') {
+                    current.append('"')
+                    i++
+                } else {
+                    inQuotes = !inQuotes
+                }
+                hasToken = true
+            }
+            ch.isWhitespace() && !inQuotes -> {
+                if (hasToken) {
+                    result.add(current.toString())
+                    current.clear()
+                    hasToken = false
+                }
+            }
+            else -> {
+                current.append(ch)
+                hasToken = true
+            }
+        }
+        i++
+    }
+    if (hasToken) result.add(current.toString())
+    return result
 }
 
 /** The `host:port` a gdbstub target is reached at; null for CDP targets. */
@@ -100,8 +197,8 @@ private fun detectWasmtime(args: List<String>): WasmAttachTarget? {
             else -> null
         } ?: continue
         val (host, port) = parseHostPort(address, defaultHost = LOOPBACK) ?: return null
-        if (port == 0) return null
-        return WasmAttachTarget.GdbStub(WasmAttachRuntime.WASMTIME, host, port, firstWasmModule(args))
+        val module = wasmModuleOf(args)
+        return WasmAttachTarget.GdbStub(WasmAttachRuntime.WASMTIME, host, port, module.path, module.candidates)
     }
     return null
 }
@@ -111,8 +208,8 @@ private fun detectIwasm(args: List<String>): WasmAttachTarget? {
         if (isWasmModulePath(arg)) break
         if (!arg.startsWith("-g=")) continue
         val (host, port) = parseHostPort(arg.removePrefix("-g="), defaultHost = LOOPBACK) ?: return null
-        if (port == 0) return null
-        return WasmAttachTarget.GdbStub(WasmAttachRuntime.WAMR, host, port, firstWasmModule(args))
+        val module = wasmModuleOf(args)
+        return WasmAttachTarget.GdbStub(WasmAttachRuntime.WAMR, host, port, module.path, module.candidates)
     }
     return null
 }
@@ -147,8 +244,10 @@ private fun detectNode(args: List<String>): WasmAttachTarget? {
             port = parsed.second
         }
     }
-    if (!inspectorEnabled || port == 0) return null
-    return WasmAttachTarget.NodeInspector(host, port, firstWasmModule(args) ?: wasmPathInInlineScript(args))
+    if (!inspectorEnabled) return null
+    val module = wasmModuleOf(args).takeIf { it.path != null }
+        ?: wasmPathInInlineScript(args).let { WasmModuleArgument(it, listOfNotNull(it)) }
+    return WasmAttachTarget.NodeInspector(host, port, module.path, module.candidates)
 }
 
 /** Node options whose value is the next argument rather than `=value`. */
@@ -158,14 +257,20 @@ private val NODE_OPTIONS_WITH_SEPARATE_VALUE = setOf(
 )
 
 /**
- * Finds a `.wasm` path quoted inside an inline script, e.g. the
+ * Finds a `.wasm` path inside an inline script, e.g. the
  * `fs.readFileSync('/path/module.wasm')` runner Hexana passes to `node -e`.
+ * The quotes are gone when the script came through a tokenizer (a `ps`
+ * listing re-split by [splitOptions]), so `readFileSync(<path>)` without
+ * them is recognized too.
  */
 private fun wasmPathInInlineScript(args: List<String>): String? =
-    args.firstNotNullOfOrNull { arg -> INLINE_WASM_PATH.find(arg)?.groupValues?.get(2) }
-        ?.replace("\\\\", "\\")
+    args.firstNotNullOfOrNull { arg ->
+        INLINE_WASM_PATH.find(arg)?.groupValues?.get(2)
+            ?: INLINE_READ_FILE_WASM_PATH.find(arg)?.groupValues?.get(1)
+    }?.replace("\\\\", "\\")
 
 private val INLINE_WASM_PATH = Regex("""(['"`])([^'"`]+?\.wasm)\1""")
+private val INLINE_READ_FILE_WASM_PATH = Regex("""readFileSync\(\s*([^'"`()]+?\.wasm)\s*\)""")
 
 private fun detectChrome(args: List<String>): WasmAttachTarget? {
     // Renderer, GPU and utility helpers carry --type; only the browser
@@ -178,9 +283,8 @@ private fun detectChrome(args: List<String>): WasmAttachTarget? {
         ?.removePrefix("--user-data-dir=")
         ?.trim('"')
         ?.takeIf { it.isNotEmpty() }
-    // An OS-chosen port is only discoverable through the profile directory.
-    if (port == 0 && userDataDir == null) return null
-    return WasmAttachTarget.ChromeDevTools(port, userDataDir, firstWasmModule(args))
+    val module = wasmModuleOf(args)
+    return WasmAttachTarget.ChromeDevTools(port, userDataDir, module.path, module.candidates)
 }
 
 /**
@@ -209,7 +313,29 @@ fun parseHostPort(value: String, defaultHost: String): Pair<String, Int>? {
     return host to port
 }
 
-private fun firstWasmModule(args: List<String>): String? = args.firstOrNull(::isWasmModulePath)
+private class WasmModuleArgument(val path: String?, val candidates: List<String>)
+
+/**
+ * The first module argument plus its [WasmAttachTarget.wasmPathCandidates]:
+ * the argument rejoined with up to [MAX_REJOINED_WORDS] preceding words
+ * that can be part of a path, longest first. Options, `key=value` words and
+ * `host:port`/URL words end the rejoin; they are option values, not paths.
+ */
+private fun wasmModuleOf(args: List<String>): WasmModuleArgument {
+    val index = args.indexOfFirst(::isWasmModulePath)
+    if (index < 0) return WasmModuleArgument(null, emptyList())
+    var first = index
+    while (first > 0 && index - first < MAX_REJOINED_WORDS && canBePathWord(args[first - 1])) first--
+    val candidates = (first..index).map { start -> args.subList(start, index + 1).joinToString(" ") }
+    return WasmModuleArgument(args[index], candidates)
+}
+
+private const val MAX_REJOINED_WORDS = 8
+
+private fun canBePathWord(word: String): Boolean =
+    !word.startsWith("-") && '=' !in word && (':' !in word || WINDOWS_DRIVE_PREFIX.matches(word))
+
+private val WINDOWS_DRIVE_PREFIX = Regex("""[A-Za-z]:[\\/][^:]*""")
 
 private fun isWasmModulePath(arg: String): Boolean =
     !arg.startsWith("-") && WASM_EXTENSIONS.any { arg.endsWith(it, ignoreCase = true) }

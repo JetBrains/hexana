@@ -21,6 +21,8 @@ interface AttachTarget {
     port: number;
     userDataDir: string | null;
     wasmPath: string | null;
+    wasmPathCandidates: string[];
+    needsPortDiscovery: boolean;
 }
 
 const OUT = path.join(__dirname, '..', '..', '..', '..', '..', 'out');
@@ -85,12 +87,37 @@ describe('wasm debugger attach', function () {
     });
 
     describe('process listing', function () {
-        it('parses ps and PowerShell rows', function () {
-            const {parseProcessList} = require(path.join(OUT, 'WasmAttach'));
-            expect(parseProcessList('  42 wasmtime run -g 127.0.0.1:1234 app.wasm\n   7 \n  x junk\n', ' '))
-                .to.deep.equal([{pid: 42, commandLine: 'wasmtime run -g 127.0.0.1:1234 app.wasm'}]);
-            expect(parseProcessList('4\t\r\n1200\t"C:\\Program Files\\node.exe" --inspect app.js\r\n', '\t'))
-                .to.deep.equal([{pid: 1200, commandLine: '"C:\\Program Files\\node.exe" --inspect app.js'}]);
+        it('parses ps rows with parent pids and executables', function () {
+            const {parseUnixProcessList, parseUnixCommList} = require(path.join(OUT, 'WasmAttach'));
+            expect(parseUnixProcessList('  42     1 wasmtime run -g 127.0.0.1:1234 app.wasm\n   7   0 \n  x junk\n'))
+                .to.deep.equal([{pid: 42, ppid: 1, commandLine: 'wasmtime run -g 127.0.0.1:1234 app.wasm'}]);
+            expect([...parseUnixCommList('  42 /Users/me/my tools/wasmtime\n').entries()])
+                .to.deep.equal([[42, '/Users/me/my tools/wasmtime']]);
+        });
+
+        it('parses PowerShell Win32_Process rows', function () {
+            const {parseWindowsProcessList} = require(path.join(OUT, 'WasmAttach'));
+            const out = '4\t0\t\t\r\n1200\t900\tC:\\Program Files\\nodejs\\node.exe\t"C:\\Program Files\\nodejs\\node.exe" --inspect app.js\r\n';
+            expect(parseWindowsProcessList(out)).to.deep.equal([{
+                pid: 1200,
+                ppid: 900,
+                commandLine: '"C:\\Program Files\\nodejs\\node.exe" --inspect app.js',
+                executable: 'C:\\Program Files\\nodejs\\node.exe',
+            }]);
+        });
+
+        it('detects a macOS process whose executable path has spaces', function () {
+            const {detectProcess} = require(path.join(OUT, 'WasmAttach'));
+            if (process.platform === 'linux') this.skip(); // Linux reads /proc/<pid>/cmdline instead
+            const target = detectProcess({
+                pid: -1,
+                ppid: 1,
+                commandLine: '/Users/me/my tools/iwasm -g=127.0.0.1:1234 /Users/me/my wasm/app.wasm',
+                executable: '/Users/me/my tools/iwasm',
+            });
+            if (target === null && process.platform === 'win32') this.skip(); // Windows tokenizing of a Unix line
+            expect(target).to.include({runtime: 'wamr', port: 1234, wasmPath: 'wasm/app.wasm'});
+            expect(target.wasmPathCandidates).to.deep.equal(['/Users/me/my wasm/app.wasm', 'wasm/app.wasm']);
         });
     });
 
@@ -146,14 +173,34 @@ describe('wasm debugger attach', function () {
             expect(String(error)).to.contain(`no Node.js inspector answered at 127.0.0.1:${port}`);
         });
 
-        it('resolves relative module paths against the workspace folder', function () {
+        it('resolves module path candidates, longest first', function () {
             const {resolveModulePath} = require(path.join(OUT, 'WasmAttach'));
-            const module = path.join(tempRoot, 'app.wasm');
+            fs.mkdirSync(path.join(tempRoot, 'my wasm'));
+            const module = path.join(tempRoot, 'my wasm', 'app.wasm');
             fs.writeFileSync(module, Buffer.from([0, 0x61, 0x73, 0x6d]));
             const folder = {uri: {fsPath: tempRoot}};
-            expect(resolveModulePath(module, -1, undefined)).to.equal(module);
-            expect(resolveModulePath('app.wasm', -1, folder)).to.equal(module);
-            expect(resolveModulePath('missing.wasm', -1, folder)).to.equal(undefined);
+            expect(resolveModulePath([module], -1, undefined)).to.equal(module);
+            expect(resolveModulePath([path.join('my wasm', 'app.wasm')], -1, folder)).to.equal(module);
+            // What a quote-dropping listing leaves of the path, rejoined by the detector.
+            expect(resolveModulePath([module, path.join('wasm', 'app.wasm')], -1, folder)).to.equal(module);
+            expect(resolveModulePath(['missing.wasm'], -1, folder)).to.equal(undefined);
+        });
+
+        it('discovers an inspector on an OS-chosen port of the process', async function () {
+            const {discoverEndpoint} = require(path.join(OUT, 'WasmAttach'));
+            // This test process plays the Node.js process started with --inspect=0.
+            const port = await serve({'/json/list': [{type: 'node', webSocketDebuggerUrl: 'ws://127.0.0.1/self'}]});
+            const config: Record<string, unknown> = {runtime: 'nodejs', port: 0};
+            await discoverEndpoint(config, process.pid);
+            expect(config).to.include({port, wsUrl: 'ws://127.0.0.1/self'});
+        });
+
+        it('takes the single listening port of a gdbstub on an OS-chosen port', async function () {
+            const {discoverEndpoint} = require(path.join(OUT, 'WasmAttach'));
+            const port = await serve({});
+            const config: Record<string, unknown> = {runtime: 'wasmtime', port: 0};
+            await discoverEndpoint(config, process.pid);
+            expect(config).to.include({host: '127.0.0.1', port});
         });
 
         function serve(routes: Record<string, unknown>): Promise<number> {
@@ -168,6 +215,52 @@ describe('wasm debugger attach', function () {
         }
     });
 
+    describe('CDP sessions across page navigations', function () {
+        function connectedAdapter(runtime: 'nodejs' | 'browser') {
+            const {CdpDebugAdapter} = require(path.join(OUT, 'CdpDebugAdapter'));
+            const adapter = new CdpDebugAdapter(runtime, {request: 'attach'}) as any;
+            const ws = {
+                closed: false,
+                send(data: string) {
+                    const {id} = JSON.parse(data);
+                    setImmediate(() => adapter.handleCdpMessage(JSON.stringify({id, result: {}})));
+                },
+                close() { this.closed = true; },
+            };
+            adapter.ws = ws;
+            return {adapter, ws};
+        }
+
+        function emit(adapter: any, method: string, params: unknown = {}) {
+            adapter.handleCdpMessage(JSON.stringify({method, params}));
+        }
+
+        it('keeps a browser session through a navigation and forgets the old page', async function () {
+            const {adapter, ws} = connectedAdapter('browser');
+            await adapter.initCdpSession();
+            emit(adapter, 'Debugger.scriptParsed', {scriptId: '11', url: 'wasm://wasm/abc'});
+            expect(adapter.wasmScriptId).to.equal('11');
+
+            emit(adapter, 'Runtime.executionContextDestroyed', {executionContextId: 1});
+            emit(adapter, 'Runtime.executionContextsCleared');
+            expect(ws.closed).to.equal(false);
+            expect(adapter.wasmScriptId).to.equal(undefined);
+            expect(adapter.scripts.size).to.equal(0);
+
+            emit(adapter, 'Debugger.scriptParsed', {scriptId: '42', url: 'wasm://wasm/def'});
+            expect(adapter.wasmScriptId).to.equal('42');
+            adapter.disposed = true;
+        });
+
+        it('still ends a Node.js session when its context is destroyed', async function () {
+            const {adapter, ws} = connectedAdapter('nodejs');
+            await adapter.initCdpSession();
+            emit(adapter, 'Runtime.executionContextDestroyed', {executionContextId: 1});
+            expect(ws.closed).to.equal(true);
+            adapter.disposed = true;
+        });
+    });
+
     describe('extension-lib detection', function () {
         it('exposes the shared detector', function () {
             const bundle = findUpwards(
@@ -179,17 +272,24 @@ describe('wasm debugger attach', function () {
             }
             const mod = require(bundle) as {
                 hexanaExtensionLib: {org: {jetbrains: {hexana: {vscode: {lib: {
-                    detectAttachTarget(commandLine: string): AttachTarget | null;
+                    detectAttachTarget(commandLine: string, windows: boolean, executable: string | null): AttachTarget | null;
+                    detectAttachTargetFromArgs(executable: string, args: string[]): AttachTarget | null;
                 }}}}}};
             };
             const lib = mod.hexanaExtensionLib.org.jetbrains.hexana.vscode.lib;
-            const target = lib.detectAttachTarget('/usr/local/bin/wasmtime run -g 0.0.0.0:4321 /w/app.wasm');
+            const target = lib.detectAttachTarget('/usr/local/bin/wasmtime run -g 0.0.0.0:4321 /w/app.wasm', false, null);
             expect(target).to.include({runtime: 'wasmtime', host: '127.0.0.1', port: 4321, wasmPath: '/w/app.wasm'});
-            expect(lib.detectAttachTarget('node --inspect-brk=9333 server.js'))
-                .to.include({runtime: 'nodejs', port: 9333});
-            expect(lib.detectAttachTarget('chrome --remote-debugging-port=9222'))
+            expect(lib.detectAttachTarget('node --inspect-brk=9333 server.js', false, null))
+                .to.include({runtime: 'nodejs', port: 9333, needsPortDiscovery: false});
+            expect(lib.detectAttachTarget('node --inspect=0 server.js', false, null))
+                .to.include({runtime: 'nodejs', port: 0, needsPortDiscovery: true});
+            expect(lib.detectAttachTarget('chrome --remote-debugging-port=9222', false, null))
                 .to.include({runtime: 'browser', port: 9222, host: null});
-            expect(lib.detectAttachTarget('wasmtime run app.wasm')).to.equal(null);
+            expect(lib.detectAttachTarget('"C:\\my tools\\iwasm.exe" -g=127.0.0.1:1 "C:\\my wasm\\a.wasm"', true, null))
+                .to.include({runtime: 'wamr', wasmPath: 'C:\\my wasm\\a.wasm'});
+            expect(lib.detectAttachTargetFromArgs('/opt/iwasm', ['-g=127.0.0.1:1', '/my wasm/a.wasm']))
+                .to.include({wasmPath: '/my wasm/a.wasm'});
+            expect(lib.detectAttachTarget('wasmtime run app.wasm', false, null)).to.equal(null);
         });
     });
 });

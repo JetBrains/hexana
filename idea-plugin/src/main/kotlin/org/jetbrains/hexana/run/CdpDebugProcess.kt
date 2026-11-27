@@ -361,6 +361,10 @@ internal class CdpDebugProcess(
         // proactively disconnect so the debug session finishes cleanly.
         cdp.on("Runtime.executionContextDestroyed") { params ->
             LOG.warn("CDP: Runtime.executionContextDestroyed params=$params")
+            // Only Node.js ends with its context. A page destroys contexts on
+            // every navigation, reload and closed iframe and keeps running;
+            // its session ends when the WebSocket closes (tab or browser closed).
+            if (engine != WasmEngine.NODE_JS) return@on
             // Disable the debugger domain first so Node.js doesn't
             // stay paused, then close the CDP connection which lets
             // the Node.js process exit naturally.
@@ -378,6 +382,22 @@ internal class CdpDebugProcess(
                     cdp.close()
                 } catch (_: Exception) {
                 }
+            }
+        }
+
+        // A navigation or reload discards every script of the page. The next
+        // page's wasm module arrives with a new scriptId and goes through the
+        // usual instrumentation pause, which re-registers the breakpoints.
+        cdp.on("Runtime.executionContextsCleared") { _ ->
+            if (engine == WasmEngine.NODE_JS) return@on
+            LOG.info("CDP: execution contexts cleared (navigation); forgetting the page's scripts")
+            cdp.scripts.clear()
+            wasmScriptSeen.set(false)
+            if (wasmFilePath == null && debugInfoFromTargetScriptId != null) {
+                // Debug info read from the previous page's module.
+                sourceLocationResolver = null
+                dwarfVariableResolver = null
+                debugInfoFromTargetScriptId = null
             }
         }
 

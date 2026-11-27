@@ -820,9 +820,32 @@ export class CdpDebugAdapter implements vscode.DebugAdapter {
             }
         });
         this.onCdp("Runtime.executionContextDestroyed", () => {
+            // Only Node.js ends with its context. A page destroys contexts on
+            // every navigation, reload and closed iframe and keeps running;
+            // its session ends when the WebSocket closes (tab or browser closed).
+            if (this.runtime !== "nodejs") return;
             this.cdpSendFire("Debugger.disable");
             this.cdpSendFire("Runtime.disable");
             this.closeCdp();
+        });
+        this.onCdp("Runtime.executionContextsCleared", () => {
+            if (this.runtime === "nodejs") return;
+            // A navigation or reload discards the page's scripts. The next
+            // page's wasm module arrives with a new scriptId and goes through
+            // the instrumentation pause, which re-registers the breakpoints.
+            this.log.appendLine("[Hexana CDP] Execution contexts cleared (navigation); forgetting the page's scripts");
+            this.scripts.clear();
+            this.wasmScriptId = undefined;
+            this.wasmScriptSeen = false;
+            this.wasmBreakpointOffsets.clear();
+            if (this.debugInfoFromTargetScriptId) {
+                // Debug info read from the previous page's module.
+                this.sourceLocationResolver = undefined;
+                this.disassembly = undefined;
+                this.wasmFunctionOffsets = [];
+                this.debugInfoFromTargetScriptId = undefined;
+                this.debugInfoFromTarget = undefined;
+            }
         });
         this.onCdp("Runtime.consoleAPICalled", (params) => {
             const args = (params.args || []) as any[];

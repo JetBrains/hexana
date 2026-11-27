@@ -34,6 +34,8 @@ import org.jetbrains.hexana.run.WasmRuntimeSettings
 import org.jetbrains.hexana.run.WasmtimeGdbDebugProcess
 import org.jetbrains.hexana.run.startAttachedDebugSession
 import org.jetbrains.hexana.shared.CdpSourceLocationResolver
+import org.jetbrains.hexana.shared.ListeningEndpoint
+import org.jetbrains.hexana.shared.splitWindowsCommandLine
 import org.jetbrains.hexana.shared.WasmAttachRuntime
 import org.jetbrains.hexana.shared.WasmAttachTarget
 import org.jetbrains.hexana.shared.detectWasmAttachTarget
@@ -64,6 +66,12 @@ class WasmAttachDebuggerProvider : XAttachDebuggerProvider {
     ): List<XAttachDebugger> {
         val target = detectWasmAttachTarget(processInfo) ?: return emptyList()
         if (target is WasmAttachTarget.GdbStub && isGdbStubInUse(project, target)) return emptyList()
+        // Hexana's own debug launches (`node --inspect-brk=0`, Chrome with
+        // `--remote-debugging-port=0`) are direct children of the IDE and
+        // already have a session.
+        if (target.needsPortDiscovery && processInfo.parentPid.toLong() == ProcessHandle.current().pid()) {
+            return emptyList()
+        }
         return listOf(WasmAttachDebugger(target))
     }
 
@@ -81,23 +89,51 @@ class WasmAttachDebuggerProvider : XAttachDebuggerProvider {
 }
 
 internal fun detectWasmAttachTarget(processInfo: ProcessInfo): WasmAttachTarget? {
-    val args = try {
-        ParametersListUtil.parse(processInfo.args)
+    val args = exactArguments(processInfo.pid) ?: try {
+        // The platform joins arguments with spaces; Windows keeps the original
+        // quoting, which needs Windows (backslash-literal) tokenizing.
+        if (SystemInfo.isWindows) splitWindowsCommandLine(processInfo.args) else ParametersListUtil.parse(processInfo.args)
     } catch (_: Exception) {
         return null
     }
     return detectWasmAttachTarget(processInfo.executableName, args)
 }
 
+/**
+ * The exact argument list (without argv[0]) where the OS exposes it:
+ * `/proc/<pid>/cmdline` on Linux, NUL-separated. Elsewhere null, and the
+ * joined command line from the process list is tokenized instead.
+ */
+private fun exactArguments(pid: Int): List<String>? {
+    if (!SystemInfo.isLinux) return null
+    return try {
+        val raw = File("/proc/$pid/cmdline").readText()
+        raw.split('\u0000').dropLastWhile { it.isEmpty() }.drop(1)
+    } catch (_: Exception) {
+        null
+    }
+}
+
 private class WasmAttachDebugger(private val target: WasmAttachTarget) : XAttachDebugger {
 
-    override fun getDebuggerDisplayName(): String = when (target) {
-        is WasmAttachTarget.GdbStub -> {
-            val runtime = if (target.runtime == WasmAttachRuntime.WAMR) "WAMR" else "Wasmtime"
-            "Hexana WebAssembly ($runtime gdbstub ${target.host}:${target.port})"
+    override fun getDebuggerDisplayName(): String = "Hexana WebAssembly (${describe(target)})"
+
+    private fun describe(target: WasmAttachTarget): String {
+        val port = (target as? WasmAttachTarget.GdbStub)?.port
+            ?: (target as? WasmAttachTarget.NodeInspector)?.port
+            ?: (target as WasmAttachTarget.ChromeDevTools).port
+        val host = (target as? WasmAttachTarget.GdbStub)?.host ?: (target as? WasmAttachTarget.NodeInspector)?.host
+        val where = when {
+            port == 0 -> "port chosen at startup"
+            host != null -> "$host:$port"
+            else -> "port $port"
         }
-        is WasmAttachTarget.NodeInspector -> "Hexana WebAssembly (Node.js inspector ${target.host}:${target.port})"
-        is WasmAttachTarget.ChromeDevTools -> "Hexana WebAssembly (Chrome DevTools)"
+        return when (target.runtime) {
+            WasmAttachRuntime.WASMTIME -> "Wasmtime gdbstub $where"
+            WasmAttachRuntime.WAMR -> "WAMR gdbstub $where"
+            WasmAttachRuntime.NODE_JS -> "Node.js inspector $where"
+            WasmAttachRuntime.BROWSER -> "Chrome DevTools $where"
+        }
     }
 
     override fun attachDebugSession(project: Project, attachHost: XAttachHost, processInfo: ProcessInfo) {
@@ -109,7 +145,7 @@ private class WasmAttachDebugger(private val target: WasmAttachTarget) : XAttach
     }
 
     private fun prepareStarter(project: Project, processInfo: ProcessInfo): XDebugProcessStarter {
-        val wasmPath = resolveModulePath(target.wasmPath, processInfo.pid, project.basePath)
+        val wasmPath = resolveModulePath(target.wasmPathCandidates, processInfo.pid, project.basePath)
         val wasmBytes = wasmPath?.let { path ->
             try {
                 File(path).readBytes()
@@ -127,23 +163,39 @@ private class WasmAttachDebugger(private val target: WasmAttachTarget) : XAttach
             }
         }
         return when (target) {
-            is WasmAttachTarget.GdbStub -> gdbStubStarter(project, target, wasmPath, dwarfResolver)
+            is WasmAttachTarget.GdbStub -> {
+                val endpoint = if (target.needsPortDiscovery) gdbStubEndpoint(processInfo.pid) else target
+                gdbStubStarter(project, endpoint, wasmPath, dwarfResolver)
+            }
             is WasmAttachTarget.NodeInspector -> {
-                val wsUrl = CdpDebugRunner.discoverNodeWebSocketUrl(target.host, target.port)
-                    ?: throw ExecutionException(
-                        "No Node.js inspector answered at ${target.host}:${target.port}. " +
+                val wsUrl = if (target.needsPortDiscovery) {
+                    listeningEndpoints(processInfo.pid).firstNotNullOfOrNull { (host, port) ->
+                        CdpDebugRunner.discoverNodeWebSocketUrl(host, port)
+                    } ?: throw ExecutionException(
+                        "No Node.js inspector answered on the ports this process listens on. " +
                             "Another debugger may already be attached."
                     )
+                } else {
+                    CdpDebugRunner.discoverNodeWebSocketUrl(target.host, target.port)
+                        ?: throw ExecutionException(
+                            "No Node.js inspector answered at ${target.host}:${target.port}. " +
+                                "Another debugger may already be attached."
+                        )
+                }
                 cdpStarter(project, wsUrl, WasmEngine.NODE_JS, wasmPath, wasmBytes, dwarfResolver)
             }
             is WasmAttachTarget.ChromeDevTools -> {
-                val port = chromeDevToolsPort(target)
-                    ?: throw ExecutionException(
-                        "Cannot find the DevTools port of this browser: it was started with " +
-                            "--remote-debugging-port=0 and its DevToolsActivePort file is missing."
-                    )
-                val wsUrl = CdpDebugRunner.discoverPageWebSocketUrl(LOOPBACK, port, retries = 1)
-                    ?: throw ExecutionException("The browser on DevTools port $port has no page to debug.")
+                val ports = chromeDevToolsPort(target)?.let(::listOf)
+                    ?: listeningEndpoints(processInfo.pid).map { it.port }
+                val wsUrl = ports.firstNotNullOfOrNull { port ->
+                    CdpDebugRunner.discoverPageWebSocketUrl(LOOPBACK, port, retries = 1)
+                } ?: throw ExecutionException(
+                    if (ports.isEmpty()) {
+                        "Cannot find the DevTools port of this browser."
+                    } else {
+                        "The browser on DevTools port ${ports.joinToString()} has no page to debug."
+                    }
+                )
                 cdpStarter(project, wsUrl, WasmEngine.BROWSER, wasmPath, wasmBytes, dwarfResolver)
             }
         }
@@ -239,6 +291,31 @@ private class WasmAttachDebugger(private val target: WasmAttachTarget) : XAttach
         }
     }
 
+    /**
+     * The endpoint of a gdbstub on an OS-chosen port. A stub takes a single
+     * client, so it is not probed: the runtime must listen on exactly one port.
+     */
+    private fun gdbStubEndpoint(pid: Int): WasmAttachTarget.GdbStub {
+        val endpoints = listeningEndpoints(pid)
+        val endpoint = endpoints.singleOrNull()
+            ?: throw ExecutionException(
+                if (endpoints.isEmpty()) {
+                    "The runtime is not listening on any TCP port yet."
+                } else {
+                    "The runtime listens on several ports (${endpoints.joinToString { "${it.host}:${it.port}" }}); " +
+                        "start it with an explicit gdbstub port."
+                }
+            )
+        return (target as WasmAttachTarget.GdbStub).copy(host = endpoint.host, port = endpoint.port)
+    }
+
+    private fun listeningEndpoints(pid: Int): List<ListeningEndpoint> =
+        try {
+            findListeningEndpoints(pid)
+        } catch (e: Exception) {
+            throw ExecutionException("Cannot list the ports process $pid listens on: ${e.message}", e)
+        }
+
     private fun chromeDevToolsPort(target: WasmAttachTarget.ChromeDevTools): Int? {
         if (target.port != 0) return target.port
         val userDataDir = target.userDataDir ?: return null
@@ -265,24 +342,34 @@ private class DetachedTargetProcessHandler : ProcessHandler() {
 }
 
 /**
- * Resolves the module path from a process's command line. Relative paths
- * are tried against the process's working directory (readable on Linux
- * only) and then the project directory.
+ * Resolves the module from its path candidates (longest first, see
+ * [WasmAttachTarget.wasmPathCandidates]); the first that exists wins.
+ * Relative paths are tried against the process's working directory
+ * (readable on Linux only) and then the project directory.
  */
-internal fun resolveModulePath(path: String?, pid: Int, projectBasePath: String?): String? {
-    if (path.isNullOrBlank()) return null
-    val file = File(path)
-    if (file.isAbsolute) return file.takeIf { it.isFile }?.absolutePath
-    val baseDirs = buildList {
-        if (SystemInfo.isLinux) {
-            try {
-                add(File("/proc/$pid/cwd").canonicalFile)
-            } catch (_: Exception) {
+internal fun resolveModulePath(candidates: List<String>, pid: Int, projectBasePath: String?): String? {
+    val baseDirs by lazy {
+        buildList {
+            if (SystemInfo.isLinux) {
+                try {
+                    add(File("/proc/$pid/cwd").canonicalFile)
+                } catch (_: Exception) {
+                }
             }
+            if (projectBasePath != null) add(File(projectBasePath))
         }
-        if (projectBasePath != null) add(File(projectBasePath))
     }
-    return baseDirs.map { File(it, path) }.firstOrNull { it.isFile }?.absolutePath
+    for (path in candidates) {
+        if (path.isBlank()) continue
+        val file = File(path)
+        val resolved = if (file.isAbsolute) {
+            file.takeIf { it.isFile }
+        } else {
+            baseDirs.map { File(it, path) }.firstOrNull { it.isFile }
+        }
+        if (resolved != null) return resolved.absolutePath
+    }
+    return null
 }
 
 private fun <T> runBlockingWork(project: Project, title: String, work: () -> T): T =

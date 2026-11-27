@@ -335,8 +335,10 @@ export function parseRawPacketOutput(lines: string[]): string | null;
 /**
  * A running process a `wasm` debug session can attach to (shared with the
  * IntelliJ Attach to Process dialog). `host` is null for browsers (always
- * loopback); a browser `port` of 0 means it is in
- * `<userDataDir>/DevToolsActivePort`.
+ * loopback). `needsPortDiscovery` (port 0): the OS chose the port; find it
+ * among the process's listening sockets, or for a browser in
+ * `<userDataDir>/DevToolsActivePort`. `wasmPathCandidates` lists where the
+ * module may be, longest first; take the first that exists.
  */
 export interface JsWasmAttachTarget {
     readonly runtime: "wasmtime" | "wamr" | "nodejs" | "browser";
@@ -344,10 +346,36 @@ export interface JsWasmAttachTarget {
     readonly port: number;
     readonly userDataDir: string | null;
     readonly wasmPath: string | null;
+    readonly wasmPathCandidates: string[];
+    readonly needsPortDiscovery: boolean;
 }
 
-/** Recognizes a Wasm debug target from a full process command line; null when there is none. */
-export function detectAttachTarget(commandLine: string): JsWasmAttachTarget | null;
+/**
+ * Recognizes a Wasm debug target from a full process command line; null when there is none.
+ * `windows` selects Windows tokenizing; `executable`, when known, is cut off verbatim.
+ */
+export function detectAttachTarget(
+    commandLine: string,
+    windows: boolean,
+    executable: string | null,
+): JsWasmAttachTarget | null;
+
+/** Recognizes a Wasm debug target from an exact argument list (Linux `/proc/<pid>/cmdline`). */
+export function detectAttachTargetFromArgs(executable: string, args: string[]): JsWasmAttachTarget | null;
+
+/** A TCP socket a process listens on (wildcards mapped to loopback). */
+export interface JsListeningEndpoint {
+    readonly host: string;
+    readonly port: number;
+}
+
+export function lsofListeningArguments(pid: number): string[];
+export function parseLsofListening(output: string): JsListeningEndpoint[];
+/** The inode of a `/proc/<pid>/fd/<n>` link target (`socket:[123]`); null for other files. */
+export function procSocketInode(linkTarget: string): string | null;
+export function parseProcNetTcpListening(content: string, socketInodes: string[]): JsListeningEndpoint[];
+export function netstatListeningArguments(): string[];
+export function parseNetstatListening(output: string, pid: number): JsListeningEndpoint[];
 
 // ── ShellUtils ──────────────────────────────────────────────────────
 
